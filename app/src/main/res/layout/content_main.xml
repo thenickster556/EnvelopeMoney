@@ -67,7 +67,7 @@
 
         <ListView
             android:id="@+id/listViewEnvelopes"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"/>
+            android:layout_width="368dp"
+            android:layout_height="224dp" />
     </LinearLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>
