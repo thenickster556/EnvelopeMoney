@@ -10,8 +10,11 @@ import android.widget.ListView;
 import android.widget.Spinner;
 import android.widget.TextView;
 
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+
+import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -89,11 +92,94 @@ public class MainActivity extends AppCompatActivity {
                 showError("Invalid amount entered!");
             }
         });
+        FloatingActionButton fab = findViewById(R.id.fabAddEnvelope);
+        fab.setOnClickListener(v -> showEnvelopeDialog(null));
+
+        listViewEnvelopes.setOnItemLongClickListener((parent, view, position, id) -> {
+            showEnvelopeOptionsDialog(position);
+            return true;
+        });
+
+    }
+
+    private void showEnvelopeDialog(@Nullable Envelope envelopeToEdit) {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        View dialogView = getLayoutInflater().inflate(R.layout.dialog_envelope, null);
+        EditText etName = dialogView.findViewById(R.id.etEnvelopeName);
+        EditText etLimit = dialogView.findViewById(R.id.etEnvelopeLimit);
+
+        if (envelopeToEdit != null) {
+            etName.setText(envelopeToEdit.getName());
+            etLimit.setText(String.valueOf(envelopeToEdit.getLimit()));
+        }
+
+        builder.setView(dialogView)
+                .setTitle(envelopeToEdit == null ? "New Envelope" : "Edit Envelope")
+                .setPositiveButton("Save", (dialog, which) -> {
+                    String name = etName.getText().toString();
+                    String limitStr = etLimit.getText().toString();
+
+                    if (name.isEmpty() || limitStr.isEmpty()) {
+                        showError("Please fill all fields");
+                        return;
+                    }
+
+                    double limit = Double.parseDouble(limitStr);
+
+                    if (envelopeToEdit == null) {
+                        // Create new
+                        envelopes.add(new Envelope(name, limit));
+                    } else {
+                        // Update existing
+                        double oldLimit = envelopeToEdit.getLimit();
+                        double remaining = envelopeToEdit.getRemaining();
+                        double spent = oldLimit - remaining;
+
+                        envelopeToEdit.setName(name);
+                        envelopeToEdit.setLimit(limit);
+                        envelopeToEdit.setRemaining(Math.max(limit - spent, 0));
+                    }
+
+                    PrefManager.saveEnvelopes(this, envelopes);
+                    updateDisplay();
+                })
+                .setNegativeButton("Cancel", null);
+
+        builder.create().show();
+    }
+
+    private void showEnvelopeOptionsDialog(int position) {
+        Envelope envelope = envelopes.get(position);
+        new AlertDialog.Builder(this)
+                .setTitle(envelope.getName())
+                .setItems(new CharSequence[]{"Edit", "Delete"}, (dialog, which) -> {
+                    if (which == 0) {
+                        // Edit
+                        showEnvelopeDialog(envelope);
+                    } else {
+                        // Delete
+                        new AlertDialog.Builder(this)
+                                .setMessage("Delete this envelope?")
+                                .setPositiveButton("Delete", (d, w) -> {
+                                    envelopes.remove(position);
+                                    PrefManager.saveEnvelopes(this, envelopes);
+                                    updateDisplay();
+                                })
+                                .setNegativeButton("Cancel", null)
+                                .show();
+                    }
+                })
+                .show();
     }
 
     private void updateDisplay() {
         listAdapter.notifyDataSetChanged();
         updateTotalRemaining();
+        // Update spinner
+        ArrayAdapter<String> spinnerAdapter = new ArrayAdapter<>(
+                this, android.R.layout.simple_spinner_item, getEnvelopeNames());
+        spinnerAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spinnerCategories.setAdapter(spinnerAdapter);
     }
 
     private void updateTotalRemaining() {
