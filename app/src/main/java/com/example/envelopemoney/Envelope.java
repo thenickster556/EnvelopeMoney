@@ -18,7 +18,8 @@ public class Envelope {
     private double remaining;
     @SerializedName("transactions")
     private List<Transaction> transactions = new ArrayList<>();
-
+    @SerializedName("selected")
+    private boolean isSelected = true;
 
 
     public Envelope(String name, double limit) {
@@ -26,6 +27,7 @@ public class Envelope {
         this.limit = limit;
         this.remaining = limit;
     }
+
 
     // Getters and setters
     public String getName() { return name; }
@@ -64,4 +66,6 @@ public class Envelope {
                 .sum();
         remaining = limit - totalSpent;
     }
+    public boolean isSelected() { return isSelected; }
+    public void setSelected(boolean selected) { isSelected = selected; }
 }
