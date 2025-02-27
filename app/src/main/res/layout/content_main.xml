@@ -11,8 +11,8 @@
 
     <!-- Transaction History -->
     <LinearLayout
-        android:layout_width="386dp"
-        android:layout_height="204dp"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
         android:orientation="horizontal">
 
         <Spinner
