@@ -1,6 +1,8 @@
 package com.example.envelopemoney;
 
+import android.content.Context;
 import android.os.Bundle;
+import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
@@ -16,17 +18,25 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity {
     private Spinner spinnerCategories;
     private EditText etAmount;
-    private TextView tvTotalRemaining;
+    private EditText etComment;
     private ListView listViewEnvelopes;
     private List<Envelope> envelopes;
     private ArrayAdapter<Envelope> listAdapter;
+    private ListView listViewTransactions;
+    private TransactionAdapter transactionAdapter;
+    private List<Transaction> allTransactions = new ArrayList<>();
+    private ArrayAdapter<String> spinnerAdapter;
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -36,16 +46,20 @@ public class MainActivity extends AppCompatActivity {
         // Initialize views
         spinnerCategories = findViewById(R.id.spinnerCategories);
         etAmount = findViewById(R.id.etAmount);
-        tvTotalRemaining = findViewById(R.id.tvTotalRemaining);
+        etComment = findViewById(R.id.etComment);
         listViewEnvelopes = findViewById(R.id.listViewEnvelopes);
         Button btnSubmit = findViewById(R.id.btnSubmit);
 
+        // Initialize transaction list view
+        listViewTransactions = findViewById(R.id.listViewTransactions);
+        transactionAdapter = new TransactionAdapter(this, allTransactions);
+        listViewTransactions.setAdapter(transactionAdapter);
+
         // Load envelopes
         envelopes = PrefManager.getEnvelopes(this);
-        updateTotalRemaining();
 
         // Setup Spinner
-        ArrayAdapter<String> spinnerAdapter = new ArrayAdapter<>(
+        spinnerAdapter = new ArrayAdapter<>(
                 this, android.R.layout.simple_spinner_item,
                 getEnvelopeNames());
         spinnerAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
@@ -76,6 +90,7 @@ public class MainActivity extends AppCompatActivity {
         btnSubmit.setOnClickListener(v -> {
             try {
                 double amount = Double.parseDouble(etAmount.getText().toString());
+                String comment = etComment.getText().toString();
                 int position = spinnerCategories.getSelectedItemPosition();
                 Envelope selected = envelopes.get(position);
 
@@ -88,6 +103,23 @@ public class MainActivity extends AppCompatActivity {
                 PrefManager.saveEnvelopes(this, envelopes);
                 updateDisplay();
                 etAmount.setText("");
+                // Create transaction
+                SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault());
+                String date = sdf.format(new Date());
+                Transaction transaction = new Transaction(
+                        selected.getName(),
+                        amount,
+                        date,
+                        comment
+                );
+
+                selected.addTransaction(transaction);
+                updateTransactionHistory();
+                PrefManager.saveEnvelopes(this, envelopes);
+                updateDisplay();
+                etAmount.setText("");
+                etComment.setText("");
+                etComment.clearFocus();
             } catch (NumberFormatException e) {
                 showError("Invalid amount entered!");
             }
@@ -100,6 +132,83 @@ public class MainActivity extends AppCompatActivity {
             return true;
         });
 
+    }
+    private void updateTransactionHistory() {
+        allTransactions.clear();
+
+        // Safely collect transactions
+        for (Envelope envelope : envelopes) {
+            List<Transaction> envelopeTransactions = envelope.getTransactions();
+            if (envelopeTransactions != null) {
+                allTransactions.addAll(envelopeTransactions);
+            }
+        }
+
+        // Safe sorting with null checks
+        Collections.sort(allTransactions, (t1, t2) -> {
+            String d1 = t1.getDate() != null ? t1.getDate() : "";
+            String d2 = t2.getDate() != null ? t2.getDate() : "";
+            return d2.compareTo(d1); // Descending order
+        });
+
+        // Add default message if empty
+        if (allTransactions.isEmpty()) {
+            Transaction placeholder = new Transaction(
+                    "No transactions yet",
+                    0,
+                    new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(new Date()),
+                    "Start by adding your first transaction"
+            );
+            allTransactions.add(placeholder);
+        }
+
+        transactionAdapter.notifyDataSetChanged();
+    }
+
+    private void updateDisplay() {
+        // Update envelopes list
+        listAdapter.notifyDataSetChanged();
+
+        // Update transactions list
+        updateTransactionHistory();
+
+        // Update spinner
+        spinnerAdapter.clear();
+        spinnerAdapter.addAll(getEnvelopeNames());
+        spinnerAdapter.notifyDataSetChanged();
+    }
+    // Add this new adapter class
+    private class TransactionAdapter extends ArrayAdapter<Transaction> {
+        public TransactionAdapter(Context context, List<Transaction> transactions) {
+            super(context, 0, transactions);
+        }
+
+        @Override
+        public View getView(int position, View convertView, ViewGroup parent) {
+            Transaction transaction = getItem(position);
+
+            if (convertView == null) {
+                convertView = LayoutInflater.from(getContext())
+                        .inflate(android.R.layout.simple_list_item_2, parent, false);
+            }
+
+            TextView text1 = convertView.findViewById(android.R.id.text1);
+            TextView text2 = convertView.findViewById(android.R.id.text2);
+
+            String amountText = String.format(Locale.getDefault(),
+                    "%s - $%.2f", transaction.getEnvelopeName(), transaction.getAmount());
+            String detailsText = transaction.getDate();
+
+            // Add comment if exists
+            if (!transaction.getComment().isEmpty()) {
+                detailsText += " - " + transaction.getComment();
+            }
+
+            text1.setText(amountText);
+            text2.setText(detailsText);
+
+            return convertView;
+        }
     }
 
     private void showEnvelopeDialog(@Nullable Envelope envelopeToEdit) {
@@ -172,26 +281,11 @@ public class MainActivity extends AppCompatActivity {
                 .show();
     }
 
-    private void updateDisplay() {
-        listAdapter.notifyDataSetChanged();
-        updateTotalRemaining();
-        // Update spinner
-        ArrayAdapter<String> spinnerAdapter = new ArrayAdapter<>(
-                this, android.R.layout.simple_spinner_item, getEnvelopeNames());
-        spinnerAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        spinnerCategories.setAdapter(spinnerAdapter);
-    }
-
-    private void updateTotalRemaining() {
-        double total = 0;
-        for (Envelope e : envelopes) total += e.getRemaining();
-        tvTotalRemaining.setText(String.format(Locale.getDefault(),
-                "Total Remaining: $%.2f", total));
-    }
-
     private List<String> getEnvelopeNames() {
         List<String> names = new ArrayList<>();
-        for (Envelope e : envelopes) names.add(e.getName());
+        for (Envelope e : envelopes) {
+            names.add(e.getName());
+        }
         return names;
     }
 

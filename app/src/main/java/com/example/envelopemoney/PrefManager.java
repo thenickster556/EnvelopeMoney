@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.SharedPreferences;
 
 import com.google.gson.Gson;
+import com.google.gson.annotations.SerializedName;
 import com.google.gson.reflect.TypeToken;
 
 import java.lang.reflect.Type;
@@ -16,6 +17,12 @@ public class PrefManager {
     private String name;
     private double limit;
     private double remaining;
+    @SerializedName("amount")
+    private double amount;
+    @SerializedName("date")
+    private String date;
+    @SerializedName("comment")
+    private String comment;
 
     public static void saveEnvelopes(Context context, List<Envelope> envelopes) {
         Gson gson = new Gson();
