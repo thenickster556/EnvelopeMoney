@@ -3,6 +3,8 @@ package com.example.envelopemoney;
 import android.content.Context;
 import android.os.Bundle;
 import android.view.LayoutInflater;
+import android.view.Menu;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
@@ -17,6 +19,7 @@ import android.widget.TextView;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.Toolbar;
 
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
@@ -38,6 +41,7 @@ public class MainActivity extends AppCompatActivity {
     private List<Transaction> allTransactions = new ArrayList<>();
     private ArrayAdapter<String> spinnerAdapter;
     private EnvelopeAdapter envelopeAdapter;
+    private Toolbar toolbar;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -51,6 +55,10 @@ public class MainActivity extends AppCompatActivity {
         Button btnSubmit = findViewById(R.id.btnSubmit);
         listViewEnvelopes = findViewById(R.id.listViewEnvelopes);
         listViewTransactions = findViewById(R.id.listViewTransactions);
+
+        // Hook up the Toolbar as your ActionBar
+        Toolbar toolbar = findViewById(R.id.toolbar);
+        setSupportActionBar(toolbar);
 
         // Load envelopes
         envelopes = PrefManager.getEnvelopes(this);
@@ -233,7 +241,53 @@ public class MainActivity extends AppCompatActivity {
     // Rest of helper methods (showEnvelopeOptionsDialog, showEnvelopeDialog,
     // getEnvelopeNames, showError) remain identical to your original implementation
 
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        getMenuInflater().inflate(R.menu.main, menu);
+        return true;
+    }
 
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        if (item.getItemId() == R.id.action_reset) {
+            showResetConfirmationDialog();
+            return true;
+        }
+        return super.onOptionsItemSelected(item);
+    }
+
+    private void showResetConfirmationDialog() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        View dialogView = getLayoutInflater().inflate(R.layout.dialog_reset_confirmation, null);
+
+        CheckBox cbCarryOver = dialogView.findViewById(R.id.cbCarryOver);
+        EditText etConfirmation = dialogView.findViewById(R.id.etConfirmation);
+
+        builder.setView(dialogView)
+                .setTitle("Confirm Monthly Reset")
+                .setPositiveButton("Reset", (dialog, which) -> {
+                    String confirmation = etConfirmation.getText().toString().trim();
+                    if ("DEL".equalsIgnoreCase(confirmation)) {
+                        performMonthlyReset(
+                                cbCarryOver.isChecked()
+                        );
+                    } else {
+                        showError("Confirmation failed. Reset canceled.");
+                    }
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void performMonthlyReset(boolean carryOver) {
+        for (Envelope envelope : envelopes) {
+            envelope.reset(carryOver);
+        }
+
+        PrefManager.saveEnvelopes(this, envelopes);
+        updateDisplay();
+        showError("Monthly reset completed successfully!");
+    }
     private void showEnvelopeOptionsDialog(int position) {
         Envelope envelope = envelopes.get(position);
         new AlertDialog.Builder(this)

@@ -8,7 +8,6 @@
     android:padding="16dp">
 
     <!-- Input Section -->
-
     <!-- Transaction History -->
     <LinearLayout
         android:layout_width="match_parent"

@@ -14,6 +14,8 @@ public class Envelope {
     private String name;
     @SerializedName("limit")
     private double limit;
+    @SerializedName("originalLimit")
+    private double originalLimit;
     @SerializedName("remaining")
     private double remaining;
     @SerializedName("transactions")
@@ -22,9 +24,11 @@ public class Envelope {
     private boolean isSelected = true;
 
 
+
     public Envelope(String name, double limit) {
         this.name = name;
         this.limit = limit;
+        this.originalLimit = limit;
         this.remaining = limit;
     }
 
@@ -40,6 +44,7 @@ public class Envelope {
 
     public void setLimit(double limit) {
         this.limit = limit;
+        this.originalLimit = limit;
     }
 
     // Add this method to handle limit changes properly
@@ -65,6 +70,21 @@ public class Envelope {
                 .mapToDouble(Transaction::getAmount)
                 .sum();
         remaining = limit - totalSpent;
+    }
+
+    public void reset(boolean carryOver) {
+        if (carryOver) {
+            // Add remaining to limit for next month
+            this.limit += remaining;
+            this.remaining = limit;
+        } else {
+            // Simple reset without carryover
+            this.remaining = originalLimit;
+            this.limit = originalLimit;
+        }
+
+        // Clear transaction history
+        this.transactions.clear();
     }
     public boolean isSelected() { return isSelected; }
     public void setSelected(boolean selected) { isSelected = selected; }
