@@ -1,21 +1,57 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
-    android:orientation="vertical"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:orientation="vertical"
     android:padding="16dp">
 
+    <!-- Envelope/Category Spinner -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Select Envelope" />
+    <Spinner
+        android:id="@+id/spinnerEditEnvelope"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
+
+    <!-- Date Field (non-editable) -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Select Date"
+        android:layout_marginTop="8dp"/>
+    <EditText
+        android:id="@+id/etEditTransactionDate"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Select Date"
+        android:focusable="false"
+        android:clickable="true" />
+
+    <!-- Amount -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Amount"
+        android:layout_marginTop="8dp"/>
     <EditText
         android:id="@+id/etEditTransactionAmount"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="Amount"
-        android:inputType="numberDecimal"/>
+        android:inputType="numberDecimal" />
 
+    <!-- Comment -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Comment"
+        android:layout_marginTop="8dp"/>
     <EditText
         android:id="@+id/etEditTransactionComment"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="Comment"/>
+        android:inputType="text" />
+
 </LinearLayout>

@@ -26,7 +26,8 @@ public class Transaction {
     public String getDate() { return date; }
     public String getComment() { return comment; }
     public void setAmount(double amount) {  this.amount = amount; }
-    public void  setComment(String comment) { this.comment=comment; }
-//    public void  setDate(String) { return date; }
+    public void  setComment(String comment) { this.comment = comment; }
+    public void  setDate(String date) { this.date = date; }
+    public void  setEnvelopeName(String envelopeName) { this.envelopeName = envelopeName; }
 
 }

@@ -1,5 +1,6 @@
 package com.example.envelopemoney;
 
+import android.app.DatePickerDialog;
 import android.content.Context;
 import android.os.Bundle;
 import android.view.LayoutInflater;
@@ -25,6 +26,7 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
@@ -393,39 +395,92 @@ public class MainActivity extends AppCompatActivity {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         View dialogView = getLayoutInflater().inflate(R.layout.dialog_transaction, null);
 
-        EditText etEditAmount = dialogView.findViewById(R.id.etEditTransactionAmount);
-        EditText etEditComment = dialogView.findViewById(R.id.etEditTransactionComment);
+        // Get references
+        Spinner spinnerEnvelope = dialogView.findViewById(R.id.spinnerEditEnvelope);
+        EditText etDate = dialogView.findViewById(R.id.etEditTransactionDate);
+        EditText etAmount = dialogView.findViewById(R.id.etEditTransactionAmount);
+        EditText etComment = dialogView.findViewById(R.id.etEditTransactionComment);
 
-        // Pre-fill the fields
-        etEditAmount.setText(String.valueOf(transactionToEdit.getAmount()));
-        etEditComment.setText(transactionToEdit.getComment());
+        // Setup Spinner with envelope names
+        ArrayAdapter<String> envelopeAdapter = new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_item, getEnvelopeNames());
+        envelopeAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spinnerEnvelope.setAdapter(envelopeAdapter);
 
+        // Preselect the envelope matching the transaction's current envelope
+        int envelopeIndex = getEnvelopeNames().indexOf(transactionToEdit.getEnvelopeName());
+        if (envelopeIndex >= 0) {
+            spinnerEnvelope.setSelection(envelopeIndex);
+        }
+
+        // Setup the date field – set current date and disable direct text input
+        etDate.setText(transactionToEdit.getDate());
+        etDate.setOnClickListener(v -> {
+            // Use current date as default; you can parse etDate.getText() if needed
+            Calendar calendar = Calendar.getInstance();
+            DatePickerDialog datePickerDialog = new DatePickerDialog(MainActivity.this,
+                    (view, year, month, dayOfMonth) -> {
+                        // Format date as yyyy-MM-dd (adjust as needed)
+                        String selectedDate = String.format(Locale.getDefault(), "%04d-%02d-%02d",
+                                year, month + 1, dayOfMonth);
+                        etDate.setText(selectedDate);
+                    },
+                    calendar.get(Calendar.YEAR),
+                    calendar.get(Calendar.MONTH),
+                    calendar.get(Calendar.DAY_OF_MONTH));
+            datePickerDialog.show();
+        });
+
+        // Pre-fill amount and comment fields
+        etAmount.setText(String.valueOf(transactionToEdit.getAmount()));
+        etComment.setText(transactionToEdit.getComment());
+
+        // Build the dialog
         builder.setView(dialogView)
                 .setTitle("Edit Transaction")
                 .setPositiveButton("Save", (dialog, which) -> {
                     try {
                         double oldAmount = transactionToEdit.getAmount();
-                        double newAmount = Double.parseDouble(etEditAmount.getText().toString());
-                        String newComment = etEditComment.getText().toString();
+                        double newAmount = Double.parseDouble(etAmount.getText().toString());
+                        String newComment = etComment.getText().toString();
+                        String newDate = etDate.getText().toString();
+                        String newEnvelopeName = spinnerEnvelope.getSelectedItem().toString();
 
-                        // 1) Find the envelope that this transaction belongs to
-                        Envelope envelope = findEnvelopeByName(transactionToEdit.getEnvelopeName());
-                        if (envelope == null) {
-                            showError("Envelope not found!");
-                            return;
+                        // Update envelope if it has changed
+                        if (!transactionToEdit.getEnvelopeName().equals(newEnvelopeName)) {
+                            Envelope oldEnvelope = findEnvelopeByName(transactionToEdit.getEnvelopeName());
+                            Envelope newEnvelope = findEnvelopeByName(newEnvelopeName);
+                            if (oldEnvelope != null) {
+                                // Refund old amount in old envelope and remove transaction
+                                oldEnvelope.getTransactions().remove(transactionToEdit);
+                                oldEnvelope.setRemaining(oldEnvelope.getRemaining() + oldAmount);
+                            }
+                            if (newEnvelope != null) {
+                                // Deduct new amount and add transaction to new envelope
+                                newEnvelope.setRemaining(newEnvelope.getRemaining() - newAmount);
+                                newEnvelope.getTransactions().add(transactionToEdit);
+                            }
+                            // You'll need a setter or directly update the field:
+                            transactionToEdit.setEnvelopeName(newEnvelopeName);
+                        } else {
+                            // If envelope is the same, adjust remaining based on the difference
+                            Envelope envelope = findEnvelopeByName(newEnvelopeName);
+                            if (envelope != null) {
+                                double diff = newAmount - oldAmount;
+                                if (diff > envelope.getRemaining()) {
+                                    showError("Insufficient funds in envelope!");
+                                    return;
+                                }
+                                envelope.setRemaining(envelope.getRemaining() - diff);
+                            }
                         }
 
-                        // 2) Update the envelope’s remaining based on the difference
-                        double diff = newAmount - oldAmount;
-                        envelope.setRemaining(envelope.getRemaining() - diff);
-
-                        // 3) Update transaction data
+                        // Update transaction fields
                         transactionToEdit.setAmount(newAmount);
-                        // If you want to also update date, do it here
-                        // transactionToEdit.setDate(...)
                         transactionToEdit.setComment(newComment);
+                        transactionToEdit.setDate(newDate);
 
-                        // 4) Save changes
+                        // Persist changes and refresh UI
                         PrefManager.saveEnvelopes(MainActivity.this, envelopes);
                         updateDisplay();
                     } catch (NumberFormatException e) {
@@ -436,6 +491,7 @@ public class MainActivity extends AppCompatActivity {
 
         builder.create().show();
     }
+
 
     private void deleteTransaction(Transaction transaction) {
         Envelope envelope = findEnvelopeByName(transaction.getEnvelopeName());
@@ -465,7 +521,6 @@ public class MainActivity extends AppCompatActivity {
         }
         return null;
     }
-
 
 
     private void showError(String message) {
