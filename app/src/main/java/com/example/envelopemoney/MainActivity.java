@@ -167,6 +167,7 @@ public class MainActivity extends AppCompatActivity {
 
     // Adapter classes and helper methods below
     private class TransactionAdapter extends ArrayAdapter<Transaction> {
+
         public TransactionAdapter(Context context, List<Transaction> transactions) {
             super(context, 0, transactions);
         }
@@ -177,23 +178,47 @@ public class MainActivity extends AppCompatActivity {
 
             if (convertView == null) {
                 convertView = LayoutInflater.from(getContext())
-                        .inflate(android.R.layout.simple_list_item_2, parent, false);
+                        .inflate(R.layout.item_transaction, parent, false);
             }
 
-            TextView text1 = convertView.findViewById(android.R.id.text1);
-            TextView text2 = convertView.findViewById(android.R.id.text2);
+            TextView tvAmount = convertView.findViewById(R.id.tvTransactionAmount);
+            TextView tvDetails = convertView.findViewById(R.id.tvTransactionDetails);
+            ImageButton btnOptions = convertView.findViewById(R.id.btnTransactionOptions);
 
+            // Populate data
             String amountText = String.format(Locale.getDefault(),
                     "%s - $%.2f", transaction.getEnvelopeName(), transaction.getAmount());
-            String details = transaction.getDate() +
-                    (!transaction.getComment().isEmpty() ? " | " + transaction.getComment() : "");
+            tvAmount.setText(amountText);
 
-            text1.setText(amountText);
-            text2.setText(details);
+            String details = transaction.getDate();
+            if (transaction.getComment() != null && !transaction.getComment().isEmpty()) {
+                details += " | " + transaction.getComment();
+            }
+            tvDetails.setText(details);
+
+            // Handle Options button click
+            btnOptions.setOnClickListener(v -> showTransactionOptionsDialog(transaction));
 
             return convertView;
         }
     }
+    private void showTransactionOptionsDialog(Transaction transaction) {
+        // We'll show an AlertDialog with "Edit" and "Delete" options
+        new AlertDialog.Builder(this)
+                .setTitle("Transaction Options")
+                .setItems(new CharSequence[]{"Edit", "Delete"}, (dialog, which) -> {
+                    if (which == 0) {
+                        // Edit
+                        showTransactionDialog(transaction);
+                    } else {
+                        // Delete
+                        deleteTransaction(transaction);
+                    }
+                })
+                .show();
+    }
+
+
 
     private class EnvelopeAdapter extends ArrayAdapter<Envelope> {
         public EnvelopeAdapter(Context context, List<Envelope> envelopes) {
@@ -363,6 +388,85 @@ public class MainActivity extends AppCompatActivity {
         }
         return names;
     }
+
+    private void showTransactionDialog(Transaction transactionToEdit) {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        View dialogView = getLayoutInflater().inflate(R.layout.dialog_transaction, null);
+
+        EditText etEditAmount = dialogView.findViewById(R.id.etEditTransactionAmount);
+        EditText etEditComment = dialogView.findViewById(R.id.etEditTransactionComment);
+
+        // Pre-fill the fields
+        etEditAmount.setText(String.valueOf(transactionToEdit.getAmount()));
+        etEditComment.setText(transactionToEdit.getComment());
+
+        builder.setView(dialogView)
+                .setTitle("Edit Transaction")
+                .setPositiveButton("Save", (dialog, which) -> {
+                    try {
+                        double oldAmount = transactionToEdit.getAmount();
+                        double newAmount = Double.parseDouble(etEditAmount.getText().toString());
+                        String newComment = etEditComment.getText().toString();
+
+                        // 1) Find the envelope that this transaction belongs to
+                        Envelope envelope = findEnvelopeByName(transactionToEdit.getEnvelopeName());
+                        if (envelope == null) {
+                            showError("Envelope not found!");
+                            return;
+                        }
+
+                        // 2) Update the envelope’s remaining based on the difference
+                        double diff = newAmount - oldAmount;
+                        envelope.setRemaining(envelope.getRemaining() - diff);
+
+                        // 3) Update transaction data
+                        transactionToEdit.setAmount(newAmount);
+                        // If you want to also update date, do it here
+                        // transactionToEdit.setDate(...)
+                        transactionToEdit.setComment(newComment);
+
+                        // 4) Save changes
+                        PrefManager.saveEnvelopes(MainActivity.this, envelopes);
+                        updateDisplay();
+                    } catch (NumberFormatException e) {
+                        showError("Invalid amount entered!");
+                    }
+                })
+                .setNegativeButton("Cancel", null);
+
+        builder.create().show();
+    }
+
+    private void deleteTransaction(Transaction transaction) {
+        Envelope envelope = findEnvelopeByName(transaction.getEnvelopeName());
+        if (envelope == null) {
+            showError("Envelope not found!");
+            return;
+        }
+
+        double oldAmount = transaction.getAmount();
+        // Give back the spent amount
+        envelope.setRemaining(envelope.getRemaining() + oldAmount);
+
+        // Remove from the envelope’s transaction list
+        envelope.getTransactions().remove(transaction);
+
+        // Save and refresh
+        PrefManager.saveEnvelopes(MainActivity.this, envelopes);
+        updateDisplay();
+    }
+
+
+    private Envelope findEnvelopeByName(String envelopeName) {
+        for (Envelope env : envelopes) {
+            if (env.getName().equals(envelopeName)) {
+                return env;
+            }
+        }
+        return null;
+    }
+
+
 
     private void showError(String message) {
         new AlertDialog.Builder(this)
