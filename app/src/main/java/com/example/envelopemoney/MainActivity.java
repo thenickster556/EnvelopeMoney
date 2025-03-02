@@ -35,18 +35,13 @@ import java.util.List;
 import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity {
-    private Spinner spinnerCategories;
-    private EditText etAmount;
-    private EditText etComment;
     private ListView listViewEnvelopes;
     private List<Envelope> envelopes;
     private ListView listViewTransactions;
     private TransactionAdapter transactionAdapter;
     private List<Transaction> allTransactions = new ArrayList<>();
-    private ArrayAdapter<String> spinnerAdapter;
     private EnvelopeAdapter envelopeAdapter;
     private TextView tvTransactionsTotal;
-    private Toolbar toolbar;
 
     @RequiresApi(api = Build.VERSION_CODES.N)
     @Override
@@ -55,10 +50,11 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         // Initialize views
-        spinnerCategories = findViewById(R.id.spinnerCategories);
-        etAmount = findViewById(R.id.etAmount);
-        etComment = findViewById(R.id.etComment);
-        Button btnSubmit = findViewById(R.id.btnSubmit);
+        ImageButton btnAddTransaction = findViewById(R.id.btnAddTransaction);
+        btnAddTransaction.setOnClickListener(v -> showNewTransactionDialog());
+
+        ImageButton btnAddEnvelope = findViewById(R.id.btnAddEnvelope);
+        btnAddEnvelope.setOnClickListener(v -> showEnvelopeDialog(null));
         listViewEnvelopes = findViewById(R.id.listViewEnvelopes);
         listViewTransactions = findViewById(R.id.listViewTransactions);
 
@@ -77,57 +73,79 @@ public class MainActivity extends AppCompatActivity {
         envelopeAdapter = new EnvelopeAdapter(this, envelopes);
         listViewEnvelopes.setAdapter(envelopeAdapter);
 
-        // Setup Spinner
-        spinnerAdapter = new ArrayAdapter<>(
-                this, android.R.layout.simple_spinner_item,
-                getEnvelopeNames());
-        spinnerAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        spinnerCategories.setAdapter(spinnerAdapter);
 
-        // Setup FAB
-        FloatingActionButton fab = findViewById(R.id.fabAddEnvelope);
-        fab.setOnClickListener(v -> showEnvelopeDialog(null));
-
-        // Submit button handler
-        btnSubmit.setOnClickListener(v -> handleTransactionSubmission());
 
         updateTransactionHistory();
     }
 
     @RequiresApi(api = Build.VERSION_CODES.N)
-    private void handleTransactionSubmission() {
-        try {
-            double amount = Double.parseDouble(etAmount.getText().toString());
-            String comment = etComment.getText().toString();
-            int position = spinnerCategories.getSelectedItemPosition();
-            Envelope selected = envelopes.get(position);
+    private void showNewTransactionDialog() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        View dialogView = getLayoutInflater().inflate(R.layout.dialog_new_transaction, null);
 
-            // Create transaction
-            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault());
-            String date = sdf.format(new Date());
-            Transaction transaction = new Transaction(
-                    selected.getName(),
-                    amount,
-                    date,
-                    comment
-            );
+        Spinner spinnerEnvelope = dialogView.findViewById(R.id.spinnerEditEnvelope);
+        EditText etDate = dialogView.findViewById(R.id.etEditTransactionDate);
+        EditText etAmount = dialogView.findViewById(R.id.etEditTransactionAmount);
+        EditText etComment = dialogView.findViewById(R.id.etEditTransactionComment);
 
-            // Update envelope
-            selected.addTransaction(transaction);
-            selected.setRemaining(selected.getRemaining() - amount);
+        // Populate spinner with envelope names
+        ArrayAdapter<String> envelopeAdapter = new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_item, getEnvelopeNames());
+        envelopeAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spinnerEnvelope.setAdapter(envelopeAdapter);
 
-            // Clear inputs
-            etAmount.setText("");
-            etComment.setText("");
-            etComment.clearFocus();
+        // Optionally set default date to 'today'
+        Calendar calendar = Calendar.getInstance();
+        String today = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(calendar.getTime());
+        etDate.setText(today);
 
-            // Persist changes
-            PrefManager.saveEnvelopes(this, envelopes);
-            updateDisplay();
-        } catch (NumberFormatException e) {
-            showError("Invalid amount entered!");
-        }
+        // Setup date picker on click
+        etDate.setOnClickListener(v -> {
+            DatePickerDialog datePickerDialog = new DatePickerDialog(MainActivity.this,
+                    (view, year, month, dayOfMonth) -> {
+                        String selectedDate = String.format(Locale.getDefault(), "%04d-%02d-%02d",
+                                year, month + 1, dayOfMonth);
+                        etDate.setText(selectedDate);
+                    },
+                    calendar.get(Calendar.YEAR),
+                    calendar.get(Calendar.MONTH),
+                    calendar.get(Calendar.DAY_OF_MONTH));
+            datePickerDialog.show();
+        });
+
+        builder.setView(dialogView)
+                .setTitle("New Transaction")
+                .setPositiveButton("Save", (dialog, which) -> {
+                    try {
+                        // Parse fields
+                        String envelopeName = spinnerEnvelope.getSelectedItem().toString();
+                        double amount = Double.parseDouble(etAmount.getText().toString());
+                        String comment = etComment.getText().toString();
+                        String date = etDate.getText().toString();
+
+                        // Create a new Transaction
+                        Transaction newTransaction = new Transaction(
+                                envelopeName, amount, date, comment
+                        );
+
+                        // Add to the chosen Envelope
+                        Envelope env = findEnvelopeByName(envelopeName);
+                        if (env != null) {
+                            env.addTransaction(newTransaction);
+                        }
+
+                        // Save & refresh
+                        PrefManager.saveEnvelopes(MainActivity.this, envelopes);
+                        updateDisplay();
+                    } catch (NumberFormatException e) {
+                        showError("Invalid amount entered!");
+                    }
+                })
+                .setNegativeButton("Cancel", null)
+                .create()
+                .show();
     }
+
 
     @RequiresApi(api = Build.VERSION_CODES.N)
     private void updateTransactionHistory() {
@@ -172,10 +190,6 @@ public class MainActivity extends AppCompatActivity {
         envelopeAdapter.notifyDataSetChanged();
         updateTransactionHistory();
 
-        // Update spinner
-        spinnerAdapter.clear();
-        spinnerAdapter.addAll(getEnvelopeNames());
-        spinnerAdapter.notifyDataSetChanged();
     }
 
     // Adapter classes and helper methods below
@@ -507,34 +521,35 @@ public class MainActivity extends AppCompatActivity {
 
     @RequiresApi(api = Build.VERSION_CODES.N)
     private void deleteTransaction(Transaction transaction) {
-        new AlertDialog.Builder(this)
-                .setMessage("Delete this transaction?")
-                .setPositiveButton("Delete", (d, w) -> {
-                    for (Envelope envelope : envelopes) {
-                        if (envelope.getName().equals(transaction.getEnvelopeName())) {
-                            envelope.removeTransaction(transaction);
-                            break;
-                        }
-                    }
-                    PrefManager.saveEnvelopes(this, envelopes);
-                    updateDisplay();
-                });
-//        Envelope envelope = findEnvelopeByName(transaction.getEnvelopeName());
-//        if (envelope == null) {
-//            showError("Envelope not found!");
-//            return;
-//        }
-//
-//        double oldAmount = transaction.getAmount();
-//        // Give back the spent amount
-//        envelope.setRemaining(envelope.getRemaining() + oldAmount);
-//
-//        // Remove from the envelope’s transaction list
-//        envelope.getTransactions().remove(transaction);
-//
-//        // Save and refresh
-//        PrefManager.saveEnvelopes(MainActivity.this, envelopes);
-//        updateDisplay();
+        // revisit this
+//        new AlertDialog.Builder(this)
+//                .setMessage("Delete this transaction?")
+//                .setPositiveButton("Delete", (d, w) -> {
+//                    for (Envelope envelope : envelopes) {
+//                        if (envelope.getName().equals(transaction.getEnvelopeName())) {
+//                            envelope.removeTransaction(transaction);
+//                            break;
+//                        }
+//                    }
+//                    PrefManager.saveEnvelopes(this, envelopes);
+//                    updateDisplay();
+//                });
+        Envelope envelope = findEnvelopeByName(transaction.getEnvelopeName());
+        if (envelope == null) {
+            showError("Envelope not found!");
+            return;
+        }
+
+        double oldAmount = transaction.getAmount();
+        // Give back the spent amount
+        envelope.setRemaining(envelope.getRemaining() + oldAmount);
+
+        // Remove from the envelope’s transaction list
+        envelope.getTransactions().remove(transaction);
+
+        // Save and refresh
+        PrefManager.saveEnvelopes(MainActivity.this, envelopes);
+        updateDisplay();
     }
 
 

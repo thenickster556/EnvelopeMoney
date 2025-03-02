@@ -8,48 +8,35 @@
     android:padding="16dp">
 
     <!-- Input Section -->
-    <!-- Transaction History -->
+    <!-- Transaction History Title Row -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal">
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingTop="16dp">
 
-        <Spinner
-            android:id="@+id/spinnerCategories"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="2" />
-
-        <EditText
-            android:id="@+id/etAmount"
+        <TextView
+            android:id="@+id/tvTransactionHistoryTitle"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:hint="Amount"
-            android:inputType="numberSigned|numberDecimal" />
+            android:text="Transaction History"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:layout_marginStart="8dp" />
 
-        <EditText
-            android:id="@+id/etComment"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1.5"
-            android:hint="Comment" />
-
-        <Button
-            android:id="@+id/btnSubmit"
+        <ImageButton
+            android:id="@+id/btnAddTransaction"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Submit" />
+            android:src="@android:drawable/ic_menu_add"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Add Transaction"
+            android:layout_marginEnd="8dp"/>
     </LinearLayout>
 
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Transaction History"
-        android:textSize="18sp"
-        android:textStyle="bold"
-        android:layout_marginTop="16dp"/>
-
+    <!-- Transaction List & Total -->
     <ListView
         android:id="@+id/listViewTransactions"
         android:layout_width="match_parent"
@@ -65,18 +52,39 @@
         android:textSize="16sp"
         android:textStyle="bold"
         android:padding="8dp"
-        android:background="@android:color/holo_green_light"
-        android:inputType="numberSigned|numberDecimal" />
+        android:background="@android:color/holo_green_light" />
 
-    <!-- Envelopes Section -->
-    <TextView
+    <!-- Envelopes Title Row -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Envelopes"
-        android:textSize="18sp"
-        android:textStyle="bold"
-        android:layout_marginTop="16dp"/>
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingTop="16dp">
 
+        <TextView
+            android:id="@+id/tvEnvelopesTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Envelopes"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:layout_marginStart="8dp"
+            android:layout_marginLeft="8dp" />
+
+        <ImageButton
+            android:id="@+id/btnAddEnvelope"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:src="@android:drawable/ic_menu_add"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Add Envelope"
+            android:layout_marginEnd="8dp"
+            android:layout_marginRight="8dp" />
+    </LinearLayout>
+
+    <!-- Envelopes List -->
     <ListView
         android:id="@+id/listViewEnvelopes"
         android:layout_width="match_parent"
@@ -84,14 +92,5 @@
         android:layout_weight="1"
         android:layout_marginTop="8dp"/>
 
-    <!-- Add Envelope FAB -->
-    <com.google.android.material.floatingactionbutton.FloatingActionButton
-        android:id="@+id/fabAddEnvelope"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="end|bottom"
-        android:layout_margin="16dp"
-        android:src="@android:drawable/ic_menu_add"
-        app:tint="@android:color/white"/>
 
 </LinearLayout>
