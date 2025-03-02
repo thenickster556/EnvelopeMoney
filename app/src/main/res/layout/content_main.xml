@@ -26,7 +26,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:hint="Amount"
-            android:inputType="numberDecimal" />
+            android:inputType="numberSigned|numberDecimal" />
 
         <EditText
             android:id="@+id/etComment"
@@ -56,6 +56,17 @@
         android:layout_height="0dp"
         android:layout_weight="1"
         android:layout_marginTop="8dp"/>
+
+    <TextView
+        android:id="@+id/tvTransactionsTotal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Total: $0.00"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:padding="8dp"
+        android:background="@android:color/holo_green_light"
+        android:inputType="numberSigned|numberDecimal" />
 
     <!-- Envelopes Section -->
     <TextView

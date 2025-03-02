@@ -44,9 +44,10 @@ public class PrefManager {
 
     private static List<Envelope> createDefaultEnvelopes(Context context) {
         List<Envelope> defaultEnvelopes = new ArrayList<>();
-        defaultEnvelopes.add(new Envelope("Emergency Fund", 500));
-        defaultEnvelopes.add(new Envelope("Education Fund", 300));
-        defaultEnvelopes.add(new Envelope("Vacation Fund", 200));
+        defaultEnvelopes.add(new Envelope("Gas", 90));
+        defaultEnvelopes.add(new Envelope("Personal", 250));
+        defaultEnvelopes.add(new Envelope("Vacation", 300));
+        defaultEnvelopes.add(new Envelope("Outreach", 86.5));
         saveEnvelopes(context, defaultEnvelopes);
         return defaultEnvelopes;
     }

@@ -37,7 +37,12 @@ public class Envelope {
     public String getName() { return name; }
     public double getLimit() { return limit; }
     public double getRemaining() { return remaining; }
-    public void setRemaining(double remaining) { this.remaining = remaining; }
+
+    @RequiresApi(api = Build.VERSION_CODES.N)
+    public void setRemaining(double remaining) {
+        this.calculateRemaining();
+//        this.remaining = remaining;
+    }
     public void setName(String name) {
         this.name = name;
     }
@@ -53,9 +58,21 @@ public class Envelope {
         this.limit = newLimit;
         this.remaining = Math.max(newLimit - spent, 0);
     }
+    @RequiresApi(api = Build.VERSION_CODES.N)
     public void addTransaction(Transaction transaction) {
         transactions.add(transaction);
-        remaining -= transaction.getAmount();
+        calculateRemaining();
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.N)
+    public void removeTransaction(Transaction transaction) {
+        transactions.remove(transaction);
+        calculateRemaining();
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.N)
+    public void updateTransaction(Transaction transaction, double oldAmount) {
+        calculateRemaining();
     }
     public List<Transaction> getTransactions() {
         if (transactions == null) { // Handle deserialization case
@@ -66,9 +83,10 @@ public class Envelope {
     // Update remaining calculation when loading
     @RequiresApi(api = Build.VERSION_CODES.N)
     private void calculateRemaining() {
-        double totalSpent = transactions.stream()
-                .mapToDouble(Transaction::getAmount)
-                .sum();
+        double totalSpent = 0;
+        for (Transaction t : transactions) {
+            totalSpent += t.getAmount();
+        }
         remaining = limit - totalSpent;
     }
 
@@ -86,6 +104,7 @@ public class Envelope {
         // Clear transaction history
         this.transactions.clear();
     }
+
     public boolean isSelected() { return isSelected; }
     public void setSelected(boolean selected) { isSelected = selected; }
 }

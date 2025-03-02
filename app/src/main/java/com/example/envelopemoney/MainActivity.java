@@ -2,6 +2,7 @@ package com.example.envelopemoney;
 
 import android.app.DatePickerDialog;
 import android.content.Context;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.Menu;
@@ -18,6 +19,7 @@ import android.widget.Spinner;
 import android.widget.TextView;
 
 import androidx.annotation.Nullable;
+import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
@@ -43,8 +45,10 @@ public class MainActivity extends AppCompatActivity {
     private List<Transaction> allTransactions = new ArrayList<>();
     private ArrayAdapter<String> spinnerAdapter;
     private EnvelopeAdapter envelopeAdapter;
+    private TextView tvTransactionsTotal;
     private Toolbar toolbar;
 
+    @RequiresApi(api = Build.VERSION_CODES.N)
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -64,6 +68,8 @@ public class MainActivity extends AppCompatActivity {
 
         // Load envelopes
         envelopes = PrefManager.getEnvelopes(this);
+        // Initialize total view
+        tvTransactionsTotal = findViewById(R.id.tvTransactionsTotal);
 
         // Initialize adapters
         transactionAdapter = new TransactionAdapter(this, allTransactions);
@@ -88,17 +94,13 @@ public class MainActivity extends AppCompatActivity {
         updateTransactionHistory();
     }
 
+    @RequiresApi(api = Build.VERSION_CODES.N)
     private void handleTransactionSubmission() {
         try {
             double amount = Double.parseDouble(etAmount.getText().toString());
             String comment = etComment.getText().toString();
             int position = spinnerCategories.getSelectedItemPosition();
             Envelope selected = envelopes.get(position);
-
-            if (amount > selected.getRemaining()) {
-                showError("Amount exceeds remaining funds!");
-                return;
-            }
 
             // Create transaction
             SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault());
@@ -127,24 +129,25 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    @RequiresApi(api = Build.VERSION_CODES.N)
     private void updateTransactionHistory() {
         allTransactions.clear();
 
-        // Filter transactions from selected envelopes
+        // Aggregate transactions from selected envelopes
         for (Envelope envelope : envelopes) {
             if (envelope.isSelected()) {
                 allTransactions.addAll(envelope.getTransactions());
             }
         }
 
-        // Sort transactions
+        // Sort transactions (newest first)
         Collections.sort(allTransactions, (t1, t2) -> {
             String d1 = t1.getDate() != null ? t1.getDate() : "";
             String d2 = t2.getDate() != null ? t2.getDate() : "";
             return d2.compareTo(d1);
         });
 
-        // Add placeholder if empty
+        // Add a placeholder if empty
         if (allTransactions.isEmpty()) {
             allTransactions.add(new Transaction(
                     "No transactions yet",
@@ -154,8 +157,16 @@ public class MainActivity extends AppCompatActivity {
             ));
         }
 
+        // Update total
+        double total = 0;
+        for (Transaction t : allTransactions) {
+            total += t.getAmount();
+        }
+        tvTransactionsTotal.setText(String.format(Locale.getDefault(), "Total: $%.2f", total));
+
         transactionAdapter.notifyDataSetChanged();
     }
+
 
     private void updateDisplay() {
         envelopeAdapter.notifyDataSetChanged();
@@ -204,6 +215,7 @@ public class MainActivity extends AppCompatActivity {
             return convertView;
         }
     }
+    @RequiresApi(api = Build.VERSION_CODES.N)
     private void showTransactionOptionsDialog(Transaction transaction) {
         // We'll show an AlertDialog with "Edit" and "Delete" options
         new AlertDialog.Builder(this)
@@ -493,23 +505,36 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
+    @RequiresApi(api = Build.VERSION_CODES.N)
     private void deleteTransaction(Transaction transaction) {
-        Envelope envelope = findEnvelopeByName(transaction.getEnvelopeName());
-        if (envelope == null) {
-            showError("Envelope not found!");
-            return;
-        }
-
-        double oldAmount = transaction.getAmount();
-        // Give back the spent amount
-        envelope.setRemaining(envelope.getRemaining() + oldAmount);
-
-        // Remove from the envelope’s transaction list
-        envelope.getTransactions().remove(transaction);
-
-        // Save and refresh
-        PrefManager.saveEnvelopes(MainActivity.this, envelopes);
-        updateDisplay();
+        new AlertDialog.Builder(this)
+                .setMessage("Delete this transaction?")
+                .setPositiveButton("Delete", (d, w) -> {
+                    for (Envelope envelope : envelopes) {
+                        if (envelope.getName().equals(transaction.getEnvelopeName())) {
+                            envelope.removeTransaction(transaction);
+                            break;
+                        }
+                    }
+                    PrefManager.saveEnvelopes(this, envelopes);
+                    updateDisplay();
+                });
+//        Envelope envelope = findEnvelopeByName(transaction.getEnvelopeName());
+//        if (envelope == null) {
+//            showError("Envelope not found!");
+//            return;
+//        }
+//
+//        double oldAmount = transaction.getAmount();
+//        // Give back the spent amount
+//        envelope.setRemaining(envelope.getRemaining() + oldAmount);
+//
+//        // Remove from the envelope’s transaction list
+//        envelope.getTransactions().remove(transaction);
+//
+//        // Save and refresh
+//        PrefManager.saveEnvelopes(MainActivity.this, envelopes);
+//        updateDisplay();
     }
 
 
