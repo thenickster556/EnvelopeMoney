@@ -91,14 +91,13 @@ public class Envelope {
     }
 
     public void reset(boolean carryOver) {
+        this.limit = originalLimit;
         if (carryOver) {
             // Add remaining to limit for next month
-            this.limit += remaining;
-            this.remaining = limit;
+            this.remaining += limit;
         } else {
             // Simple reset without carryover
             this.remaining = originalLimit;
-            this.limit = originalLimit;
         }
 
         // Clear transaction history
