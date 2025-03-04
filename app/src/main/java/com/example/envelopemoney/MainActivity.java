@@ -563,16 +563,24 @@ public class MainActivity extends AppCompatActivity {
                     }
 
                     double limit = Double.parseDouble(limitStr);
-                    double remainder = Double.parseDouble(remainderStr);
+                    double remainder;
+                    if (remainderStr.startsWith("+")) {
+                        // e.g. "+50" means limit + 50
+                        remainder = limit + Double.parseDouble(remainderStr.substring(1));
+                    } else if (remainderStr.startsWith("-")) {
+                        // e.g. "-30" means limit - 30
+                        remainder = limit - Double.parseDouble(remainderStr.substring(1));
+                    } else {
+                        // Otherwise, treat as an absolute value
+                        remainder = Double.parseDouble(remainderStr);
+                    }
 
                     if (envelopeToEdit == null) {
                         // Create new
                         envelopes.add(new Envelope(name, limit));
                     } else {
                         // Update existing
-                        double oldLimit = envelopeToEdit.getLimit();
                         double remaining = envelopeToEdit.getRemaining();
-                        double spent = oldLimit - remaining;
 
                         envelopeToEdit.setName(name);
                         envelopeToEdit.setLimit(limit);
