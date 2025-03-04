@@ -2,6 +2,7 @@ package com.example.envelopemoney;
 
 import android.app.DatePickerDialog;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.LayoutInflater;
@@ -26,6 +27,7 @@ import androidx.appcompat.widget.Toolbar;
 
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
+import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -33,6 +35,8 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+
+import java.lang.reflect.Field;
 
 public class MainActivity extends AppCompatActivity {
     private ListView listViewEnvelopes;
@@ -42,6 +46,8 @@ public class MainActivity extends AppCompatActivity {
     private List<Transaction> allTransactions = new ArrayList<>();
     private EnvelopeAdapter envelopeAdapter;
     private TextView tvTransactionsTotal;
+    private String currentMonth;
+    private final Boolean TEST = true;
 
     @RequiresApi(api = Build.VERSION_CODES.N)
     @Override
@@ -64,8 +70,26 @@ public class MainActivity extends AppCompatActivity {
 
         // Load envelopes
         envelopes = PrefManager.getEnvelopes(this);
+        if(TEST){
+            addData();
+        }
+
+        if (MonthTracker.isFirstMonth(this)) {
+            // Initialize with current transactions
+            String currentMonth = MonthTracker.formatMonth(new Date());
+            for (Envelope env : envelopes) {
+                env.initializeMonth(currentMonth, false);
+                env.migrateLegacyTransactions(currentMonth);
+            }
+        }
         // Initialize total view
         tvTransactionsTotal = findViewById(R.id.tvTransactionsTotal);
+        currentMonth = MonthTracker.getCurrentMonth(this);
+        // Check for new month
+        if (MonthTracker.isNewMonth(this)) {
+            handleNewMonth(true); // Auto-reset with carry-over
+        }
+        setupMonthNavigation();
 
         // Initialize adapters
         transactionAdapter = new TransactionAdapter(this, allTransactions);
@@ -76,6 +100,156 @@ public class MainActivity extends AppCompatActivity {
 
 
         updateTransactionHistory();
+    }
+    private void addData() {
+//         Dummy transactions for "Emergency Fund"
+        Transaction janEmergencyTransaction = new Transaction("Emergency Fund", 100.0, "2025-01-10", "January expense");
+        setTransactionMonth(janEmergencyTransaction, "2025-01");
+
+        Transaction febEmergencyTransaction = new Transaction("Emergency Fund", 75.0, "2025-02-05", "February expense");
+        setTransactionMonth(febEmergencyTransaction, "2025-02");
+
+        // Dummy transactions for "Vacation Fund"
+        Transaction janVacationTransaction = new Transaction("Vacation Fund", 200.0, "2025-01-20", "January booking");
+        setTransactionMonth(janVacationTransaction, "2025-01");
+
+        Transaction febVacationTransaction = new Transaction("Vacation Fund", 150.0, "2025-02-12", "February booking");
+        setTransactionMonth(febVacationTransaction, "2025-02");
+        Envelope emergencyFund = findEnvelopeByName("Emergency Fund");
+        if (emergencyFund != null) {
+            emergencyFund.addTransaction(janEmergencyTransaction);
+            emergencyFund.addTransaction(febEmergencyTransaction);
+        }
+
+        Envelope vacationFund = findEnvelopeByName("Vacation Fund");
+        if (vacationFund != null) {
+            vacationFund.addTransaction(janVacationTransaction);
+            vacationFund.addTransaction(febVacationTransaction);
+        }
+        emergencyFund.initializeMonth("2025-01", false);
+        emergencyFund.initializeMonth("2025-02", false);
+        vacationFund.initializeMonth("2025-01", false);
+        vacationFund.initializeMonth("2025-02", false);
+
+
+    }
+
+    private void setTransactionMonth(Transaction transaction, String month) {
+        try {
+            Field monthField = Transaction.class.getDeclaredField("month");
+            monthField.setAccessible(true);
+            monthField.set(transaction, month);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void setupMonthNavigation() {
+        // Initialize current month data first
+        String currentMonth = MonthTracker.getCurrentMonth(this);
+        for (Envelope env : envelopes) {
+            env.initializeMonth(currentMonth, true);
+        }
+
+        TextView tvMonth = findViewById(R.id.tvCurrentMonth);
+        ImageButton btnPrev = findViewById(R.id.btnPrevMonth);
+        ImageButton btnNext = findViewById(R.id.btnNextMonth);
+
+        tvMonth.setText(formatDisplayMonth(currentMonth));
+
+        // Disable previous button if no earlier months
+        btnPrev.setEnabled(hasPreviousMonth());
+
+        // Disable next button if current month is present or future
+        btnNext.setEnabled(false);
+        btnPrev.setOnClickListener(v -> changeMonth(-1));
+        btnNext.setOnClickListener(v -> changeMonth(1));
+    }
+
+    private boolean hasPreviousMonth() {
+        try {
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM");
+            Date date = sdf.parse(currentMonth);
+            Calendar cal = Calendar.getInstance();
+            cal.setTime(date);
+            cal.add(Calendar.MONTH, -1);
+
+            String prevMonth = sdf.format(cal.getTime());
+            for (Envelope e : envelopes) {
+                if (e.hasDataForMonth(prevMonth)) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (ParseException e) {
+            return false;
+        }
+    }
+
+    private boolean hasNextMonth() {
+        try {
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM", Locale.getDefault());
+            Date current = sdf.parse(currentMonth);
+            Date now = new Date();
+            return current.before(now);
+        } catch (ParseException e) {
+            return false;
+        }
+    }
+    private void handleNewMonth(boolean carryOver) {
+        String newMonth = MonthTracker.formatMonth(new Date());
+        for (Envelope env : envelopes) {
+            Envelope.MonthData previousMonth = env.getMonthlyData(currentMonth);
+            Envelope.MonthData newMonthData = env.getMonthlyData(newMonth);
+
+            if (carryOver) {
+                newMonthData.limit = previousMonth.limit + previousMonth.remaining;
+                newMonthData.remaining = newMonthData.limit;
+            }
+        }
+        MonthTracker.setCurrentMonth(this, newMonth);
+        currentMonth = newMonth;
+    }
+    private void changeMonth(int direction) {
+        try {
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM", Locale.getDefault());
+            Date date = sdf.parse(currentMonth);
+            Calendar cal = Calendar.getInstance();
+            cal.setTime(date);
+            cal.add(Calendar.MONTH, direction);
+
+            String newMonth = sdf.format(cal.getTime());
+
+            // Prevent navigating to future months
+            if (newMonth.compareTo(MonthTracker.formatMonth(new Date())) > 0) {
+                return;
+            }
+
+            currentMonth = newMonth;
+            MonthTracker.setCurrentMonth(this, newMonth);
+            refreshDataForMonth();
+            setupMonthNavigation();
+        } catch (ParseException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void refreshDataForMonth() {
+        // Load data for current month
+        for (Envelope env : envelopes) {
+            env.getMonthlyData(currentMonth); // Initialize if needed
+        }
+        updateDisplay();
+    }
+    private String formatDisplayMonth(String month) {
+        try {
+            SimpleDateFormat inputFormat = new SimpleDateFormat("yyyy-MM", Locale.getDefault());
+            SimpleDateFormat outputFormat = new SimpleDateFormat("MMM yyyy", Locale.getDefault());
+            Date date = inputFormat.parse(month);
+            return outputFormat.format(date);
+        } catch (ParseException e) {
+            return month;
+        }
     }
 
     @RequiresApi(api = Build.VERSION_CODES.N)
@@ -151,12 +325,23 @@ public class MainActivity extends AppCompatActivity {
     private void updateTransactionHistory() {
         allTransactions.clear();
 
-        // Aggregate transactions from selected envelopes
+        for (Envelope envelope : envelopes) {
+            Envelope.MonthData monthData = envelope.getMonthlyData(currentMonth);
+            allTransactions.addAll(monthData.transactions);
+        }
+
+
+        // Aggregate transactions from selected envelopes that are in the current month
         for (Envelope envelope : envelopes) {
             if (envelope.isSelected()) {
-                allTransactions.addAll(envelope.getTransactions());
+                for (Transaction t : envelope.getTransactions()) {
+                    if (t.getMonth().equals(currentMonth)) {
+                        allTransactions.add(t);
+                    }
+                }
             }
         }
+
 
         // Sort transactions (newest first)
         Collections.sort(allTransactions, (t1, t2) -> {
