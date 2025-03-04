@@ -47,7 +47,7 @@ public class MainActivity extends AppCompatActivity {
     private EnvelopeAdapter envelopeAdapter;
     private TextView tvTransactionsTotal;
     private String currentMonth;
-    private final Boolean TEST = true;
+    private final Boolean TEST = false;
 
     @RequiresApi(api = Build.VERSION_CODES.N)
     @Override

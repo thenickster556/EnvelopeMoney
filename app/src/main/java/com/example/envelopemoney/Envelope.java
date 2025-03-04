@@ -14,7 +14,9 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 
 public class Envelope {
     public static class MonthData {
@@ -155,7 +157,7 @@ public class Envelope {
         currentData.transactions.clear();  // clear previous sync
         double spent = 0;
         for (Transaction t : transactions) {
-            if (t.getMonth().equals(month)) {
+            if (Objects.equals(t.getMonth(), month)) {
                 spent += t.getAmount();
                 currentData.transactions.add(t);
             }
@@ -176,30 +178,63 @@ public class Envelope {
         }
     }
 
-    public void migrateLegacyTransactions(String month) {
+    public void migrateLegacyTransactions(String defaultMonthForNull) {
         if (monthlyData == null) monthlyData = new HashMap<>();
 
-        MonthData data = monthlyData.get(month);
-        if (data == null) return;
+        MonthData data = monthlyData.get(defaultMonthForNull);
+        if (data == null) {
+            data = new MonthData(originalLimit, originalLimit);
+            monthlyData.put(defaultMonthForNull, data);
+        }
 
-        // Move transactions to monthly data
         Iterator<Transaction> iterator = transactions.iterator();
         while (iterator.hasNext()) {
             Transaction t = iterator.next();
             if (t.getMonth() == null) {
-                data.transactions.add(t);
+                // 1. Derive the month from the transaction’s date
+                String derivedMonth = parseDateToYearMonth(t.getDate());
+                // If parse fails or returns null, fall back to defaultMonthForNull
+                if (derivedMonth == null) {
+                    derivedMonth = defaultMonthForNull;
+                }
+                // 2. Set the transaction’s month
+                t.setMonth(derivedMonth);
+
+                // 3. Move it into that month’s MonthData
+                MonthData correctData = monthlyData.get(derivedMonth);
+                if (correctData == null) {
+                    correctData = new MonthData(originalLimit, originalLimit);
+                    monthlyData.put(derivedMonth, correctData);
+                }
+                correctData.transactions.add(t);
+
+                // 4. Remove from the envelope’s top-level list
                 iterator.remove();
             }
         }
 
-
-        // Recalculate remaining
+        // Recalculate
         double total = 0;
         for (Transaction t : data.transactions) {
             total += t.getAmount();
         }
         data.remaining = data.limit - total;
     }
+
+    // Helper to parse date like "2025-03-01 18:07" -> "2025-03"
+    private String parseDateToYearMonth(String dateStr) {
+        if (dateStr == null || dateStr.isEmpty()) return null;
+        try {
+            SimpleDateFormat input = new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault());
+            Date date = input.parse(dateStr);
+            SimpleDateFormat output = new SimpleDateFormat("yyyy-MM", Locale.getDefault());
+            return output.format(date);
+        } catch (ParseException e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
 
     private MonthData getPreviousMonthData(String currentMonth) {
         // Implement logic to find previous month's data
