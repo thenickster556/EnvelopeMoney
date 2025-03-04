@@ -16,13 +16,28 @@
             android:id="@+id/etEnvelopeName"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Envelope Name" />
-
+            android:hint="Envelope Name"/>
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Monthly Limit"
+            android:labelFor="@id/etEnvelopeLimit"/>
         <EditText
             android:id="@+id/etEnvelopeLimit"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:hint="Monthly Limit"
+            android:inputType="numberDecimal" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Monthly Remainder"
+            android:labelFor="@id/etEnvelopeRemainder"/>
+        <EditText
+            android:id="@+id/etEnvelopeRemainder"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Monthly Remainder"
             android:inputType="numberDecimal" />
 
     </LinearLayout>

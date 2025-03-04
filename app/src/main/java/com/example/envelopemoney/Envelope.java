@@ -71,7 +71,7 @@ public class Envelope {
 
     @RequiresApi(api = Build.VERSION_CODES.N)
     public void setRemaining(double remaining) {
-        this.calculateRemaining();
+        this.remaining = remaining;
     }
 
     public void setName(String name) {
@@ -142,7 +142,7 @@ public class Envelope {
 
     // Recalculate remaining from the global transaction list
     @RequiresApi(api = Build.VERSION_CODES.N)
-    private void calculateRemaining() {
+    public void calculateRemaining() {
         double totalSpent = 0;
         for (Transaction t : transactions) {
             totalSpent += t.getAmount();

@@ -542,10 +542,12 @@ public class MainActivity extends AppCompatActivity {
         View dialogView = getLayoutInflater().inflate(R.layout.dialog_envelope, null);
         EditText etName = dialogView.findViewById(R.id.etEnvelopeName);
         EditText etLimit = dialogView.findViewById(R.id.etEnvelopeLimit);
+        EditText etRemainder = dialogView.findViewById(R.id.etEnvelopeRemainder);
 
         if (envelopeToEdit != null) {
             etName.setText(envelopeToEdit.getName());
             etLimit.setText(String.valueOf(envelopeToEdit.getLimit()));
+            etRemainder.setText(String.valueOf(envelopeToEdit.getRemaining()));
         }
 
         builder.setView(dialogView)
@@ -553,6 +555,7 @@ public class MainActivity extends AppCompatActivity {
                 .setPositiveButton("Save", (dialog, which) -> {
                     String name = etName.getText().toString();
                     String limitStr = etLimit.getText().toString();
+                    String remainderStr = etRemainder.getText().toString();
 
                     if (name.isEmpty() || limitStr.isEmpty()) {
                         showError("Please fill all fields");
@@ -560,6 +563,7 @@ public class MainActivity extends AppCompatActivity {
                     }
 
                     double limit = Double.parseDouble(limitStr);
+                    double remainder = Double.parseDouble(remainderStr);
 
                     if (envelopeToEdit == null) {
                         // Create new
@@ -572,7 +576,12 @@ public class MainActivity extends AppCompatActivity {
 
                         envelopeToEdit.setName(name);
                         envelopeToEdit.setLimit(limit);
-                        envelopeToEdit.setRemaining(Math.max(limit - spent, 0));
+                        if(remainder == remaining){
+                            envelopeToEdit.calculateRemaining();
+                        }
+                        else{
+                            envelopeToEdit.setRemaining(remainder);
+                        }
                     }
 
                     PrefManager.saveEnvelopes(this, envelopes);
@@ -653,11 +662,11 @@ public class MainActivity extends AppCompatActivity {
                             if (oldEnvelope != null) {
                                 // Refund old amount in old envelope and remove transaction
                                 oldEnvelope.getTransactions().remove(transactionToEdit);
-                                oldEnvelope.setRemaining(oldEnvelope.getRemaining() + oldAmount);
+                                oldEnvelope.calculateRemaining();
                             }
                             if (newEnvelope != null) {
                                 // Deduct new amount and add transaction to new envelope
-                                newEnvelope.setRemaining(newEnvelope.getRemaining() - newAmount);
+                                newEnvelope.calculateRemaining();
                                 newEnvelope.getTransactions().add(transactionToEdit);
                             }
                             // You'll need a setter or directly update the field:
@@ -671,7 +680,7 @@ public class MainActivity extends AppCompatActivity {
                                     showError("Insufficient funds in envelope!");
                                     return;
                                 }
-                                envelope.setRemaining(envelope.getRemaining() - diff);
+                                envelope.calculateRemaining();
                             }
                         }
 
