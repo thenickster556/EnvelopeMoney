@@ -142,27 +142,22 @@ public class Envelope {
         if (monthlyData == null) monthlyData = new HashMap<>();
 
         if (!monthlyData.containsKey(month)) {
-            // Find previous month data if carrying over
             String previousMonth = getPreviousMonth(month);
             MonthData previousData = monthlyData.get(previousMonth);
-
             if (carryOver && previousData != null) {
                 double newLimit = previousData.limit + previousData.remaining;
                 monthlyData.put(month, new MonthData(newLimit, newLimit));
             } else {
-                // Use original limit for new months
                 monthlyData.put(month, new MonthData(originalLimit, originalLimit));
             }
         }
-
-        // Sync with existing transactions
         MonthData currentData = monthlyData.get(month);
+        currentData.transactions.clear();  // clear previous sync
         double spent = 0;
-        currentData.transactions.clear(); // Clear any old data
         for (Transaction t : transactions) {
             if (t.getMonth().equals(month)) {
                 spent += t.getAmount();
-                currentData.transactions.add(t);  // Add the transaction to monthly data
+                currentData.transactions.add(t);
             }
         }
         currentData.remaining = currentData.limit - spent;

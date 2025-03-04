@@ -103,29 +103,29 @@ public class MainActivity extends AppCompatActivity {
     }
     private void addData() {
 //         Dummy transactions for "Emergency Fund"
-        Transaction janEmergencyTransaction = new Transaction("Emergency Fund", 100.0, "2025-01-10", "January expense");
-        setTransactionMonth(janEmergencyTransaction, "2025-01");
-
-        Transaction febEmergencyTransaction = new Transaction("Emergency Fund", 75.0, "2025-02-05", "February expense");
-        setTransactionMonth(febEmergencyTransaction, "2025-02");
-
-        // Dummy transactions for "Vacation Fund"
-        Transaction janVacationTransaction = new Transaction("Vacation Fund", 200.0, "2025-01-20", "January booking");
-        setTransactionMonth(janVacationTransaction, "2025-01");
-
-        Transaction febVacationTransaction = new Transaction("Vacation Fund", 150.0, "2025-02-12", "February booking");
-        setTransactionMonth(febVacationTransaction, "2025-02");
+//        Transaction janEmergencyTransaction = new Transaction("Emergency Fund", 100.0, "2025-01-10", "January expense");
+//        setTransactionMonth(janEmergencyTransaction, "2025-01");
+//
+//        Transaction febEmergencyTransaction = new Transaction("Emergency Fund", 75.0, "2025-02-05", "February expense");
+//        setTransactionMonth(febEmergencyTransaction, "2025-02");
+//
+//        // Dummy transactions for "Vacation Fund"
+//        Transaction janVacationTransaction = new Transaction("Vacation Fund", 200.0, "2025-01-20", "January booking");
+//        setTransactionMonth(janVacationTransaction, "2025-01");
+//
+//        Transaction febVacationTransaction = new Transaction("Vacation Fund", 150.0, "2025-02-12", "February booking");
+//        setTransactionMonth(febVacationTransaction, "2025-02");
         Envelope emergencyFund = findEnvelopeByName("Emergency Fund");
-        if (emergencyFund != null) {
-            emergencyFund.addTransaction(janEmergencyTransaction);
-            emergencyFund.addTransaction(febEmergencyTransaction);
-        }
+//        if (emergencyFund != null) {
+//            emergencyFund.addTransaction(janEmergencyTransaction);
+//            emergencyFund.addTransaction(febEmergencyTransaction);
+//        }
 
         Envelope vacationFund = findEnvelopeByName("Vacation Fund");
-        if (vacationFund != null) {
-            vacationFund.addTransaction(janVacationTransaction);
-            vacationFund.addTransaction(febVacationTransaction);
-        }
+//        if (vacationFund != null) {
+//            vacationFund.addTransaction(janVacationTransaction);
+//            vacationFund.addTransaction(febVacationTransaction);
+//        }
         emergencyFund.initializeMonth("2025-01", false);
         emergencyFund.initializeMonth("2025-02", false);
         vacationFund.initializeMonth("2025-01", false);
@@ -158,10 +158,10 @@ public class MainActivity extends AppCompatActivity {
         tvMonth.setText(formatDisplayMonth(currentMonth));
 
         // Disable previous button if no earlier months
-//        btnPrev.setEnabled(hasPreviousMonth());
+        btnPrev.setEnabled(hasPreviousMonth());
 
         // Disable next button if current month is present or future
-//        btnNext.setEnabled(false);
+        btnNext.setEnabled(hasNextMonth());
         btnPrev.setOnClickListener(v -> changeMonth(-1));
         btnNext.setOnClickListener(v -> changeMonth(1));
     }
