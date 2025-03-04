@@ -158,10 +158,10 @@ public class MainActivity extends AppCompatActivity {
         tvMonth.setText(formatDisplayMonth(currentMonth));
 
         // Disable previous button if no earlier months
-        btnPrev.setEnabled(hasPreviousMonth());
+//        btnPrev.setEnabled(hasPreviousMonth());
 
         // Disable next button if current month is present or future
-        btnNext.setEnabled(false);
+//        btnNext.setEnabled(false);
         btnPrev.setOnClickListener(v -> changeMonth(-1));
         btnNext.setOnClickListener(v -> changeMonth(1));
     }

@@ -8,13 +8,40 @@
     android:padding="16dp">
 
     <!-- Input Section -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:paddingTop="?attr/actionBarSize"
+        android:paddingBottom="3dp">
+
+        <ImageButton
+            android:id="@+id/btnPrevMonth"
+            android:layout_width="40dp"
+            android:layout_height="30dp"
+            android:src="@android:drawable/ic_media_previous" />
+
+        <TextView
+            android:id="@+id/tvCurrentMonth"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:padding="8dp"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <ImageButton
+            android:id="@+id/btnNextMonth"
+            android:layout_width="40dp"
+            android:layout_height="30dp"
+            android:src="@android:drawable/ic_media_next" />
+    </LinearLayout>
     <!-- Transaction History Title Row -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:paddingTop="?attr/actionBarSize">
+        android:gravity="center_vertical">
 
         <TextView
             android:id="@+id/tvTransactionHistoryTitle"
@@ -24,7 +51,8 @@
             android:text="Transaction History"
             android:textSize="18sp"
             android:textStyle="bold"
-            android:layout_marginStart="8dp" />
+            android:layout_marginStart="8dp"
+            android:layout_marginLeft="8dp" />
 
         <ImageButton
             android:id="@+id/btnAddTransaction"
@@ -33,7 +61,8 @@
             android:src="@android:drawable/ic_menu_add"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="Add Transaction"
-            android:layout_marginEnd="8dp"/>
+            android:layout_marginEnd="8dp"
+            android:layout_marginRight="8dp" />
     </LinearLayout>
 
     <!-- Transaction List & Total -->
