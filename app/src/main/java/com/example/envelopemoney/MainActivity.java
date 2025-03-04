@@ -305,7 +305,7 @@ public class MainActivity extends AppCompatActivity {
                         // Add to the chosen Envelope
                         Envelope env = findEnvelopeByName(envelopeName);
                         if (env != null) {
-                            env.addTransaction(newTransaction);
+                            env.addTransaction(newTransaction,currentMonth);
                         }
 
                         // Save & refresh
@@ -325,23 +325,11 @@ public class MainActivity extends AppCompatActivity {
     private void updateTransactionHistory() {
         allTransactions.clear();
 
+        // Use only the monthly data as the source of truth
         for (Envelope envelope : envelopes) {
             Envelope.MonthData monthData = envelope.getMonthlyData(currentMonth);
             allTransactions.addAll(monthData.transactions);
         }
-
-
-        // Aggregate transactions from selected envelopes that are in the current month
-        for (Envelope envelope : envelopes) {
-            if (envelope.isSelected()) {
-                for (Transaction t : envelope.getTransactions()) {
-                    if (t.getMonth().equals(currentMonth)) {
-                        allTransactions.add(t);
-                    }
-                }
-            }
-        }
-
 
         // Sort transactions (newest first)
         Collections.sort(allTransactions, (t1, t2) -> {
@@ -369,6 +357,7 @@ public class MainActivity extends AppCompatActivity {
 
         transactionAdapter.notifyDataSetChanged();
     }
+
 
 
     private void updateDisplay() {
@@ -710,31 +699,21 @@ public class MainActivity extends AppCompatActivity {
 //        new AlertDialog.Builder(this)
 //                .setMessage("Delete this transaction?")
 //                .setPositiveButton("Delete", (d, w) -> {
-//                    for (Envelope envelope : envelopes) {
-//                        if (envelope.getName().equals(transaction.getEnvelopeName())) {
-//                            envelope.removeTransaction(transaction);
-//                            break;
-//                        }
+//                    Envelope envelope = findEnvelopeByName(transaction.getEnvelopeName());
+//                    if(envelope != null){
+//                        envelope.removeTransaction(transaction);
+//                        // Save and refresh
+//                        PrefManager.saveEnvelopes(this, envelopes);
+//                        updateDisplay();
 //                    }
-//                    PrefManager.saveEnvelopes(this, envelopes);
-//                    updateDisplay();
 //                });
         Envelope envelope = findEnvelopeByName(transaction.getEnvelopeName());
-        if (envelope == null) {
-            showError("Envelope not found!");
-            return;
-        }
-
-        double oldAmount = transaction.getAmount();
-        // Give back the spent amount
-        envelope.setRemaining(envelope.getRemaining() + oldAmount);
-
-        // Remove from the envelope’s transaction list
-        envelope.getTransactions().remove(transaction);
-
-        // Save and refresh
-        PrefManager.saveEnvelopes(MainActivity.this, envelopes);
-        updateDisplay();
+        if(envelope != null){
+            envelope.removeTransaction(transaction, currentMonth);
+            // Save and refresh
+            PrefManager.saveEnvelopes(this, envelopes);
+            updateDisplay();
+        };
     }
 
 

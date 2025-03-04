@@ -1,11 +1,8 @@
 package com.example.envelopemoney;
 
 import android.os.Build;
-
 import androidx.annotation.RequiresApi;
-
 import com.google.gson.annotations.SerializedName;
-
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -30,6 +27,7 @@ public class Envelope {
             this.transactions = new ArrayList<>();
         }
     }
+
     @SerializedName("name")
     private String name;
     @SerializedName("limit")
@@ -45,16 +43,12 @@ public class Envelope {
     @SerializedName("monthlyData")
     private Map<String, MonthData> monthlyData = new HashMap<>();
 
-
-
-
     public Envelope(String name, double limit) {
         this.name = name;
         this.limit = limit;
         this.originalLimit = limit;
         this.remaining = limit;
     }
-
 
     // Getters and setters
     public String getName() { return name; }
@@ -74,11 +68,12 @@ public class Envelope {
         MonthData data = monthlyData.get(month);
         return data != null && (!data.transactions.isEmpty() || data.remaining != data.limit);
     }
+
     @RequiresApi(api = Build.VERSION_CODES.N)
     public void setRemaining(double remaining) {
         this.calculateRemaining();
-//        this.remaining = remaining;
     }
+
     public void setName(String name) {
         this.name = name;
     }
@@ -88,35 +83,64 @@ public class Envelope {
         this.originalLimit = limit;
     }
 
-    // Add this method to handle limit changes properly
+    // Adjust limit and remaining based on new limit
     public void adjustLimit(double newLimit) {
         double spent = this.limit - this.remaining;
         this.limit = newLimit;
         this.remaining = Math.max(newLimit - spent, 0);
     }
+
+    private boolean canAfford(double amount) {
+        return (remaining >= amount);
+    }
+
+    /**
+     * Adds a new transaction to the envelope without removing it from the global list.
+     */
     @RequiresApi(api = Build.VERSION_CODES.N)
-    public void addTransaction(Transaction transaction) {
-        transactions.add(transaction);
+    public void addTransaction(Transaction t, String currentMonth) {
+        // Ensure the transaction's envelopeName is set correctly
+        t.setEnvelopeName(this.name);
+        transactions.add(t);
+        calculateRemaining();
+        // If the transaction's month equals currentMonth, update monthlyData as well
+        if (Objects.equals(t.getMonth(), currentMonth)) {
+            // Refresh current month's data
+            initializeMonth(currentMonth, false);
+        }
+    }
+
+    /**
+     * Removes a transaction from the envelope.
+     */
+    @RequiresApi(api = Build.VERSION_CODES.N)
+    public void removeTransaction(Transaction t, String currentMonth) {
+        transactions.remove(t);
+        calculateRemaining();
+        // If the transaction's month equals currentMonth, update monthlyData as well
+        if (Objects.equals(t.getMonth(), currentMonth)) {
+            // Refresh current month's data
+            initializeMonth(currentMonth, false);
+        }
+    }
+
+    /**
+     * Updates an existing transaction.
+     */
+    @RequiresApi(api = Build.VERSION_CODES.N)
+    public void updateTransaction(Transaction t, double newAmount) {
+        t.setAmount(newAmount);
         calculateRemaining();
     }
 
-    @RequiresApi(api = Build.VERSION_CODES.N)
-    public void removeTransaction(Transaction transaction) {
-        transactions.remove(transaction);
-        calculateRemaining();
-    }
-
-    @RequiresApi(api = Build.VERSION_CODES.N)
-    public void updateTransaction(Transaction transaction, double oldAmount) {
-        calculateRemaining();
-    }
     public List<Transaction> getTransactions() {
         if (transactions == null) { // Handle deserialization case
             transactions = new ArrayList<>();
         }
         return transactions;
     }
-    // Update remaining calculation when loading
+
+    // Recalculate remaining from the global transaction list
     @RequiresApi(api = Build.VERSION_CODES.N)
     private void calculateRemaining() {
         double totalSpent = 0;
@@ -126,20 +150,24 @@ public class Envelope {
         remaining = limit - totalSpent;
     }
 
+    /**
+     * Resets the envelope for a new month.
+     * (Optional: Commented out the clear operation to avoid deleting data.)
+     */
     public void reset(boolean carryOver) {
         this.limit = originalLimit;
         if (carryOver) {
-            // Add remaining to limit for next month
             this.remaining += limit;
         } else {
-            // Simple reset without carryover
             this.remaining = originalLimit;
         }
-
-        // Clear transaction history
-        this.transactions.clear();
+        // Commented out: this.transactions.clear();
     }
-    // Add this method to initialize month data
+
+    /**
+     * Initializes monthly data for a given month.
+     * It syncs the monthlyData.transactions with the global transactions that have the matching month.
+     */
     public void initializeMonth(String month, boolean carryOver) {
         if (monthlyData == null) monthlyData = new HashMap<>();
 
@@ -157,6 +185,7 @@ public class Envelope {
         currentData.transactions.clear();  // clear previous sync
         double spent = 0;
         for (Transaction t : transactions) {
+            // Use Objects.equals to safely compare even if t.getMonth() is null
             if (Objects.equals(t.getMonth(), month)) {
                 spent += t.getAmount();
                 currentData.transactions.add(t);
@@ -167,7 +196,7 @@ public class Envelope {
 
     private String getPreviousMonth(String currentMonth) {
         try {
-            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM");
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM", Locale.getDefault());
             Date date = sdf.parse(currentMonth);
             Calendar cal = Calendar.getInstance();
             cal.setTime(date);
@@ -178,6 +207,10 @@ public class Envelope {
         }
     }
 
+    /**
+     * Migrates legacy transactions by setting their month from the date.
+     * Modified so that legacy transactions are not removed from the global list.
+     */
     public void migrateLegacyTransactions(String defaultMonthForNull) {
         if (monthlyData == null) monthlyData = new HashMap<>();
 
@@ -191,29 +224,24 @@ public class Envelope {
         while (iterator.hasNext()) {
             Transaction t = iterator.next();
             if (t.getMonth() == null) {
-                // 1. Derive the month from the transaction’s date
                 String derivedMonth = parseDateToYearMonth(t.getDate());
-                // If parse fails or returns null, fall back to defaultMonthForNull
                 if (derivedMonth == null) {
                     derivedMonth = defaultMonthForNull;
                 }
-                // 2. Set the transaction’s month
                 t.setMonth(derivedMonth);
-
-                // 3. Move it into that month’s MonthData
                 MonthData correctData = monthlyData.get(derivedMonth);
                 if (correctData == null) {
                     correctData = new MonthData(originalLimit, originalLimit);
                     monthlyData.put(derivedMonth, correctData);
                 }
+                // Add transaction to the appropriate MonthData without removing it from the global list:
                 correctData.transactions.add(t);
-
-                // 4. Remove from the envelope’s top-level list
-                iterator.remove();
+                // DO NOT remove t from transactions
+                // iterator.remove();
             }
         }
 
-        // Recalculate
+        // Recalculate for the default month
         double total = 0;
         for (Transaction t : data.transactions) {
             total += t.getAmount();
@@ -233,12 +261,6 @@ public class Envelope {
             e.printStackTrace();
             return null;
         }
-    }
-
-
-    private MonthData getPreviousMonthData(String currentMonth) {
-        // Implement logic to find previous month's data
-        return null;
     }
 
     public boolean isSelected() { return isSelected; }
