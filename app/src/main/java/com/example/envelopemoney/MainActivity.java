@@ -324,8 +324,10 @@ public class MainActivity extends AppCompatActivity {
 
         // Use only the monthly data as the source of truth
         for (Envelope envelope : envelopes) {
-            Envelope.MonthData monthData = envelope.getMonthlyData(currentMonth);
-            allTransactions.addAll(monthData.transactions);
+            if(envelope.isSelected()) {
+                Envelope.MonthData monthData = envelope.getMonthlyData(currentMonth);
+                allTransactions.addAll(monthData.transactions);
+            }
         }
 
         // Sort transactions (newest first)
@@ -710,25 +712,19 @@ public class MainActivity extends AppCompatActivity {
 
     @RequiresApi(api = Build.VERSION_CODES.N)
     private void deleteTransaction(Transaction transaction) {
-        // revisit this
-//        new AlertDialog.Builder(this)
-//                .setMessage("Delete this transaction?")
-//                .setPositiveButton("Delete", (d, w) -> {
-//                    Envelope envelope = findEnvelopeByName(transaction.getEnvelopeName());
-//                    if(envelope != null){
-//                        envelope.removeTransaction(transaction);
-//                        // Save and refresh
-//                        PrefManager.saveEnvelopes(this, envelopes);
-//                        updateDisplay();
-//                    }
-//                });
-        Envelope envelope = findEnvelopeByName(transaction.getEnvelopeName());
-        if(envelope != null){
-            envelope.removeTransaction(transaction, currentMonth);
-            // Save and refresh
-            PrefManager.saveEnvelopes(this, envelopes);
-            updateDisplay();
-        };
+        new AlertDialog.Builder(MainActivity.this)
+                .setMessage("Delete this transaction?")
+                .setPositiveButton("Delete", (d, w) -> {
+                    Envelope envelope = findEnvelopeByName(transaction.getEnvelopeName());
+                    if(envelope != null){
+                        envelope.removeTransaction(transaction, currentMonth);
+                        // Save and refresh
+                        PrefManager.saveEnvelopes(this, envelopes);
+                        updateDisplay();
+                    };
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
     }
 
 

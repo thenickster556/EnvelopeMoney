@@ -42,6 +42,7 @@ public class Envelope {
     private boolean isSelected = true;
     @SerializedName("monthlyData")
     private Map<String, MonthData> monthlyData = new HashMap<>();
+    private double offset = 0;
 
     public Envelope(String name, double limit) {
         this.name = name;
@@ -71,6 +72,7 @@ public class Envelope {
 
     @RequiresApi(api = Build.VERSION_CODES.N)
     public void setRemaining(double remaining) {
+        this.offset = remaining - this.remaining;
         this.remaining = remaining;
     }
 
@@ -85,9 +87,9 @@ public class Envelope {
 
     // Adjust limit and remaining based on new limit
     public void adjustLimit(double newLimit) {
-        double spent = this.limit - this.remaining;
         this.limit = newLimit;
-        this.remaining = Math.max(newLimit - spent, 0);
+        this.originalLimit = newLimit;
+        this.calculateRemaining();
     }
 
     private boolean canAfford(double amount) {
@@ -147,7 +149,7 @@ public class Envelope {
         for (Transaction t : transactions) {
             totalSpent += t.getAmount();
         }
-        remaining = this.remaining - totalSpent;
+        remaining = this.limit - totalSpent + this.offset;
     }
 
     /**
@@ -156,6 +158,7 @@ public class Envelope {
      */
     public void reset(boolean carryOver) {
         this.limit = originalLimit;
+        this.offset = 0;
         if (carryOver) {
             this.remaining += limit;
         } else {
