@@ -586,9 +586,12 @@ public class MainActivity extends AppCompatActivity {
                         double remaining = envelopeToEdit.getRemaining();
 
                         envelopeToEdit.setName(name);
-                        envelopeToEdit.adjustLimit(limit);
+                        if(limit != envelopeToEdit.getLimit()) {
+                            envelopeToEdit.adjustLimit(limit);
+                        }
                         if (remainder != remaining) {
-                            envelopeToEdit.setRemaining(remainder);
+                            // Set the manual override values:
+                            envelopeToEdit.setManualOverrideRemaining(remainder); // store the limit at override time
                         }
                     }
 
@@ -674,8 +677,8 @@ public class MainActivity extends AppCompatActivity {
                             }
                             if (newEnvelope != null) {
                                 // Deduct new amount and add transaction to new envelope
-                                newEnvelope.calculateRemaining();
                                 newEnvelope.getTransactions().add(transactionToEdit);
+                                newEnvelope.calculateRemaining();
                             }
                             // You'll need a setter or directly update the field:
                             transactionToEdit.setEnvelopeName(newEnvelopeName);
@@ -683,12 +686,7 @@ public class MainActivity extends AppCompatActivity {
                             // If envelope is the same, adjust remaining based on the difference
                             Envelope envelope = findEnvelopeByName(newEnvelopeName);
                             if (envelope != null) {
-                                double diff = newAmount - oldAmount;
-                                if (diff > envelope.getRemaining()) {
-                                    showError("Insufficient funds in envelope!");
-                                    return;
-                                }
-                                envelope.calculateRemaining();
+                                envelope.updateTransaction(transactionToEdit, newAmount);
                             }
                         }
 

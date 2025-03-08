@@ -42,7 +42,11 @@ public class Envelope {
     private boolean isSelected = true;
     @SerializedName("monthlyData")
     private Map<String, MonthData> monthlyData = new HashMap<>();
-    private double offset = 0;
+
+    private Double manualRemaining = null;     // if null => no manual override
+    private double baselineLimit = 0;         // the limit at the moment of manual override
+    private double baselineRemaining = 0;     // the user-set remaining at the time of override
+
 
     public Envelope(String name, double limit) {
         this.name = name;
@@ -72,7 +76,6 @@ public class Envelope {
 
     @RequiresApi(api = Build.VERSION_CODES.N)
     public void setRemaining(double remaining) {
-        this.offset = remaining - this.remaining;
         this.remaining = remaining;
     }
 
@@ -85,11 +88,38 @@ public class Envelope {
         this.originalLimit = limit;
     }
 
+    /**
+     * User explicitly sets a new manual remaining.
+     * This discards any old override, sets new baselines,
+     * and uses that override from now on.
+     */
+    public void setManualOverrideRemaining(double newRemaining) {
+        this.manualRemaining = newRemaining;
+        this.baselineRemaining = newRemaining; // record the user's set remaining
+        this.remaining = newRemaining;         // set the envelope’s remaining right now
+    }
+
     // Adjust limit and remaining based on new limit
     public void adjustLimit(double newLimit) {
+        double oldLimit = this.limit;
         this.limit = newLimit;
         this.originalLimit = newLimit;
-        this.calculateRemaining();
+        if (manualRemaining != null) {
+            // difference from the old baseline limit
+            double diff = newLimit - baselineLimit;
+
+            // The new manual remaining is baselineRemaining + diff
+            this.manualRemaining = baselineRemaining + diff;
+
+            // Update the envelope’s actual remaining to reflect the new manual override
+            this.remaining = this.manualRemaining;
+
+            // Update baselines to the new values
+            this.baselineLimit = newLimit;
+            this.baselineRemaining = this.manualRemaining;
+        } else {
+           this.calculateRemaining();
+        }
     }
 
     private boolean canAfford(double amount) {
@@ -104,35 +134,54 @@ public class Envelope {
         // Ensure the transaction's envelopeName is set correctly
         t.setEnvelopeName(this.name);
         transactions.add(t);
-        calculateRemaining();
         // If the transaction's month equals currentMonth, update monthlyData as well
         if (Objects.equals(t.getMonth(), currentMonth)) {
             // Refresh current month's data
             initializeMonth(currentMonth, false);
         }
+        if (manualRemaining != null) {
+            // Subtract from the override so the new transaction reduces the envelope’s “leftover”
+            manualRemaining -= t.getAmount();
+            remaining = manualRemaining;
+        } else {
+            // Recalc from normal logic
+            calculateRemaining();
+        }
     }
 
-    /**
-     * Removes a transaction from the envelope.
-     */
     @RequiresApi(api = Build.VERSION_CODES.N)
     public void removeTransaction(Transaction t, String currentMonth) {
         transactions.remove(t);
-        calculateRemaining();
+
         // If the transaction's month equals currentMonth, update monthlyData as well
         if (Objects.equals(t.getMonth(), currentMonth)) {
             // Refresh current month's data
             initializeMonth(currentMonth, false);
         }
+        if (manualRemaining != null) {
+            // Add back the amount to the override since we're removing that spending
+            manualRemaining += t.getAmount();
+            remaining = manualRemaining;
+        } else {
+            calculateRemaining();
+        }
     }
 
-    /**
-     * Updates an existing transaction.
-     */
     @RequiresApi(api = Build.VERSION_CODES.N)
     public void updateTransaction(Transaction t, double newAmount) {
+        double oldAmount = t.getAmount();
         t.setAmount(newAmount);
-        calculateRemaining();
+
+        if (manualRemaining != null) {
+            // We changed the transaction’s spending by (oldAmount - newAmount)
+            double diff = oldAmount - newAmount ;
+            // If oldAmount was 50, newAmount = 70 => diff= -20 => override is decreased by 20
+            // If oldAmount was 70, newAmount = 50 => diff= +20 => override is increased by 20
+            manualRemaining += diff;
+            remaining = manualRemaining;
+        } else {
+            calculateRemaining();
+        }
     }
 
     public List<Transaction> getTransactions() {
@@ -149,7 +198,11 @@ public class Envelope {
         for (Transaction t : transactions) {
             totalSpent += t.getAmount();
         }
-        remaining = this.limit - totalSpent + this.offset;
+        if(manualRemaining != null){
+            remaining = this.baselineLimit - totalSpent;
+        }else {
+            remaining = this.limit - totalSpent;
+        }
     }
 
     /**
@@ -158,7 +211,7 @@ public class Envelope {
      */
     public void reset(boolean carryOver) {
         this.limit = originalLimit;
-        this.offset = 0;
+        this.manualRemaining = null;
         if (carryOver) {
             this.remaining += limit;
         } else {
