@@ -543,7 +543,11 @@ public class MainActivity extends AppCompatActivity {
         EditText etName = dialogView.findViewById(R.id.etEnvelopeName);
         EditText etLimit = dialogView.findViewById(R.id.etEnvelopeLimit);
         EditText etRemainder = dialogView.findViewById(R.id.etEnvelopeRemainder);
-
+        TextView etReminderLabel = dialogView.findViewById(R.id.etEnvelopeRemainderLabel);
+        if(envelopeToEdit == null){
+            etReminderLabel.setVisibility(View.GONE);
+            etRemainder.setVisibility(View.GONE);
+        }
         if (envelopeToEdit != null) {
             etName.setText(envelopeToEdit.getName());
             etLimit.setText(String.valueOf(envelopeToEdit.getLimit()));
@@ -555,36 +559,36 @@ public class MainActivity extends AppCompatActivity {
                 .setPositiveButton("Save", (dialog, which) -> {
                     String name = etName.getText().toString();
                     String limitStr = etLimit.getText().toString();
-                    String remainderStr = etRemainder.getText().toString();
 
                     if (name.isEmpty() || limitStr.isEmpty()) {
                         showError("Please fill all fields");
                         return;
                     }
-
                     double limit = Double.parseDouble(limitStr);
-                    double remainder;
-                    if (remainderStr.startsWith("+")) {
-                        // e.g. "+50" means limit + 50
-                        remainder = limit + Double.parseDouble(remainderStr.substring(1));
-                    } else if (remainderStr.startsWith("-")) {
-                        // e.g. "-30" means limit - 30
-                        remainder = limit - Double.parseDouble(remainderStr.substring(1));
-                    } else {
-                        // Otherwise, treat as an absolute value
-                        remainder = Double.parseDouble(remainderStr);
-                    }
-
-                    if (envelopeToEdit == null) {
+                    if(envelopeToEdit == null) {
                         // Create new
                         envelopes.add(new Envelope(name, limit));
-                    } else {
+                    }
+                    else {
+                        String remainderStr = etRemainder.getText().toString();
+                        double remainder;
+                        if (remainderStr.startsWith("+")) {
+                            // e.g. "+50" means limit + 50
+                            remainder = limit + Double.parseDouble(remainderStr.substring(1));
+                        } else if (remainderStr.startsWith("-")) {
+                            // e.g. "-30" means limit - 30
+                            remainder = limit - Double.parseDouble(remainderStr.substring(1));
+                        } else {
+                            // Otherwise, treat as an absolute value
+                            remainder = Double.parseDouble(remainderStr);
+                        }
+
                         // Update existing
                         double remaining = envelopeToEdit.getRemaining();
 
                         envelopeToEdit.setName(name);
                         envelopeToEdit.adjustLimit(limit);
-                        if(remainder != remaining){
+                        if (remainder != remaining) {
                             envelopeToEdit.setRemaining(remainder);
                         }
                     }
