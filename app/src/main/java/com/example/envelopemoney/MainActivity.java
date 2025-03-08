@@ -2,7 +2,6 @@ package com.example.envelopemoney;
 
 import android.app.DatePickerDialog;
 import android.content.Context;
-import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.LayoutInflater;
@@ -11,7 +10,6 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
-import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.ImageButton;
@@ -24,8 +22,6 @@ import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
-
-import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -158,10 +154,10 @@ public class MainActivity extends AppCompatActivity {
         tvMonth.setText(formatDisplayMonth(currentMonth));
 
         // Disable previous button if no earlier months
-        btnPrev.setEnabled(hasPreviousMonth());
+//        btnPrev.setEnabled(hasPreviousMonth());
 
         // Disable next button if current month is present or future
-        btnNext.setEnabled(hasNextMonth());
+//        btnNext.setEnabled(hasNextMonth());
         btnPrev.setOnClickListener(v -> changeMonth(-1));
         btnNext.setOnClickListener(v -> changeMonth(1));
     }
@@ -229,6 +225,7 @@ public class MainActivity extends AppCompatActivity {
             MonthTracker.setCurrentMonth(this, newMonth);
             refreshDataForMonth();
             setupMonthNavigation();
+            updateDisplay();
         } catch (ParseException e) {
             e.printStackTrace();
         }
