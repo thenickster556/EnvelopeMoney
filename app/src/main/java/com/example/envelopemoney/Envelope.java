@@ -147,7 +147,7 @@ public class Envelope {
         for (Transaction t : transactions) {
             totalSpent += t.getAmount();
         }
-        remaining = limit - totalSpent;
+        remaining = this.remaining - totalSpent;
     }
 
     /**
@@ -161,7 +161,6 @@ public class Envelope {
         } else {
             this.remaining = originalLimit;
         }
-        // Commented out: this.transactions.clear();
     }
 
     /**

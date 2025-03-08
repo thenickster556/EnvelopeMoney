@@ -102,34 +102,34 @@ public class MainActivity extends AppCompatActivity {
         updateTransactionHistory();
     }
     private void addData() {
-//         Dummy transactions for "Emergency Fund"
+        // Dummy transactions for "Emergency Fund"
 //        Transaction janEmergencyTransaction = new Transaction("Emergency Fund", 100.0, "2025-01-10", "January expense");
 //        setTransactionMonth(janEmergencyTransaction, "2025-01");
 //
 //        Transaction febEmergencyTransaction = new Transaction("Emergency Fund", 75.0, "2025-02-05", "February expense");
 //        setTransactionMonth(febEmergencyTransaction, "2025-02");
 //
-//        // Dummy transactions for "Vacation Fund"
+////        // Dummy transactions for "Vacation Fund"
 //        Transaction janVacationTransaction = new Transaction("Vacation Fund", 200.0, "2025-01-20", "January booking");
 //        setTransactionMonth(janVacationTransaction, "2025-01");
-//
+////
 //        Transaction febVacationTransaction = new Transaction("Vacation Fund", 150.0, "2025-02-12", "February booking");
 //        setTransactionMonth(febVacationTransaction, "2025-02");
-        Envelope emergencyFund = findEnvelopeByName("Emergency Fund");
+//        Envelope emergencyFund = findEnvelopeByName("Emergency Fund");
 //        if (emergencyFund != null) {
-//            emergencyFund.addTransaction(janEmergencyTransaction);
-//            emergencyFund.addTransaction(febEmergencyTransaction);
+//            emergencyFund.addTransaction(janEmergencyTransaction, currentMonth);
+//            emergencyFund.addTransaction(febEmergencyTransaction, currentMonth);
 //        }
-
-        Envelope vacationFund = findEnvelopeByName("Vacation Fund");
+//
+//        Envelope vacationFund = findEnvelopeByName("Vacation Fund");
 //        if (vacationFund != null) {
-//            vacationFund.addTransaction(janVacationTransaction);
-//            vacationFund.addTransaction(febVacationTransaction);
+//            vacationFund.addTransaction(janVacationTransaction, currentMonth);
+//            vacationFund.addTransaction(febVacationTransaction, currentMonth);
 //        }
-        emergencyFund.initializeMonth("2025-01", false);
-        emergencyFund.initializeMonth("2025-02", false);
-        vacationFund.initializeMonth("2025-01", false);
-        vacationFund.initializeMonth("2025-02", false);
+//        emergencyFund.initializeMonth("2025-01", false);
+//        emergencyFund.initializeMonth("2025-02", false);
+//        vacationFund.initializeMonth("2025-01", false);
+//        vacationFund.initializeMonth("2025-02", false);
 
 
     }
@@ -583,11 +583,8 @@ public class MainActivity extends AppCompatActivity {
                         double remaining = envelopeToEdit.getRemaining();
 
                         envelopeToEdit.setName(name);
-                        envelopeToEdit.setLimit(limit);
-                        if(remainder == remaining){
-                            envelopeToEdit.calculateRemaining();
-                        }
-                        else{
+                        envelopeToEdit.adjustLimit(limit);
+                        if(remainder != remaining){
                             envelopeToEdit.setRemaining(remainder);
                         }
                     }
