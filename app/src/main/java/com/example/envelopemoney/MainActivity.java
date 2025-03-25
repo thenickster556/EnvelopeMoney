@@ -86,6 +86,7 @@ public class MainActivity extends AppCompatActivity {
             handleNewMonth(true); // Auto-reset with carry-over
         }
         setupMonthNavigation();
+        setupDatePickers();
 
         // Initialize adapters
         transactionAdapter = new TransactionAdapter(this, allTransactions);
@@ -150,9 +151,12 @@ public class MainActivity extends AppCompatActivity {
         TextView tvMonth = findViewById(R.id.tvCurrentMonth);
         ImageButton btnPrev = findViewById(R.id.btnPrevMonth);
         ImageButton btnNext = findViewById(R.id.btnNextMonth);
+        TextView tvStartDate = findViewById(R.id.tvStartDate);
+        TextView tvEndDate = findViewById(R.id.tvEndDate);
 
         tvMonth.setText(formatDisplayMonth(currentMonth));
-
+        tvStartDate.setText(getFirstDayOfMonth(currentMonth));
+        tvEndDate.setText(getLastDayOfMonth(currentMonth));
         // Disable previous button if no earlier months
 //        btnPrev.setEnabled(hasPreviousMonth());
 
@@ -160,6 +164,36 @@ public class MainActivity extends AppCompatActivity {
 //        btnNext.setEnabled(hasNextMonth());
         btnPrev.setOnClickListener(v -> changeMonth(-1));
         btnNext.setOnClickListener(v -> changeMonth(1));
+    }
+
+    private String getFirstDayOfMonth(String monthStr) {
+        // monthStr is in "yyyy-MM", so the first day is simply:
+        try {
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM", Locale.getDefault());
+            Date date = sdf.parse(monthStr);
+            Calendar cal = Calendar.getInstance();
+            cal.setTime(date);
+            cal.set(Calendar.DAY_OF_MONTH, 1);
+            SimpleDateFormat displayFormat = new SimpleDateFormat("MMM d, yyyy", Locale.getDefault());
+            return displayFormat.format(cal.getTime());
+        } catch (ParseException e) {
+            return monthStr;
+        }
+    }
+
+    private String getLastDayOfMonth(String monthStr) {
+        try {
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM", Locale.getDefault());
+            Date date = sdf.parse(monthStr);
+            Calendar cal = Calendar.getInstance();
+            cal.setTime(date);
+            int lastDay = cal.getActualMaximum(Calendar.DAY_OF_MONTH);
+            cal.set(Calendar.DAY_OF_MONTH, lastDay);
+            SimpleDateFormat displayFormat = new SimpleDateFormat("MMM d, yyyy", Locale.getDefault());
+            return displayFormat.format(cal.getTime());
+        } catch (ParseException e) {
+            return monthStr;
+        }
     }
 
     private boolean hasPreviousMonth() {
@@ -213,14 +247,12 @@ public class MainActivity extends AppCompatActivity {
             Calendar cal = Calendar.getInstance();
             cal.setTime(date);
             cal.add(Calendar.MONTH, direction);
-
             String newMonth = sdf.format(cal.getTime());
 
             // Prevent navigating to future months
             if (newMonth.compareTo(MonthTracker.formatMonth(new Date())) > 0) {
                 return;
             }
-
             currentMonth = newMonth;
             MonthTracker.setCurrentMonth(this, newMonth);
             refreshDataForMonth();
@@ -322,11 +354,31 @@ public class MainActivity extends AppCompatActivity {
     private void updateTransactionHistory() {
         allTransactions.clear();
 
-        // Use only the monthly data as the source of truth
+        TextView tvStartDate = findViewById(R.id.tvStartDate);
+        TextView tvEndDate = findViewById(R.id.tvEndDate);
+        final SimpleDateFormat sdfDisplay = new SimpleDateFormat("MMM d, yyyy", Locale.getDefault());
+        final SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault());
+        Date startDate = null, endDate = null;
+        try {
+            startDate = sdfDisplay.parse(tvStartDate.getText().toString());
+            endDate = sdfDisplay.parse(tvEndDate.getText().toString());
+        } catch (ParseException e) {
+            e.printStackTrace();
+        }
+
+        // Filter transactions from selected envelopes by date range
         for (Envelope envelope : envelopes) {
-            if(envelope.isSelected()) {
-                Envelope.MonthData monthData = envelope.getMonthlyData(currentMonth);
-                allTransactions.addAll(monthData.transactions);
+            if (envelope.isSelected()) {
+                for (Transaction t : envelope.getTransactions()) {
+                    try {
+                        Date txDate = sdf.parse(t.getDate());
+                        if (txDate != null && !txDate.before(startDate) && !txDate.after(endDate)) {
+                            allTransactions.add(t);
+                        }
+                    } catch (ParseException e) {
+                        e.printStackTrace();
+                    }
+                }
             }
         }
 
@@ -342,7 +394,7 @@ public class MainActivity extends AppCompatActivity {
             allTransactions.add(new Transaction(
                     "No transactions yet",
                     0,
-                    new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(new Date()),
+                    new SimpleDateFormat("MMM d, yyyy", Locale.getDefault()).format(new Date()),
                     "Start by adding your first transaction"
             ));
         }
@@ -503,6 +555,57 @@ public class MainActivity extends AppCompatActivity {
                 })
                 .setNegativeButton("Cancel", null)
                 .show();
+    }
+    private void setupDatePickers() {
+        // Assume these TextViews are already defined in your layout and have IDs tvStartDate and tvEndDate.
+        TextView tvStartDate = findViewById(R.id.tvStartDate);
+        TextView tvEndDate = findViewById(R.id.tvEndDate);
+        final SimpleDateFormat sdf = new SimpleDateFormat("MMM d, yyyy", Locale.getDefault());
+
+        // Set click listener for Start Date
+        tvStartDate.setOnClickListener(v -> {
+            Calendar calendar = Calendar.getInstance();
+            try {
+                // Parse current text to a date so that DatePickerDialog starts at that date.
+                Date currentDate = sdf.parse(tvStartDate.getText().toString());
+                calendar.setTime(currentDate);
+            } catch (ParseException e) {
+                e.printStackTrace();
+            }
+            DatePickerDialog dpd = new DatePickerDialog(MainActivity.this,
+                    (view, year, month, dayOfMonth) -> {
+                        // month is 0-indexed, so add 1.
+                        calendar.set(year, month, dayOfMonth);
+                        tvStartDate.setText(sdf.format(calendar.getTime()));
+                        // Refresh your transaction history based on the new filter
+                        updateTransactionHistory();
+                    },
+                    calendar.get(Calendar.YEAR),
+                    calendar.get(Calendar.MONTH),
+                    calendar.get(Calendar.DAY_OF_MONTH));
+            dpd.show();
+        });
+
+        // Set click listener for End Date
+        tvEndDate.setOnClickListener(v -> {
+            Calendar calendar = Calendar.getInstance();
+            try {
+                Date currentDate = sdf.parse(tvEndDate.getText().toString());
+                calendar.setTime(currentDate);
+            } catch (ParseException e) {
+                e.printStackTrace();
+            }
+            DatePickerDialog dpd = new DatePickerDialog(MainActivity.this,
+                    (view, year, month, dayOfMonth) -> {
+                        calendar.set(year, month, dayOfMonth);
+                        tvEndDate.setText(sdf.format(calendar.getTime()));
+                        updateTransactionHistory();
+                    },
+                    calendar.get(Calendar.YEAR),
+                    calendar.get(Calendar.MONTH),
+                    calendar.get(Calendar.DAY_OF_MONTH));
+            dpd.show();
+        });
     }
 
     private void performMonthlyReset(boolean carryOver) {
