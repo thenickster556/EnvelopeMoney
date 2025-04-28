@@ -499,14 +499,14 @@ public class MainActivity extends AppCompatActivity {
                     envelope.getLimit(),
                     envelope.getRemaining()));
 
-            // Checkbox state
+            cbSelect.setOnCheckedChangeListener(null);
+
             cbSelect.setChecked(envelope.isSelected());
 
-            // Checkbox listener
             cbSelect.setOnCheckedChangeListener((buttonView, isChecked) -> {
                 envelope.setSelected(isChecked);
                 updateTransactionHistory();
-                PrefManager.saveEnvelopes(MainActivity.this, envelopes);
+                PrefManager.saveEnvelopes(getContext(), envelopes);
             });
 
             // Options button listener
