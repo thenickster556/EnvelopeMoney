@@ -206,17 +206,22 @@ public class Envelope {
     }
 
     /**
-     * Resets the envelope for a new month.
-     * (Optional: Commented out the clear operation to avoid deleting data.)
+     * Resets for a new month.
+     * If carryOver==true, new limit = base allowance + leftover,
+     * and remaining = that new limit.
+     * Otherwise both reset to base allowance only.
      */
     public void reset(boolean carryOver) {
-        this.limit = originalLimit;
-        this.manualRemaining = null;
+        double prevRemaining = this.remaining;        // e.g. $200
         if (carryOver) {
-            this.remaining += limit;
+            // new limit should be base allowance + leftover
+            this.limit     = this.originalLimit + prevRemaining; // 100 + 200 = 300
+            this.remaining = this.limit;                          // start month at full
         } else {
-            this.remaining = originalLimit;
+            this.limit     = this.originalLimit;  // back to 100
+            this.remaining = this.limit;          // remaining = 100
         }
+        this.manualRemaining = null;
     }
 
     /**

@@ -229,16 +229,13 @@ public class MainActivity extends AppCompatActivity {
     private void handleNewMonth(boolean carryOver) {
         String newMonth = MonthTracker.formatMonth(new Date());
         for (Envelope env : envelopes) {
-            Envelope.MonthData previousMonth = env.getMonthlyData(currentMonth);
-            Envelope.MonthData newMonthData = env.getMonthlyData(newMonth);
-
-            if (carryOver) {
-                newMonthData.limit = previousMonth.limit + previousMonth.remaining;
-                newMonthData.remaining = newMonthData.limit;
-            }
+            env.reset(carryOver);
+            env.initializeMonth(newMonth, carryOver);
         }
         MonthTracker.setCurrentMonth(this, newMonth);
         currentMonth = newMonth;
+        PrefManager.saveEnvelopes(this, envelopes);
+        updateDisplay();
     }
     private void changeMonth(int direction) {
         try {
