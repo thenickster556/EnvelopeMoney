@@ -531,24 +531,13 @@ public class MainActivity extends AppCompatActivity {
         return super.onOptionsItemSelected(item);
     }
 
+    @RequiresApi(api = Build.VERSION_CODES.N)
     private void showResetConfirmationDialog() {
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        View dialogView = getLayoutInflater().inflate(R.layout.dialog_reset_confirmation, null);
-
-        CheckBox cbCarryOver = dialogView.findViewById(R.id.cbCarryOver);
-        EditText etConfirmation = dialogView.findViewById(R.id.etConfirmation);
-
-        builder.setView(dialogView)
-                .setTitle("Confirm Monthly Reset")
-                .setPositiveButton("Reset", (dialog, which) -> {
-                    String confirmation = etConfirmation.getText().toString().trim();
-                    if ("DEL".equalsIgnoreCase(confirmation)) {
-                        performMonthlyReset(
-                                cbCarryOver.isChecked()
-                        );
-                    } else {
-                        showError("Confirmation failed. Reset canceled.");
-                    }
+        new AlertDialog.Builder(this)
+                .setTitle("Recalculate Balances?")
+                .setMessage("This will recompute each envelope’s remaining balance from your existing transactions. Continue?")
+                .setPositiveButton("Recalculate", (dialog, which) -> {
+                    performMonthlyReset();
                 })
                 .setNegativeButton("Cancel", null)
                 .show();
@@ -605,15 +594,17 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    private void performMonthlyReset(boolean carryOver) {
+    @RequiresApi(api = Build.VERSION_CODES.N)
+    private void performMonthlyReset() {
         for (Envelope envelope : envelopes) {
-            envelope.reset(carryOver);
+            // Recompute remaining = limit – sum(transactions)
+            envelope.calculateRemaining(currentMonth);
         }
-
         PrefManager.saveEnvelopes(this, envelopes);
         updateDisplay();
-        showError("Monthly reset completed successfully!");
+        showError("Balances recalculated successfully!");
     }
+
     private void showEnvelopeOptionsDialog(int position) {
         Envelope envelope = envelopes.get(position);
         new AlertDialog.Builder(this)
@@ -687,7 +678,7 @@ public class MainActivity extends AppCompatActivity {
 
                         envelopeToEdit.setName(name);
                         if(limit != envelopeToEdit.getLimit()) {
-                            envelopeToEdit.adjustLimit(limit);
+                            envelopeToEdit.adjustLimit(limit, currentMonth);
                         }
                         if (remainder != remaining) {
                             // Set the manual override values:
@@ -773,12 +764,12 @@ public class MainActivity extends AppCompatActivity {
                             if (oldEnvelope != null) {
                                 // Refund old amount in old envelope and remove transaction
                                 oldEnvelope.getTransactions().remove(transactionToEdit);
-                                oldEnvelope.calculateRemaining();
+                                oldEnvelope.calculateRemaining(currentMonth);
                             }
                             if (newEnvelope != null) {
                                 // Deduct new amount and add transaction to new envelope
                                 newEnvelope.getTransactions().add(transactionToEdit);
-                                newEnvelope.calculateRemaining();
+                                newEnvelope.calculateRemaining(currentMonth);
                             }
                             // You'll need a setter or directly update the field:
                             transactionToEdit.setEnvelopeName(newEnvelopeName);
@@ -786,7 +777,7 @@ public class MainActivity extends AppCompatActivity {
                             // If envelope is the same, adjust remaining based on the difference
                             Envelope envelope = findEnvelopeByName(newEnvelopeName);
                             if (envelope != null) {
-                                envelope.updateTransaction(transactionToEdit, newAmount);
+                                envelope.updateTransaction(transactionToEdit, newAmount, currentMonth);
                             }
                         }
 

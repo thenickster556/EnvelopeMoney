@@ -100,7 +100,7 @@ public class Envelope {
     }
 
     // Adjust limit and remaining based on new limit
-    public void adjustLimit(double newLimit) {
+    public void adjustLimit(double newLimit, String currentMonth) {
         double oldLimit = this.limit;
         this.limit = newLimit;
         this.originalLimit = newLimit;
@@ -118,7 +118,7 @@ public class Envelope {
             this.baselineLimit = newLimit;
             this.baselineRemaining = this.manualRemaining;
         } else {
-           this.calculateRemaining();
+           this.calculateRemaining(currentMonth);
         }
     }
 
@@ -145,7 +145,7 @@ public class Envelope {
             remaining = manualRemaining;
         } else {
             // Recalc from normal logic
-            calculateRemaining();
+            calculateRemaining(currentMonth);
         }
     }
 
@@ -163,12 +163,12 @@ public class Envelope {
             manualRemaining += t.getAmount();
             remaining = manualRemaining;
         } else {
-            calculateRemaining();
+            calculateRemaining(currentMonth);
         }
     }
 
     @RequiresApi(api = Build.VERSION_CODES.N)
-    public void updateTransaction(Transaction t, double newAmount) {
+    public void updateTransaction(Transaction t, double newAmount, String currentMonth) {
         double oldAmount = t.getAmount();
         t.setAmount(newAmount);
 
@@ -180,7 +180,7 @@ public class Envelope {
             manualRemaining += diff;
             remaining = manualRemaining;
         } else {
-            calculateRemaining();
+            calculateRemaining(currentMonth);
         }
     }
 
@@ -193,10 +193,12 @@ public class Envelope {
 
     // Recalculate remaining from the global transaction list
     @RequiresApi(api = Build.VERSION_CODES.N)
-    public void calculateRemaining() {
+    public void calculateRemaining(String currentMonth) {
         double totalSpent = 0;
         for (Transaction t : transactions) {
-            totalSpent += t.getAmount();
+            if(Objects.equals(t.getMonth(), currentMonth)){
+                totalSpent += t.getAmount();
+            }
         }
         if(manualRemaining != null){
             remaining = this.baselineLimit - totalSpent;
