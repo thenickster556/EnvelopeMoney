@@ -134,18 +134,15 @@ public class Envelope {
         // Ensure the transaction's envelopeName is set correctly
         t.setEnvelopeName(this.name);
         transactions.add(t);
-        // If the transaction's month equals currentMonth, update monthlyData as well
         if (Objects.equals(t.getMonth(), currentMonth)) {
-            // Refresh current month's data
             initializeMonth(currentMonth, false);
-        }
-        if (manualRemaining != null) {
-            // Subtract from the override so the new transaction reduces the envelope’s “leftover”
-            manualRemaining -= t.getAmount();
-            remaining = manualRemaining;
-        } else {
-            // Recalc from normal logic
-            calculateRemaining(currentMonth);
+
+            if (manualRemaining != null) {
+                manualRemaining -= t.getAmount();
+                remaining = manualRemaining;
+            } else {
+                calculateRemaining(currentMonth);
+            }
         }
     }
 
@@ -157,30 +154,35 @@ public class Envelope {
         if (Objects.equals(t.getMonth(), currentMonth)) {
             // Refresh current month's data
             initializeMonth(currentMonth, false);
-        }
-        if (manualRemaining != null) {
-            // Add back the amount to the override since we're removing that spending
-            manualRemaining += t.getAmount();
-            remaining = manualRemaining;
-        } else {
-            calculateRemaining(currentMonth);
+
+            if (manualRemaining != null) {
+                // Add back the amount to the override since we're removing that spending
+                manualRemaining += t.getAmount();
+                remaining = manualRemaining;
+            } else {
+                calculateRemaining(currentMonth);
+            }
         }
     }
 
     @RequiresApi(api = Build.VERSION_CODES.N)
     public void updateTransaction(Transaction t, double newAmount, String currentMonth) {
         double oldAmount = t.getAmount();
+        // We changed the transaction’s spending by (oldAmount - newAmount)
+        double diff = newAmount - oldAmount;
         t.setAmount(newAmount);
 
-        if (manualRemaining != null) {
-            // We changed the transaction’s spending by (oldAmount - newAmount)
-            double diff = oldAmount - newAmount ;
-            // If oldAmount was 50, newAmount = 70 => diff= -20 => override is decreased by 20
-            // If oldAmount was 70, newAmount = 50 => diff= +20 => override is increased by 20
-            manualRemaining += diff;
-            remaining = manualRemaining;
-        } else {
-            calculateRemaining(currentMonth);
+        if (Objects.equals(t.getMonth(), currentMonth)) {
+            initializeMonth(currentMonth, false);
+            if (manualRemaining != null) {
+
+                // If oldAmount was 50, newAmount = 70 => diff= -20 => override is decreased by 20
+                // If oldAmount was 70, newAmount = 50 => diff= +20 => override is increased by 20
+                manualRemaining += diff;
+                remaining = manualRemaining;
+            } else {
+                calculateRemaining(currentMonth);
+            }
         }
     }
 
