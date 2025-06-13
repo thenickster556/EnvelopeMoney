@@ -228,15 +228,37 @@ public class MainActivity extends AppCompatActivity {
     }
     private void handleNewMonth(boolean carryOver) {
         String newMonth = MonthTracker.formatMonth(new Date());
+
         for (Envelope env : envelopes) {
-            env.reset(carryOver);
+            if (carryOver) {
+                // 1) pick up last month's leftover (manual preferred)
+                double lastLeftover = env.getManualRemaining() != null
+                        ? env.getManualRemaining()
+                        : env.getRemaining();
+
+                // 2) roll it into this month's allowance
+                double newTotal = env.getOriginalLimit() + lastLeftover;
+                env.setLimit(newTotal);
+                env.setManualRemaining(newTotal);
+                env.setRemaining(newTotal);
+            } else {
+                // clear any manual override and reset to base allowance
+                env.setLimit(env.getOriginalLimit());
+                env.setManualRemaining(null);
+                env.setRemaining(env.getLimit());
+            }
+
+            // 3) (optional) seed your month-by-month history
             env.initializeMonth(newMonth, carryOver);
         }
+
+        // persist & refresh UI
         MonthTracker.setCurrentMonth(this, newMonth);
         currentMonth = newMonth;
         PrefManager.saveEnvelopes(this, envelopes);
         updateDisplay();
     }
+
     private void changeMonth(int direction) {
         try {
             SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM", Locale.getDefault());

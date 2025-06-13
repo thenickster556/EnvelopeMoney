@@ -59,7 +59,8 @@ public class Envelope {
     public String getName() { return name; }
     public double getLimit() { return limit; }
     public double getRemaining() { return remaining; }
-
+    public double getOriginalLimit(){ return originalLimit; }
+    public Double getManualRemaining() { return manualRemaining; }
     public MonthData getMonthlyData(String month) {
         if (!monthlyData.containsKey(month)) {
             // Initialize with default values if month doesn't exist
@@ -78,7 +79,9 @@ public class Envelope {
     public void setRemaining(double remaining) {
         this.remaining = remaining;
     }
-
+    public void setManualRemaining(Double remaining) {
+        this.manualRemaining = remaining;
+    }
     public void setName(String name) {
         this.name = name;
     }
@@ -109,7 +112,7 @@ public class Envelope {
             double diff = newLimit - baselineLimit;
 
             // The new manual remaining is baselineRemaining + diff
-            this.manualRemaining = baselineRemaining + diff;
+            this.manualRemaining = manualRemaining + diff;
 
             // Update the envelope’s actual remaining to reflect the new manual override
             this.remaining = this.manualRemaining;
