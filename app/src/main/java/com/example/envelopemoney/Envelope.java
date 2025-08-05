@@ -97,9 +97,10 @@ public class Envelope {
      * and uses that override from now on.
      */
     public void setManualOverrideRemaining(double newRemaining) {
-        this.manualRemaining = newRemaining;
-        this.baselineRemaining = newRemaining; // record the user's set remaining
-        this.remaining = newRemaining;         // set the envelope’s remaining right now
+        this.manualRemaining   = newRemaining;
+        this.baselineRemaining = newRemaining;   // << keep for future recomputes
+        this.baselineLimit     = this.limit;     // << so adjustLimit() has the right anchor
+        this.remaining         = newRemaining;
     }
 
     // Adjust limit and remaining based on new limit
@@ -199,16 +200,16 @@ public class Envelope {
     // Recalculate remaining from the global transaction list
     @RequiresApi(api = Build.VERSION_CODES.N)
     public void calculateRemaining(String currentMonth) {
-        double totalSpent = 0;
-        for (Transaction t : transactions) {
-            if(Objects.equals(t.getMonth(), currentMonth)){
-                totalSpent += t.getAmount();
-            }
-        }
-        if(manualRemaining != null){
-            remaining = this.baselineLimit - totalSpent;
-        }else {
-            remaining = this.limit - totalSpent;
+        double totalSpent = transactions.stream()
+                .filter(t -> Objects.equals(t.getMonth(), currentMonth))
+                .mapToDouble(Transaction::getAmount)
+                .sum();
+
+        if (manualRemaining != null) {
+            // use the starting manual value, not baselineLimit
+            remaining = baselineRemaining - totalSpent;
+        } else {
+            remaining = limit - totalSpent;
         }
     }
 

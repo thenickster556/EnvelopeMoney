@@ -241,6 +241,7 @@ public class MainActivity extends AppCompatActivity {
                 env.setLimit(newTotal);
                 env.setManualRemaining(newTotal);
                 env.setRemaining(newTotal);
+                env.setManualOverrideRemaining(newTotal);
             } else {
                 // clear any manual override and reset to base allowance
                 env.setLimit(env.getOriginalLimit());
@@ -620,6 +621,7 @@ public class MainActivity extends AppCompatActivity {
     private void performMonthlyReset() {
         for (Envelope envelope : envelopes) {
             // Recompute remaining = limit – sum(transactions)
+            envelope.reset(false);
             envelope.calculateRemaining(currentMonth);
         }
         PrefManager.saveEnvelopes(this, envelopes);
