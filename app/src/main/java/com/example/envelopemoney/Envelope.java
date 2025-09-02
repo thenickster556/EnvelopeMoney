@@ -61,6 +61,9 @@ public class Envelope {
     public double getRemaining() { return remaining; }
     public double getOriginalLimit(){ return originalLimit; }
     public Double getManualRemaining() { return manualRemaining; }
+    public Boolean hasBaseline() {
+        return Double.isNaN(baselineRemaining);
+        }
     public MonthData getMonthlyData(String month) {
         if (!monthlyData.containsKey(month)) {
             // Initialize with default values if month doesn't exist
@@ -98,8 +101,7 @@ public class Envelope {
      */
     public void setManualOverrideRemaining(double newRemaining) {
         this.manualRemaining   = newRemaining;
-        this.baselineRemaining = newRemaining;   // << keep for future recomputes
-        this.baselineLimit     = this.limit;     // << so adjustLimit() has the right anchor
+        this.baselineRemaining = newRemaining; // seed for future recomputes
         this.remaining         = newRemaining;
     }
 
@@ -200,16 +202,24 @@ public class Envelope {
     // Recalculate remaining from the global transaction list
     @RequiresApi(api = Build.VERSION_CODES.N)
     public void calculateRemaining(String currentMonth) {
-        double totalSpent = transactions.stream()
-                .filter(t -> Objects.equals(t.getMonth(), currentMonth))
-                .mapToDouble(Transaction::getAmount)
-                .sum();
+        if (currentMonth == null) return;  // defensive
+
+        double spentThisMonth = 0.0;
+        for (Transaction t : transactions) {
+            // null-safe month match
+            String tm = (t != null) ? t.getMonth() : null;
+            if (tm != null && tm.equals(currentMonth)) {
+                spentThisMonth += safe(t.getAmount());       // safe() clamps NaN/inf/null to 0
+            }
+        }
 
         if (manualRemaining != null) {
-            // use the starting manual value, not baselineLimit
-            remaining = baselineRemaining - totalSpent;
+            // Baseline must be the starting manual value (seeded during rollover or manual set)
+            double baseline = getBaselineRemainingOr(manualRemaining);
+            this.remaining = baseline - spentThisMonth;
         } else {
-            remaining = limit - totalSpent;
+            // Auto path from this month's limit
+            this.remaining = safe(limit) - spentThisMonth;
         }
     }
 
@@ -231,6 +241,13 @@ public class Envelope {
         }
         this.manualRemaining = null;
     }
+
+    private static double safe(Double v) {
+        if (v == null) return 0d;
+        if (Double.isNaN(v) || Double.isInfinite(v)) return 0d;
+        return v;
+    }
+
 
     /**
      * Initializes monthly data for a given month.
@@ -330,6 +347,12 @@ public class Envelope {
             return null;
         }
     }
+    private double getBaselineRemainingOr(double fallback) {
+        return (Double.isNaN(baselineRemaining)) ? fallback : baselineRemaining;
+    }
+
+    public void setBaselineRemaining(double v) { this.baselineRemaining = v; }
+    public void setBaselineLimit(double v)     { this.baselineLimit     = v; } // if you use one
 
     public boolean isSelected() { return isSelected; }
     public void setSelected(boolean selected) { isSelected = selected; }

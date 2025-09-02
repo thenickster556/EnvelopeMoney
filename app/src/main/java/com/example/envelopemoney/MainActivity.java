@@ -4,6 +4,7 @@ import android.app.DatePickerDialog;
 import android.content.Context;
 import android.os.Build;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -37,6 +38,7 @@ import java.lang.reflect.Field;
 public class MainActivity extends AppCompatActivity {
     private ListView listViewEnvelopes;
     private List<Envelope> envelopes;
+    private boolean monthRolloverInProgress = false;
     private ListView listViewTransactions;
     private TransactionAdapter transactionAdapter;
     private List<Transaction> allTransactions = new ArrayList<>();
@@ -227,38 +229,70 @@ public class MainActivity extends AppCompatActivity {
         }
     }
     private void handleNewMonth(boolean carryOver) {
-        String newMonth = MonthTracker.formatMonth(new Date());
+        if (monthRolloverInProgress) return;                 // prevent re-entry
+        monthRolloverInProgress = true;
+        try {
+            final String newMonth = MonthTracker.formatMonth(new Date());
+            final String alreadySet = MonthTracker.getCurrentMonth(this);
+            if (newMonth.equals(alreadySet)) return;         // nothing to do (idempotent)
 
-        for (Envelope env : envelopes) {
-            if (carryOver) {
-                // 1) pick up last month's leftover (manual preferred)
-                double lastLeftover = env.getManualRemaining() != null
-                        ? env.getManualRemaining()
-                        : env.getRemaining();
+            // Work on a snapshot to avoid ConcurrentModification during UI binds
+            List<Envelope> snapshot = new ArrayList<>(envelopes);
 
-                // 2) roll it into this month's allowance
-                double newTotal = env.getOriginalLimit() + lastLeftover;
-                env.setLimit(newTotal);
-                env.setManualRemaining(newTotal);
-                env.setRemaining(newTotal);
-                env.setManualOverrideRemaining(newTotal);
-            } else {
-                // clear any manual override and reset to base allowance
-                env.setLimit(env.getOriginalLimit());
-                env.setManualRemaining(null);
-                env.setRemaining(env.getLimit());
+            for (Envelope env : snapshot) {
+                // ---- null-safety (see section 2) ----
+                double orig = safe(env.getOriginalLimit());
+                double rem  = safe(env.getRemaining());
+                Double manual = env.getManualRemaining();
+                double manualVal = (manual != null) ? manual : rem;
+
+                if (carryOver) {
+                    double newTotal = orig + manualVal;      // base + leftover (manual preferred)
+                    // Seed *both* manual + baselines so later recomputes are correct
+                    env.setLimit(newTotal);
+                    env.setManualRemaining(newTotal);
+                    // If you have baseline fields, seed them here too
+                    if (env.hasBaseline()) {
+                        env.setBaselineRemaining(newTotal);
+                        env.setBaselineLimit(newTotal);     // or env.getLimit() if that’s your anchor
+                    }
+                    env.setRemaining(newTotal);
+                } else {
+                    env.setLimit(orig);
+                    env.setManualRemaining(null);
+                    if (env.hasBaseline()) {
+                        env.setBaselineRemaining(orig);
+                        env.setBaselineLimit(orig);
+                    }
+                    env.setRemaining(orig);
+                }
+
+                // Ensure monthlyData exists for newMonth
+                env.initializeMonth(newMonth, carryOver);
             }
 
-            // 3) (optional) seed your month-by-month history
-            env.initializeMonth(newMonth, carryOver);
-        }
+            // Commit month AFTER envelopes are stable
+            MonthTracker.setCurrentMonth(this, newMonth);
 
-        // persist & refresh UI
-        MonthTracker.setCurrentMonth(this, newMonth);
-        currentMonth = newMonth;
-        PrefManager.saveEnvelopes(this, envelopes);
-        updateDisplay();
+            // One clean UI refresh at the end
+            PrefManager.saveEnvelopes(this, envelopes);
+            updateDisplay();
+
+        } catch (Throwable t) {
+            // Don’t crash-loop: surface a message and swallow the exception
+//            showError("We hit a rollover issue: " + t.getClass().getSimpleName());
+            // Optional: Log.d("EnvelopeMoney", "Rollover crash", t);
+            Log.d("EnvelopeMoney", "Rollover crash", t);
+        } finally {
+            monthRolloverInProgress = false;
+        }
     }
+    private static double safe(Double v) {
+        if (v == null) return 0d;
+        if (Double.isNaN(v) || Double.isInfinite(v)) return 0d;
+        return v;
+    }
+
 
     private void changeMonth(int direction) {
         try {
