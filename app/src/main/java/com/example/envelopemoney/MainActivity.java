@@ -249,7 +249,6 @@ public class MainActivity extends AppCompatActivity {
                 if (carryOver) {
                     double newTotal = orig + manualVal;      // base + leftover (manual preferred)
                     // Seed *both* manual + baselines so later recomputes are correct
-                    env.setLimit(newTotal);
                     env.setManualRemaining(newTotal);
                     // If you have baseline fields, seed them here too
                     if (env.hasBaseline()) {
@@ -258,7 +257,6 @@ public class MainActivity extends AppCompatActivity {
                     }
                     env.setRemaining(newTotal);
                 } else {
-                    env.setLimit(orig);
                     env.setManualRemaining(null);
                     if (env.hasBaseline()) {
                         env.setBaselineRemaining(orig);
