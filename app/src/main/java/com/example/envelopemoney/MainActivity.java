@@ -35,10 +35,12 @@ import java.util.Calendar;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -58,6 +60,9 @@ public class MainActivity extends AppCompatActivity {
     private final Boolean TEST = false;
     private boolean showTransfers = false;
     private int selectedTransferTotalsIndex = 0;
+    private LinearLayout layoutEnvelopesSection;
+    private ImageButton btnToggleEnvelopes;
+    private boolean envelopesCollapsed = false;
 
 
     private static class TransferTotalsOption {
@@ -90,7 +95,16 @@ public class MainActivity extends AppCompatActivity {
         ImageButton btnAddEnvelope = findViewById(R.id.btnAddEnvelope);
         btnAddEnvelope.setOnClickListener(v -> showEnvelopeDialog(null));
 
+        btnToggleEnvelopes = findViewById(R.id.btnToggleEnvelopes);
         listViewEnvelopes = findViewById(R.id.listViewEnvelopes);
+        layoutEnvelopesSection = findViewById(R.id.layoutEnvelopesSection);
+        envelopesCollapsed = PrefManager.isEnvelopesCollapsed(this);
+        applyEnvelopesCollapsedState();
+        btnToggleEnvelopes.setOnClickListener(v -> {
+            envelopesCollapsed = !envelopesCollapsed;
+            PrefManager.setEnvelopesCollapsed(MainActivity.this, envelopesCollapsed);
+            applyEnvelopesCollapsedState();
+        });
         listViewTransactions = findViewById(R.id.listViewTransactions);
         layoutTransferTotals = findViewById(R.id.layoutTransferTotals);
         spinnerTransferTotals = findViewById(R.id.spinnerTransferTotals);
@@ -132,6 +146,14 @@ public class MainActivity extends AppCompatActivity {
 
 
         updateTransactionHistory();
+    }
+
+    private void applyEnvelopesCollapsedState() {
+        if (layoutEnvelopesSection == null || btnToggleEnvelopes == null) {
+            return;
+        }
+        layoutEnvelopesSection.setVisibility(envelopesCollapsed ? View.GONE : View.VISIBLE);
+        btnToggleEnvelopes.setImageResource(envelopesCollapsed ? android.R.drawable.arrow_down_float : android.R.drawable.arrow_up_float);
     }
     private void addData() {
         // Dummy transactions for "Emergency Fund"
@@ -398,12 +420,111 @@ public class MainActivity extends AppCompatActivity {
         CheckBox cbIsTransfer = dialogView.findViewById(R.id.cbIsTransfer);
         TextView tvTransferToLabel = dialogView.findViewById(R.id.tvTransferToLabel);
         Spinner spinnerTransferDestination = dialogView.findViewById(R.id.spinnerTransferDestination);
+        CheckBox cbIsRecurring = dialogView.findViewById(R.id.cbIsRecurring);
+        TextView tvRecurringFrequencyLabel = dialogView.findViewById(R.id.tvRecurringFrequencyLabel);
+        LinearLayout layoutRecurringFrequencyOptions = dialogView.findViewById(R.id.layoutRecurringFrequencyOptions);
+        TextView btnRecurringWeekly = dialogView.findViewById(R.id.btnRecurringWeekly);
+        TextView btnRecurringBiWeekly = dialogView.findViewById(R.id.btnRecurringBiWeekly);
+        TextView btnRecurringMonthly = dialogView.findViewById(R.id.btnRecurringMonthly);
+        TextView tvRecurringDaysLabel = dialogView.findViewById(R.id.tvRecurringDaysLabel);
+        LinearLayout layoutRecurringWeekdayButtons = dialogView.findViewById(R.id.layoutRecurringWeekdayButtons);
+        TextView btnRecurringDayMon = dialogView.findViewById(R.id.btnRecurringDayMon);
+        TextView btnRecurringDayTue = dialogView.findViewById(R.id.btnRecurringDayTue);
+        TextView btnRecurringDayWed = dialogView.findViewById(R.id.btnRecurringDayWed);
+        TextView btnRecurringDayThu = dialogView.findViewById(R.id.btnRecurringDayThu);
+        TextView btnRecurringDayFri = dialogView.findViewById(R.id.btnRecurringDayFri);
+        TextView btnRecurringDaySat = dialogView.findViewById(R.id.btnRecurringDaySat);
+        TextView tvRecurringDaysValue = dialogView.findViewById(R.id.tvRecurringDaysValue);
 
         ArrayAdapter<String> envelopeAdapter = new ArrayAdapter<>(this,
                 android.R.layout.simple_spinner_item, getEnvelopeNames());
         envelopeAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         spinnerEnvelope.setAdapter(envelopeAdapter);
 
+        List<Integer> selectedRecurringDays = new ArrayList<>();
+        final String[] selectedRecurringFrequency = new String[]{"weekly"};
+        Map<Integer, TextView> recurringDayButtons = createRecurringWeekdayButtonMap(
+                btnRecurringDayMon,
+                btnRecurringDayTue,
+                btnRecurringDayWed,
+                btnRecurringDayThu,
+                btnRecurringDayFri,
+                btnRecurringDaySat);
+        applyRecurringFrequencyButtonSelection(btnRecurringWeekly, btnRecurringBiWeekly, btnRecurringMonthly, selectedRecurringFrequency[0]);
+        applyRecurringWeekdayButtonSelection(recurringDayButtons, selectedRecurringDays);
+        updateRecurringDaysSummaryView(tvRecurringDaysValue, selectedRecurringFrequency[0], selectedRecurringDays);
+        setRecurringWeekdayButtonHandlers(recurringDayButtons, selectedRecurringDays, () ->
+                updateRecurringDaysSummaryView(tvRecurringDaysValue, selectedRecurringFrequency[0], selectedRecurringDays));
+
+        btnRecurringWeekly.setOnClickListener(v -> {
+            selectedRecurringFrequency[0] = "weekly";
+            selectedRecurringDays.clear();
+            applyRecurringFrequencyButtonSelection(btnRecurringWeekly, btnRecurringBiWeekly, btnRecurringMonthly, selectedRecurringFrequency[0]);
+            applyRecurringWeekdayButtonSelection(recurringDayButtons, selectedRecurringDays);
+            updateRecurringDaysSummaryView(tvRecurringDaysValue, selectedRecurringFrequency[0], selectedRecurringDays);
+            setRecurringControlsVisibility(cbIsRecurring.isChecked(),
+                    tvRecurringFrequencyLabel,
+                    layoutRecurringFrequencyOptions,
+                    tvRecurringDaysLabel,
+                    layoutRecurringWeekdayButtons,
+                    tvRecurringDaysValue,
+                    selectedRecurringFrequency[0]);
+        });
+        btnRecurringBiWeekly.setOnClickListener(v -> {
+            selectedRecurringFrequency[0] = "bi-weekly";
+            selectedRecurringDays.clear();
+            applyRecurringFrequencyButtonSelection(btnRecurringWeekly, btnRecurringBiWeekly, btnRecurringMonthly, selectedRecurringFrequency[0]);
+            applyRecurringWeekdayButtonSelection(recurringDayButtons, selectedRecurringDays);
+            updateRecurringDaysSummaryView(tvRecurringDaysValue, selectedRecurringFrequency[0], selectedRecurringDays);
+            setRecurringControlsVisibility(cbIsRecurring.isChecked(),
+                    tvRecurringFrequencyLabel,
+                    layoutRecurringFrequencyOptions,
+                    tvRecurringDaysLabel,
+                    layoutRecurringWeekdayButtons,
+                    tvRecurringDaysValue,
+                    selectedRecurringFrequency[0]);
+        });
+        btnRecurringMonthly.setOnClickListener(v -> {
+            selectedRecurringFrequency[0] = "monthly";
+            selectedRecurringDays.clear();
+            applyRecurringFrequencyButtonSelection(btnRecurringWeekly, btnRecurringBiWeekly, btnRecurringMonthly, selectedRecurringFrequency[0]);
+            applyRecurringWeekdayButtonSelection(recurringDayButtons, selectedRecurringDays);
+            updateRecurringDaysSummaryView(tvRecurringDaysValue, selectedRecurringFrequency[0], selectedRecurringDays);
+            setRecurringControlsVisibility(cbIsRecurring.isChecked(),
+                    tvRecurringFrequencyLabel,
+                    layoutRecurringFrequencyOptions,
+                    tvRecurringDaysLabel,
+                    layoutRecurringWeekdayButtons,
+                    tvRecurringDaysValue,
+                    selectedRecurringFrequency[0]);
+        });
+
+        tvRecurringDaysValue.setOnClickListener(v -> {
+            if (!"monthly".equals(selectedRecurringFrequency[0])) {
+                return;
+            }
+            showRecurringDayPickerDialog(
+                    selectedRecurringFrequency[0],
+                    selectedRecurringDays,
+                    () -> updateRecurringDaysSummaryView(tvRecurringDaysValue, selectedRecurringFrequency[0], selectedRecurringDays)
+            );
+        });
+
+        cbIsRecurring.setOnCheckedChangeListener((buttonView, checked) ->
+                setRecurringControlsVisibility(checked,
+                        tvRecurringFrequencyLabel,
+                        layoutRecurringFrequencyOptions,
+                        tvRecurringDaysLabel,
+                        layoutRecurringWeekdayButtons,
+                        tvRecurringDaysValue,
+                        selectedRecurringFrequency[0]));
+        setRecurringControlsVisibility(false,
+                tvRecurringFrequencyLabel,
+                layoutRecurringFrequencyOptions,
+                tvRecurringDaysLabel,
+                layoutRecurringWeekdayButtons,
+                tvRecurringDaysValue,
+                selectedRecurringFrequency[0]);
         Calendar calendar = Calendar.getInstance();
         String today = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(calendar.getTime());
         etDate.setText(today);
@@ -450,6 +571,18 @@ public class MainActivity extends AppCompatActivity {
                         String date = etDate.getText().toString();
 
                         Transaction newTransaction = new Transaction(envelopeName, amount, date, comment);
+                        if (cbIsRecurring.isChecked()) {
+                            if (selectedRecurringDays.isEmpty()) {
+                                showError("Recurring requires at least one selected day");
+                                return;
+                            }
+                            newTransaction.setRecurring(true);
+                            newTransaction.setRecurringFrequency(selectedRecurringFrequency[0]);
+                            newTransaction.setRecurringDays(selectedRecurringDays);
+                            newTransaction.setRecurringSeriesId(UUID.randomUUID().toString());
+                            newTransaction.setRecurringTemplate(true);
+                        }
+
                         Envelope env = findEnvelopeByName(envelopeName);
                         if (env == null) {
                             showError("Envelope not found");
@@ -483,9 +616,8 @@ public class MainActivity extends AppCompatActivity {
                 .create()
                 .show();
     }
-
-    @RequiresApi(api = Build.VERSION_CODES.N)
     private void updateTransactionHistory() {
+        ensureRecurringTransactionsForCurrentMonth();
         ensureMirrorTransactionsForExistingTransfers();
         allTransactions.clear();
 
@@ -514,10 +646,12 @@ public class MainActivity extends AppCompatActivity {
         double incomingTransferTotal = 0;
 
         for (Envelope envelope : envelopes) {
-            if (!envelope.isSelected()) {
-                continue;
-            }
+            boolean includeEnvelope = envelope.isSelected();
             for (Transaction transaction : envelope.getTransactions()) {
+                boolean includeTransaction = includeEnvelope || (showTransfers && transaction.getTransferId() != null && !transaction.getTransferId().isEmpty());
+                if (!includeTransaction) {
+                    continue;
+                }
                 try {
                     Date txDate = sdf.parse(transaction.getDate());
                     if (txDate == null || txDate.before(startDate) || txDate.after(endDate)) {
@@ -613,8 +747,12 @@ public class MainActivity extends AppCompatActivity {
             ImageButton btnOptions = convertView.findViewById(R.id.btnTransactionOptions);
 
             // Populate data
+            String envelopeDisplayName = transaction.getEnvelopeName();
+            if (transaction.isRecurring()) {
+                envelopeDisplayName += " (reoccuring)";
+            }
             String amountText = String.format(Locale.getDefault(),
-                    "%s - $%.2f", transaction.getEnvelopeName(), transaction.getAmount());
+                    "%s - $%.2f", envelopeDisplayName, transaction.getAmount());
             tvAmount.setText(amountText);
 
             String details = transaction.getDate();
@@ -885,6 +1023,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void showTransactionDialog(Transaction transactionToEdit) {
         final Transaction editTransaction = resolveTransferAnchorTransaction(transactionToEdit);
+        final boolean wasRecurringBefore = editTransaction.isRecurring();
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         View dialogView = getLayoutInflater().inflate(R.layout.dialog_transaction, null);
 
@@ -895,6 +1034,21 @@ public class MainActivity extends AppCompatActivity {
         CheckBox cbIsTransfer = dialogView.findViewById(R.id.cbIsTransfer);
         TextView tvTransferToLabel = dialogView.findViewById(R.id.tvTransferToLabel);
         Spinner spinnerTransferDestination = dialogView.findViewById(R.id.spinnerTransferDestination);
+        CheckBox cbIsRecurring = dialogView.findViewById(R.id.cbIsRecurring);
+        TextView tvRecurringFrequencyLabel = dialogView.findViewById(R.id.tvRecurringFrequencyLabel);
+        LinearLayout layoutRecurringFrequencyOptions = dialogView.findViewById(R.id.layoutRecurringFrequencyOptions);
+        TextView btnRecurringWeekly = dialogView.findViewById(R.id.btnRecurringWeekly);
+        TextView btnRecurringBiWeekly = dialogView.findViewById(R.id.btnRecurringBiWeekly);
+        TextView btnRecurringMonthly = dialogView.findViewById(R.id.btnRecurringMonthly);
+        TextView tvRecurringDaysLabel = dialogView.findViewById(R.id.tvRecurringDaysLabel);
+        LinearLayout layoutRecurringWeekdayButtons = dialogView.findViewById(R.id.layoutRecurringWeekdayButtons);
+        TextView btnRecurringDayMon = dialogView.findViewById(R.id.btnRecurringDayMon);
+        TextView btnRecurringDayTue = dialogView.findViewById(R.id.btnRecurringDayTue);
+        TextView btnRecurringDayWed = dialogView.findViewById(R.id.btnRecurringDayWed);
+        TextView btnRecurringDayThu = dialogView.findViewById(R.id.btnRecurringDayThu);
+        TextView btnRecurringDayFri = dialogView.findViewById(R.id.btnRecurringDayFri);
+        TextView btnRecurringDaySat = dialogView.findViewById(R.id.btnRecurringDaySat);
+        TextView tvRecurringDaysValue = dialogView.findViewById(R.id.tvRecurringDaysValue);
 
         ArrayAdapter<String> envelopeAdapter = new ArrayAdapter<>(this,
                 android.R.layout.simple_spinner_item, getEnvelopeNames());
@@ -905,6 +1059,95 @@ public class MainActivity extends AppCompatActivity {
         if (envelopeIndex >= 0) {
             spinnerEnvelope.setSelection(envelopeIndex);
         }
+
+        List<Integer> selectedRecurringDays = new ArrayList<>(editTransaction.getRecurringDays());
+        final String[] selectedRecurringFrequency = new String[]{
+                editTransaction.getRecurringFrequency() == null ? "weekly" : editTransaction.getRecurringFrequency()
+        };
+        Map<Integer, TextView> recurringDayButtons = createRecurringWeekdayButtonMap(
+                btnRecurringDayMon,
+                btnRecurringDayTue,
+                btnRecurringDayWed,
+                btnRecurringDayThu,
+                btnRecurringDayFri,
+                btnRecurringDaySat);
+
+        applyRecurringFrequencyButtonSelection(btnRecurringWeekly, btnRecurringBiWeekly, btnRecurringMonthly, selectedRecurringFrequency[0]);
+        applyRecurringWeekdayButtonSelection(recurringDayButtons, selectedRecurringDays);
+        updateRecurringDaysSummaryView(tvRecurringDaysValue, selectedRecurringFrequency[0], selectedRecurringDays);
+        setRecurringWeekdayButtonHandlers(recurringDayButtons, selectedRecurringDays, () ->
+                updateRecurringDaysSummaryView(tvRecurringDaysValue, selectedRecurringFrequency[0], selectedRecurringDays));
+
+        btnRecurringWeekly.setOnClickListener(v -> {
+            selectedRecurringFrequency[0] = "weekly";
+            selectedRecurringDays.clear();
+            applyRecurringFrequencyButtonSelection(btnRecurringWeekly, btnRecurringBiWeekly, btnRecurringMonthly, selectedRecurringFrequency[0]);
+            applyRecurringWeekdayButtonSelection(recurringDayButtons, selectedRecurringDays);
+            updateRecurringDaysSummaryView(tvRecurringDaysValue, selectedRecurringFrequency[0], selectedRecurringDays);
+            setRecurringControlsVisibility(cbIsRecurring.isChecked(),
+                    tvRecurringFrequencyLabel,
+                    layoutRecurringFrequencyOptions,
+                    tvRecurringDaysLabel,
+                    layoutRecurringWeekdayButtons,
+                    tvRecurringDaysValue,
+                    selectedRecurringFrequency[0]);
+        });
+        btnRecurringBiWeekly.setOnClickListener(v -> {
+            selectedRecurringFrequency[0] = "bi-weekly";
+            selectedRecurringDays.clear();
+            applyRecurringFrequencyButtonSelection(btnRecurringWeekly, btnRecurringBiWeekly, btnRecurringMonthly, selectedRecurringFrequency[0]);
+            applyRecurringWeekdayButtonSelection(recurringDayButtons, selectedRecurringDays);
+            updateRecurringDaysSummaryView(tvRecurringDaysValue, selectedRecurringFrequency[0], selectedRecurringDays);
+            setRecurringControlsVisibility(cbIsRecurring.isChecked(),
+                    tvRecurringFrequencyLabel,
+                    layoutRecurringFrequencyOptions,
+                    tvRecurringDaysLabel,
+                    layoutRecurringWeekdayButtons,
+                    tvRecurringDaysValue,
+                    selectedRecurringFrequency[0]);
+        });
+        btnRecurringMonthly.setOnClickListener(v -> {
+            selectedRecurringFrequency[0] = "monthly";
+            selectedRecurringDays.clear();
+            applyRecurringFrequencyButtonSelection(btnRecurringWeekly, btnRecurringBiWeekly, btnRecurringMonthly, selectedRecurringFrequency[0]);
+            applyRecurringWeekdayButtonSelection(recurringDayButtons, selectedRecurringDays);
+            updateRecurringDaysSummaryView(tvRecurringDaysValue, selectedRecurringFrequency[0], selectedRecurringDays);
+            setRecurringControlsVisibility(cbIsRecurring.isChecked(),
+                    tvRecurringFrequencyLabel,
+                    layoutRecurringFrequencyOptions,
+                    tvRecurringDaysLabel,
+                    layoutRecurringWeekdayButtons,
+                    tvRecurringDaysValue,
+                    selectedRecurringFrequency[0]);
+        });
+
+        tvRecurringDaysValue.setOnClickListener(v -> {
+            if (!"monthly".equals(selectedRecurringFrequency[0])) {
+                return;
+            }
+            showRecurringDayPickerDialog(
+                    selectedRecurringFrequency[0],
+                    selectedRecurringDays,
+                    () -> updateRecurringDaysSummaryView(tvRecurringDaysValue, selectedRecurringFrequency[0], selectedRecurringDays)
+            );
+        });
+
+        cbIsRecurring.setChecked(editTransaction.isRecurring());
+        setRecurringControlsVisibility(editTransaction.isRecurring(),
+                tvRecurringFrequencyLabel,
+                layoutRecurringFrequencyOptions,
+                tvRecurringDaysLabel,
+                layoutRecurringWeekdayButtons,
+                tvRecurringDaysValue,
+                selectedRecurringFrequency[0]);
+        cbIsRecurring.setOnCheckedChangeListener((buttonView, checked) ->
+                setRecurringControlsVisibility(checked,
+                        tvRecurringFrequencyLabel,
+                        layoutRecurringFrequencyOptions,
+                        tvRecurringDaysLabel,
+                        layoutRecurringWeekdayButtons,
+                        tvRecurringDaysValue,
+                        selectedRecurringFrequency[0]));
 
         String selectedDestination = null;
         boolean editingMirrorTransfer = false;
@@ -972,6 +1215,11 @@ public class MainActivity extends AppCompatActivity {
                         String oldEnvelopeName = editTransaction.getEnvelopeName();
                         String newEnvelopeName = spinnerEnvelope.getSelectedItem().toString();
 
+                        if (cbIsRecurring.isChecked() && selectedRecurringDays.isEmpty()) {
+                            showError("Recurring requires at least one selected day");
+                            return;
+                        }
+
                         if (!oldEnvelopeName.equals(newEnvelopeName)) {
                             Envelope oldEnvelope = findEnvelopeByName(oldEnvelopeName);
                             Envelope newEnvelope = findEnvelopeByName(newEnvelopeName);
@@ -994,6 +1242,22 @@ public class MainActivity extends AppCompatActivity {
                         editTransaction.setAmount(newAmount);
                         editTransaction.setComment(newComment);
                         editTransaction.setDate(newDate);
+
+                        if (cbIsRecurring.isChecked()) {
+                            editTransaction.setRecurring(true);
+                            editTransaction.setRecurringFrequency(selectedRecurringFrequency[0]);
+                            editTransaction.setRecurringDays(selectedRecurringDays);
+                            if (editTransaction.getRecurringSeriesId() == null || editTransaction.getRecurringSeriesId().isEmpty()) {
+                                editTransaction.setRecurringSeriesId(UUID.randomUUID().toString());
+                            }
+                            editTransaction.setRecurringTemplate(wasRecurringBefore ? editTransaction.isRecurringTemplate() : true);
+                        } else {
+                            editTransaction.setRecurring(false);
+                            editTransaction.setRecurringFrequency(null);
+                            editTransaction.setRecurringDays(new ArrayList<>());
+                            editTransaction.setRecurringSeriesId(null);
+                            editTransaction.setRecurringTemplate(false);
+                        }
 
                         if (cbIsTransfer.isChecked()) {
                             if (spinnerTransferDestination.getSelectedItem() == null) {
@@ -1122,6 +1386,478 @@ public class MainActivity extends AppCompatActivity {
         int visibility = visible ? View.VISIBLE : View.GONE;
         label.setVisibility(visibility);
         spinner.setVisibility(visibility);
+    }
+    private void setRecurringControlsVisibility(boolean visible,
+                                                TextView frequencyLabel,
+                                                View frequencyOptionsView,
+                                                TextView daysLabel,
+                                                View weekdayButtonsView,
+                                                TextView monthlyDaysValue,
+                                                String selectedFrequency) {
+        int visibility = visible ? View.VISIBLE : View.GONE;
+        frequencyLabel.setVisibility(visibility);
+        frequencyOptionsView.setVisibility(visibility);
+        daysLabel.setVisibility(visibility);
+        if (!visible) {
+            weekdayButtonsView.setVisibility(View.GONE);
+            monthlyDaysValue.setVisibility(View.GONE);
+            return;
+        }
+        boolean isMonthly = "monthly".equals(selectedFrequency);
+        weekdayButtonsView.setVisibility(isMonthly ? View.GONE : View.VISIBLE);
+        monthlyDaysValue.setVisibility(isMonthly ? View.VISIBLE : View.GONE);
+    }
+
+    private Map<Integer, TextView> createRecurringWeekdayButtonMap(TextView mon,
+                                                                    TextView tue,
+                                                                    TextView wed,
+                                                                    TextView thu,
+                                                                    TextView fri,
+                                                                    TextView sat) {
+        Map<Integer, TextView> buttonMap = new HashMap<>();
+        buttonMap.put(Calendar.MONDAY, mon);
+        buttonMap.put(Calendar.TUESDAY, tue);
+        buttonMap.put(Calendar.WEDNESDAY, wed);
+        buttonMap.put(Calendar.THURSDAY, thu);
+        buttonMap.put(Calendar.FRIDAY, fri);
+        buttonMap.put(Calendar.SATURDAY, sat);
+        return buttonMap;
+    }
+
+    private void setRecurringWeekdayButtonHandlers(Map<Integer, TextView> dayButtons,
+                                                    List<Integer> selectedDays,
+                                                    Runnable onSelectionChanged) {
+        for (Map.Entry<Integer, TextView> entry : dayButtons.entrySet()) {
+            final int dayValue = entry.getKey();
+            final TextView button = entry.getValue();
+            button.setOnClickListener(v -> {
+                if (selectedDays.contains(dayValue)) {
+                    selectedDays.remove(Integer.valueOf(dayValue));
+                } else {
+                    selectedDays.add(dayValue);
+                }
+                Collections.sort(selectedDays);
+                applyRecurringWeekdayButtonSelection(dayButtons, selectedDays);
+                if (onSelectionChanged != null) {
+                    onSelectionChanged.run();
+                }
+            });
+        }
+    }
+
+    private void applyRecurringWeekdayButtonSelection(Map<Integer, TextView> dayButtons,
+                                                       List<Integer> selectedDays) {
+        int selectedColor = ContextCompat.getColor(this, android.R.color.black);
+        int normalColor = ContextCompat.getColor(this, android.R.color.darker_gray);
+        for (Map.Entry<Integer, TextView> entry : dayButtons.entrySet()) {
+            boolean selected = selectedDays.contains(entry.getKey());
+            TextView button = entry.getValue();
+            button.setBackgroundResource(selected
+                    ? R.drawable.recurring_option_selected
+                    : R.drawable.recurring_option_unselected);
+            button.setTextColor(selected ? selectedColor : normalColor);
+        }
+    }
+
+    private void applyRecurringFrequencyButtonSelection(TextView weekly,
+                                                        TextView biWeekly,
+                                                        TextView monthly,
+                                                        String selectedFrequency) {
+        weekly.setBackgroundResource("weekly".equals(selectedFrequency)
+                ? R.drawable.recurring_option_selected
+                : R.drawable.recurring_option_unselected);
+        biWeekly.setBackgroundResource("bi-weekly".equals(selectedFrequency)
+                ? R.drawable.recurring_option_selected
+                : R.drawable.recurring_option_unselected);
+        monthly.setBackgroundResource("monthly".equals(selectedFrequency)
+                ? R.drawable.recurring_option_selected
+                : R.drawable.recurring_option_unselected);
+
+        int selectedColor = ContextCompat.getColor(this, android.R.color.black);
+        int normalColor = ContextCompat.getColor(this, android.R.color.darker_gray);
+        weekly.setTextColor("weekly".equals(selectedFrequency) ? selectedColor : normalColor);
+        biWeekly.setTextColor("bi-weekly".equals(selectedFrequency) ? selectedColor : normalColor);
+        monthly.setTextColor("monthly".equals(selectedFrequency) ? selectedColor : normalColor);
+    }
+
+    private String normalizeRecurringFrequency(String selectedDisplay) {
+        if (selectedDisplay == null) {
+            return "weekly";
+        }
+        String value = selectedDisplay.trim().toLowerCase(Locale.getDefault());
+        if (value.contains("bi")) {
+            return "bi-weekly";
+        }
+        if (value.contains("month")) {
+            return "monthly";
+        }
+        return "weekly";
+    }
+
+    private String recurringFrequencyDisplay(String normalized) {
+        if (normalized == null) {
+            return "Weekly";
+        }
+        if ("bi-weekly".equals(normalized)) {
+            return "Bi-weekly";
+        }
+        if ("monthly".equals(normalized)) {
+            return "Monthly";
+        }
+        return "Weekly";
+    }
+
+    private void updateRecurringDaysSummaryView(TextView daysView, String frequency, List<Integer> selectedDays) {
+        if (selectedDays == null || selectedDays.isEmpty()) {
+            daysView.setText("Select days");
+            return;
+        }
+        List<Integer> sorted = new ArrayList<>(selectedDays);
+        Collections.sort(sorted);
+        if ("monthly".equals(frequency)) {
+            List<String> labels = new ArrayList<>();
+            for (Integer day : sorted) {
+                labels.add(String.valueOf(day));
+            }
+            daysView.setText("Days: " + String.join(", ", labels));
+            return;
+        }
+
+        String[] weekLabels = new String[]{"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
+        List<String> labels = new ArrayList<>();
+        for (Integer day : sorted) {
+            int idx = day - 1;
+            if (idx >= 0 && idx < weekLabels.length) {
+                labels.add(weekLabels[idx]);
+            }
+        }
+        daysView.setText("Days: " + String.join(", ", labels));
+    }
+
+    private void showRecurringDayPickerDialog(String frequency,
+                                              List<Integer> selectedDays,
+                                              Runnable onSelectionChanged) {
+        if ("monthly".equals(frequency)) {
+            showMonthlyRecurringCalendarDialog(selectedDays, onSelectionChanged);
+            return;
+        }
+
+        final List<Integer> values = new ArrayList<>();
+        values.add(Calendar.SUNDAY);
+        values.add(Calendar.MONDAY);
+        values.add(Calendar.TUESDAY);
+        values.add(Calendar.WEDNESDAY);
+        values.add(Calendar.THURSDAY);
+        values.add(Calendar.FRIDAY);
+        values.add(Calendar.SATURDAY);
+
+        final String[] labels = new String[]{"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
+        boolean[] checked = new boolean[values.size()];
+        for (int i = 0; i < values.size(); i++) {
+            checked[i] = selectedDays.contains(values.get(i));
+        }
+
+        new AlertDialog.Builder(this)
+                .setTitle("Choose recurring days")
+                .setMultiChoiceItems(labels, checked, (dialog, which, isChecked) -> {
+                    Integer value = values.get(which);
+                    if (isChecked) {
+                        if (!selectedDays.contains(value)) {
+                            selectedDays.add(value);
+                        }
+                    } else {
+                        selectedDays.remove(value);
+                    }
+                })
+                .setPositiveButton("OK", (dialog, which) -> {
+                    Collections.sort(selectedDays);
+                    if (onSelectionChanged != null) {
+                        onSelectionChanged.run();
+                    }
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void showMonthlyRecurringCalendarDialog(List<Integer> selectedDays, Runnable onSelectionChanged) {
+        final Calendar displayedMonth = Calendar.getInstance();
+        final Set<Integer> workingSelection = new HashSet<>(selectedDays);
+
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        int padding = dp(10);
+        root.setPadding(padding, padding, padding, padding);
+
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(android.view.Gravity.CENTER_VERTICAL);
+
+        TextView btnPrev = new TextView(this);
+        btnPrev.setText("<");
+        btnPrev.setTextSize(20f);
+        btnPrev.setPadding(dp(10), dp(6), dp(10), dp(6));
+        btnPrev.setBackgroundResource(R.drawable.recurring_option_unselected);
+
+        TextView tvMonth = new TextView(this);
+        tvMonth.setTextSize(16f);
+        tvMonth.setTypeface(tvMonth.getTypeface(), android.graphics.Typeface.BOLD);
+        LinearLayout.LayoutParams monthLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        tvMonth.setLayoutParams(monthLp);
+        tvMonth.setGravity(android.view.Gravity.CENTER);
+
+        TextView btnNext = new TextView(this);
+        btnNext.setText(">");
+        btnNext.setTextSize(20f);
+        btnNext.setPadding(dp(10), dp(6), dp(10), dp(6));
+        btnNext.setBackgroundResource(R.drawable.recurring_option_unselected);
+
+        header.addView(btnPrev);
+        header.addView(tvMonth);
+        header.addView(btnNext);
+
+        LinearLayout calendarBody = new LinearLayout(this);
+        calendarBody.setOrientation(LinearLayout.VERTICAL);
+        calendarBody.setPadding(0, dp(10), 0, 0);
+
+        Runnable renderCalendar = () -> {
+            calendarBody.removeAllViews();
+            tvMonth.setText(new SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(displayedMonth.getTime()));
+
+            String[] dow = new String[]{"S", "M", "T", "W", "T", "F", "S"};
+            LinearLayout dowRow = new LinearLayout(this);
+            dowRow.setOrientation(LinearLayout.HORIZONTAL);
+            for (String label : dow) {
+                TextView t = new TextView(this);
+                t.setText(label);
+                t.setGravity(android.view.Gravity.CENTER);
+                t.setTextColor(ContextCompat.getColor(this, android.R.color.holo_green_dark));
+                t.setTypeface(t.getTypeface(), android.graphics.Typeface.BOLD);
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+                t.setLayoutParams(lp);
+                dowRow.addView(t);
+            }
+            calendarBody.addView(dowRow);
+
+            Calendar first = (Calendar) displayedMonth.clone();
+            first.set(Calendar.DAY_OF_MONTH, 1);
+            int firstColumn = first.get(Calendar.DAY_OF_WEEK) - Calendar.SUNDAY;
+            int daysInMonth = first.getActualMaximum(Calendar.DAY_OF_MONTH);
+
+            LinearLayout weekRow = new LinearLayout(this);
+            weekRow.setOrientation(LinearLayout.HORIZONTAL);
+            int currentColumn = 0;
+
+            for (int i = 0; i < firstColumn; i++) {
+                TextView empty = new TextView(this);
+                empty.setLayoutParams(new LinearLayout.LayoutParams(0, dp(40), 1f));
+                weekRow.addView(empty);
+                currentColumn++;
+            }
+
+            for (int day = 1; day <= daysInMonth; day++) {
+                final int dayValue = day;
+                TextView dayCell = new TextView(this);
+                dayCell.setText(String.valueOf(day));
+                dayCell.setGravity(android.view.Gravity.CENTER);
+                dayCell.setTextSize(13f);
+                dayCell.setPadding(0, dp(4), 0, dp(4));
+                dayCell.setTextColor(ContextCompat.getColor(this, android.R.color.black));
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(40), 1f);
+                lp.setMargins(dp(2), dp(2), dp(2), dp(2));
+                dayCell.setLayoutParams(lp);
+
+                boolean isSelected = workingSelection.contains(dayValue);
+                dayCell.setBackgroundResource(isSelected
+                        ? R.drawable.recurring_calendar_day_selected
+                        : R.drawable.recurring_calendar_day_unselected);
+                dayCell.setOnClickListener(v -> {
+                    if (workingSelection.contains(dayValue)) {
+                        workingSelection.remove(dayValue);
+                    } else {
+                        workingSelection.add(dayValue);
+                    }
+                    boolean selected = workingSelection.contains(dayValue);
+                    dayCell.setBackgroundResource(selected
+                            ? R.drawable.recurring_calendar_day_selected
+                            : R.drawable.recurring_calendar_day_unselected);
+                    dayCell.setTextColor(ContextCompat.getColor(this, android.R.color.black));
+                });
+
+                weekRow.addView(dayCell);
+                currentColumn++;
+
+                if (currentColumn == 7) {
+                    calendarBody.addView(weekRow);
+                    weekRow = new LinearLayout(this);
+                    weekRow.setOrientation(LinearLayout.HORIZONTAL);
+                    currentColumn = 0;
+                }
+            }
+
+            if (currentColumn != 0) {
+                for (int i = currentColumn; i < 7; i++) {
+                    TextView empty = new TextView(this);
+                    empty.setLayoutParams(new LinearLayout.LayoutParams(0, dp(40), 1f));
+                    weekRow.addView(empty);
+                }
+                calendarBody.addView(weekRow);
+            }
+        };
+
+        btnPrev.setOnClickListener(v -> {
+            displayedMonth.add(Calendar.MONTH, -1);
+            renderCalendar.run();
+        });
+        btnNext.setOnClickListener(v -> {
+            displayedMonth.add(Calendar.MONTH, 1);
+            renderCalendar.run();
+        });
+
+        root.addView(header);
+        root.addView(calendarBody);
+        renderCalendar.run();
+
+        new AlertDialog.Builder(this)
+                .setTitle("Select monthly days")
+                .setView(root)
+                .setPositiveButton("OK", (dialog, which) -> {
+                    selectedDays.clear();
+                    selectedDays.addAll(workingSelection);
+                    Collections.sort(selectedDays);
+                    if (onSelectionChanged != null) {
+                        onSelectionChanged.run();
+                    }
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private int dp(int value) {
+        float density = getResources().getDisplayMetrics().density;
+        return (int) (value * density);
+    }
+    private void ensureRecurringTransactionsForCurrentMonth() {
+        String activeMonth = currentMonth != null ? currentMonth : MonthTracker.getCurrentMonth(this);
+        boolean changed = false;
+        for (Envelope envelope : envelopes) {
+            List<Transaction> snapshot = new ArrayList<>(envelope.getTransactions());
+            for (Transaction template : snapshot) {
+                if (!template.isRecurring() || !template.isRecurringTemplate()) {
+                    continue;
+                }
+                if (template.getTransferId() != null && !template.getTransferId().isEmpty()) {
+                    continue;
+                }
+                if (template.getRecurringFrequency() == null || template.getRecurringDays().isEmpty()) {
+                    continue;
+                }
+                if (template.getRecurringSeriesId() == null || template.getRecurringSeriesId().isEmpty()) {
+                    template.setRecurringSeriesId(UUID.randomUUID().toString());
+                    changed = true;
+                }
+
+                List<String> dates = getRecurringDatesForMonth(template, activeMonth);
+                for (String date : dates) {
+                    if (hasRecurringOccurrence(envelope, template.getRecurringSeriesId(), date)) {
+                        continue;
+                    }
+                    Transaction generated = new Transaction(template.getEnvelopeName(), template.getAmount(), date, template.getComment());
+                    generated.setRecurring(true);
+                    generated.setRecurringFrequency(template.getRecurringFrequency());
+                    generated.setRecurringDays(template.getRecurringDays());
+                    generated.setRecurringSeriesId(template.getRecurringSeriesId());
+                    generated.setRecurringTemplate(false);
+                    envelope.addTransaction(generated, activeMonth);
+                    changed = true;
+                }
+            }
+        }
+        if (changed) {
+            PrefManager.saveEnvelopes(this, envelopes);
+        }
+    }
+
+    private List<String> getRecurringDatesForMonth(Transaction template, String month) {
+        List<String> dates = new ArrayList<>();
+        Date anchorDate = parseIsoDate(template.getDate());
+        Date monthStart = parseIsoDate(month + "-01");
+        if (monthStart == null) {
+            return dates;
+        }
+
+        Calendar cursor = Calendar.getInstance();
+        cursor.setTime(monthStart);
+        Calendar monthEnd = Calendar.getInstance();
+        monthEnd.setTime(monthStart);
+        monthEnd.set(Calendar.DAY_OF_MONTH, monthEnd.getActualMaximum(Calendar.DAY_OF_MONTH));
+
+        String frequency = template.getRecurringFrequency();
+        Set<Integer> selectedDays = new HashSet<>(template.getRecurringDays());
+        Calendar anchorWeekStart = null;
+        if ("bi-weekly".equals(frequency) && anchorDate != null) {
+            anchorWeekStart = Calendar.getInstance();
+            anchorWeekStart.setTime(anchorDate);
+            anchorWeekStart.set(Calendar.HOUR_OF_DAY, 0);
+            anchorWeekStart.set(Calendar.MINUTE, 0);
+            anchorWeekStart.set(Calendar.SECOND, 0);
+            anchorWeekStart.set(Calendar.MILLISECOND, 0);
+            anchorWeekStart.set(Calendar.DAY_OF_WEEK, Calendar.SUNDAY);
+        }
+
+        while (!cursor.after(monthEnd)) {
+            Date candidateDate = cursor.getTime();
+            if (anchorDate != null && candidateDate.before(anchorDate)) {
+                cursor.add(Calendar.DAY_OF_MONTH, 1);
+                continue;
+            }
+
+            boolean include = false;
+            if ("monthly".equals(frequency)) {
+                include = selectedDays.contains(cursor.get(Calendar.DAY_OF_MONTH));
+            } else if ("weekly".equals(frequency)) {
+                include = selectedDays.contains(cursor.get(Calendar.DAY_OF_WEEK));
+            } else if ("bi-weekly".equals(frequency) && anchorWeekStart != null) {
+                if (selectedDays.contains(cursor.get(Calendar.DAY_OF_WEEK))) {
+                    Calendar candidateWeekStart = Calendar.getInstance();
+                    candidateWeekStart.setTime(candidateDate);
+                    candidateWeekStart.set(Calendar.HOUR_OF_DAY, 0);
+                    candidateWeekStart.set(Calendar.MINUTE, 0);
+                    candidateWeekStart.set(Calendar.SECOND, 0);
+                    candidateWeekStart.set(Calendar.MILLISECOND, 0);
+                    candidateWeekStart.set(Calendar.DAY_OF_WEEK, Calendar.SUNDAY);
+                    long diffMs = candidateWeekStart.getTimeInMillis() - anchorWeekStart.getTimeInMillis();
+                    long weeks = Math.abs(diffMs / (7L * 24L * 60L * 60L * 1000L));
+                    include = weeks % 2L == 0L;
+                }
+            }
+
+            if (include) {
+                dates.add(new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(candidateDate));
+            }
+            cursor.add(Calendar.DAY_OF_MONTH, 1);
+        }
+        return dates;
+    }
+
+    private boolean hasRecurringOccurrence(Envelope envelope, String seriesId, String date) {
+        for (Transaction transaction : envelope.getTransactions()) {
+            if (Objects.equals(seriesId, transaction.getRecurringSeriesId())
+                    && Objects.equals(date, transaction.getDate())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private Date parseIsoDate(String date) {
+        if (date == null || date.isEmpty()) {
+            return null;
+        }
+        try {
+            return new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).parse(date);
+        } catch (ParseException e) {
+            return null;
+        }
     }
 
     private void upsertTransferForTransaction(Transaction transaction, String sourceEnvelopeName, String destinationEnvelopeName, double amount) {
@@ -1392,6 +2128,24 @@ public class MainActivity extends AppCompatActivity {
                 .show();
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

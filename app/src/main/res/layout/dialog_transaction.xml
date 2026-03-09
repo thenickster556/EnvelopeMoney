@@ -39,6 +39,171 @@
         android:layout_height="wrap_content"
         android:inputType="numberDecimal|numberSigned" />
 
+    <CheckBox
+        android:id="@+id/cbIsRecurring"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="This is reoccuring" />
+
+    <TextView
+        android:id="@+id/tvRecurringFrequencyLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="Recurring Frequency" />
+
+    <LinearLayout
+        android:id="@+id/layoutRecurringFrequencyOptions"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/btnRecurringWeekly"
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="Weekly"
+            android:textStyle="bold"
+            android:background="@drawable/recurring_option_unselected"
+            android:clickable="true"
+            android:focusable="true" />
+
+        <TextView
+            android:id="@+id/btnRecurringBiWeekly"
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:layout_weight="1"
+            android:layout_marginStart="6dp"
+            android:gravity="center"
+            android:text="Bi-weekly"
+            android:textStyle="bold"
+            android:background="@drawable/recurring_option_unselected"
+            android:clickable="true"
+            android:focusable="true" />
+
+        <TextView
+            android:id="@+id/btnRecurringMonthly"
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:layout_weight="1"
+            android:layout_marginStart="6dp"
+            android:gravity="center"
+            android:text="Monthly"
+            android:textStyle="bold"
+            android:background="@drawable/recurring_option_unselected"
+            android:clickable="true"
+            android:focusable="true" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/tvRecurringDaysLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="Recurring Days" />
+
+    <LinearLayout
+        android:id="@+id/layoutRecurringWeekdayButtons"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:orientation="horizontal"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/btnRecurringDayMon"
+            android:layout_width="0dp"
+            android:layout_height="34dp"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="M"
+            android:textStyle="bold"
+            android:background="@drawable/recurring_option_unselected"
+            android:clickable="true"
+            android:focusable="true" />
+
+        <TextView
+            android:id="@+id/btnRecurringDayTue"
+            android:layout_width="0dp"
+            android:layout_height="34dp"
+            android:layout_weight="1"
+            android:layout_marginStart="4dp"
+            android:gravity="center"
+            android:text="T"
+            android:textStyle="bold"
+            android:background="@drawable/recurring_option_unselected"
+            android:clickable="true"
+            android:focusable="true" />
+
+        <TextView
+            android:id="@+id/btnRecurringDayWed"
+            android:layout_width="0dp"
+            android:layout_height="34dp"
+            android:layout_weight="1"
+            android:layout_marginStart="4dp"
+            android:gravity="center"
+            android:text="W"
+            android:textStyle="bold"
+            android:background="@drawable/recurring_option_unselected"
+            android:clickable="true"
+            android:focusable="true" />
+
+        <TextView
+            android:id="@+id/btnRecurringDayThu"
+            android:layout_width="0dp"
+            android:layout_height="34dp"
+            android:layout_weight="1"
+            android:layout_marginStart="4dp"
+            android:gravity="center"
+            android:text="Th"
+            android:textStyle="bold"
+            android:background="@drawable/recurring_option_unselected"
+            android:clickable="true"
+            android:focusable="true" />
+
+        <TextView
+            android:id="@+id/btnRecurringDayFri"
+            android:layout_width="0dp"
+            android:layout_height="34dp"
+            android:layout_weight="1"
+            android:layout_marginStart="4dp"
+            android:gravity="center"
+            android:text="F"
+            android:textStyle="bold"
+            android:background="@drawable/recurring_option_unselected"
+            android:clickable="true"
+            android:focusable="true" />
+
+        <TextView
+            android:id="@+id/btnRecurringDaySat"
+            android:layout_width="0dp"
+            android:layout_height="34dp"
+            android:layout_weight="1"
+            android:layout_marginStart="4dp"
+            android:gravity="center"
+            android:text="S"
+            android:textStyle="bold"
+            android:background="@drawable/recurring_option_unselected"
+            android:clickable="true"
+            android:focusable="true" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/tvRecurringDaysValue"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:minHeight="40dp"
+        android:padding="10dp"
+        android:background="@drawable/recurring_option_unselected"
+        android:text="Select days"
+        android:focusable="false"
+        android:clickable="true" />
+
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

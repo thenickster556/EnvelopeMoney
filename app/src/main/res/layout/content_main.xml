@@ -151,6 +151,7 @@
     </LinearLayout>
 
     <LinearLayout
+        android:id="@+id/layoutEnvelopesHeader"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
@@ -169,6 +170,16 @@
             android:layout_marginLeft="8dp" />
 
         <ImageButton
+            android:id="@+id/btnToggleEnvelopes"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:src="@android:drawable/arrow_up_float"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Collapse envelopes"
+            android:layout_marginEnd="8dp"
+            android:layout_marginRight="8dp" />
+
+        <ImageButton
             android:id="@+id/btnAddEnvelope"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -179,11 +190,18 @@
             android:layout_marginRight="8dp" />
     </LinearLayout>
 
-    <ListView
-        android:id="@+id/listViewEnvelopes"
+    <LinearLayout
+        android:id="@+id/layoutEnvelopesSection"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:layout_marginTop="8dp"/>
+        android:orientation="vertical">
+
+        <ListView
+            android:id="@+id/listViewEnvelopes"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_marginTop="8dp"/>
+    </LinearLayout>
 
 </LinearLayout>

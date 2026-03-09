@@ -14,6 +14,7 @@ import java.util.List;
 public class PrefManager {
     private static final String PREFS_NAME = "envelope_prefs";
     private static final String ENVELOPES_KEY = "envelopes";
+    private static final String ENVELOPES_COLLAPSED_KEY = "envelopes_collapsed";
     private String name;
     private double limit;
     private double remaining;
@@ -42,6 +43,17 @@ public class PrefManager {
         return new Gson().fromJson(json, (java.lang.reflect.Type) type);
     }
 
+    public static void setEnvelopesCollapsed(Context context, boolean collapsed) {
+        SharedPreferences.Editor editor = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit();
+        editor.putBoolean(ENVELOPES_COLLAPSED_KEY, collapsed);
+        editor.apply();
+    }
+
+    public static boolean isEnvelopesCollapsed(Context context) {
+        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        return prefs.getBoolean(ENVELOPES_COLLAPSED_KEY, false);
+    }
+
     private static List<Envelope> createDefaultEnvelopes(Context context) {
         List<Envelope> defaultEnvelopes = new ArrayList<>();
         defaultEnvelopes.add(new Envelope("Gas", 90));
@@ -51,7 +63,7 @@ public class PrefManager {
         saveEnvelopes(context, defaultEnvelopes);
         return defaultEnvelopes;
     }
-    
+
     public void setName(String name) {
         this.name = name;
     }
