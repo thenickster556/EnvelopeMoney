@@ -10,10 +10,12 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.ImageButton;
+import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.Spinner;
 import android.widget.TextView;
@@ -23,17 +25,22 @@ import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
+import androidx.core.content.ContextCompat;
 
+import java.lang.reflect.Field;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
-
-import java.lang.reflect.Field;
+import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
 
 public class MainActivity extends AppCompatActivity {
     private ListView listViewEnvelopes;
@@ -44,9 +51,24 @@ public class MainActivity extends AppCompatActivity {
     private List<Transaction> allTransactions = new ArrayList<>();
     private EnvelopeAdapter envelopeAdapter;
     private TextView tvTransactionsTotal;
+    private LinearLayout layoutTransferTotals;
+    private Spinner spinnerTransferTotals;
+    private TextView tvTransferTotalsSummary;
     private String currentMonth;
     private final Boolean TEST = false;
+    private boolean showTransfers = false;
+    private int selectedTransferTotalsIndex = 0;
 
+
+    private static class TransferTotalsOption {
+        final String envelopeName;
+        final double total;
+
+        TransferTotalsOption(String envelopeName, double total) {
+            this.envelopeName = envelopeName;
+            this.total = total;
+        }
+    }
     @RequiresApi(api = Build.VERSION_CODES.N)
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -57,11 +79,22 @@ public class MainActivity extends AppCompatActivity {
         ImageButton btnAddTransaction = findViewById(R.id.btnAddTransaction);
         btnAddTransaction.setOnClickListener(v -> showNewTransactionDialog());
 
+        ImageButton btnToggleTransfers = findViewById(R.id.btnToggleTransfers);
+        updateTransferToggleButton(btnToggleTransfers);
+        btnToggleTransfers.setOnClickListener(v -> {
+            showTransfers = !showTransfers;
+            updateTransferToggleButton(btnToggleTransfers);
+            updateDisplay();
+        });
+
         ImageButton btnAddEnvelope = findViewById(R.id.btnAddEnvelope);
         btnAddEnvelope.setOnClickListener(v -> showEnvelopeDialog(null));
+
         listViewEnvelopes = findViewById(R.id.listViewEnvelopes);
         listViewTransactions = findViewById(R.id.listViewTransactions);
-
+        layoutTransferTotals = findViewById(R.id.layoutTransferTotals);
+        spinnerTransferTotals = findViewById(R.id.spinnerTransferTotals);
+        tvTransferTotalsSummary = findViewById(R.id.tvTransferTotalsSummary);
         // Hook up the Toolbar as your ActionBar
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
@@ -199,9 +232,15 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private boolean hasPreviousMonth() {
+        if (currentMonth == null || currentMonth.isEmpty()) {
+            return false;
+        }
         try {
-            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM");
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM", Locale.getDefault());
             Date date = sdf.parse(currentMonth);
+            if (date == null) {
+                return false;
+            }
             Calendar cal = Calendar.getInstance();
             cal.setTime(date);
             cal.add(Calendar.MONTH, -1);
@@ -213,21 +252,27 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
             return false;
-        } catch (ParseException e) {
+        } catch (Exception e) {
+            return false;
+        }
+    }
+    private boolean hasNextMonth() {
+        if (currentMonth == null || currentMonth.isEmpty()) {
+            return false;
+        }
+        try {
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM", Locale.getDefault());
+            Date current = sdf.parse(currentMonth);
+            if (current == null) {
+                return false;
+            }
+            Date now = new Date();
+            return current.before(now);
+        } catch (Exception e) {
             return false;
         }
     }
 
-    private boolean hasNextMonth() {
-        try {
-            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM", Locale.getDefault());
-            Date current = sdf.parse(currentMonth);
-            Date now = new Date();
-            return current.before(now);
-        } catch (ParseException e) {
-            return false;
-        }
-    }
     private void handleNewMonth(boolean carryOver) {
         if (monthRolloverInProgress) return;                 // prevent re-entry
         monthRolloverInProgress = true;
@@ -270,11 +315,14 @@ public class MainActivity extends AppCompatActivity {
             }
 
             // Commit month AFTER envelopes are stable
+            currentMonth = newMonth;
             MonthTracker.setCurrentMonth(this, newMonth);
 
             // One clean UI refresh at the end
             PrefManager.saveEnvelopes(this, envelopes);
-            updateDisplay();
+            if (envelopeAdapter != null && transactionAdapter != null) {
+                updateDisplay();
+            }
 
         } catch (Throwable t) {
             // Don’t crash-loop: surface a message and swallow the exception
@@ -293,9 +341,15 @@ public class MainActivity extends AppCompatActivity {
 
 
     private void changeMonth(int direction) {
+        if (currentMonth == null || currentMonth.isEmpty()) {
+            return;
+        }
         try {
             SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM", Locale.getDefault());
             Date date = sdf.parse(currentMonth);
+            if (date == null) {
+                return;
+            }
             Calendar cal = Calendar.getInstance();
             cal.setTime(date);
             cal.add(Calendar.MONTH, direction);
@@ -310,11 +364,10 @@ public class MainActivity extends AppCompatActivity {
             refreshDataForMonth();
             setupMonthNavigation();
             updateDisplay();
-        } catch (ParseException e) {
-            e.printStackTrace();
+        } catch (Exception e) {
+            Log.d("EnvelopeMoney", "Month navigation failed", e);
         }
     }
-
     private void refreshDataForMonth() {
         // Load data for current month
         for (Envelope env : envelopes) {
@@ -342,19 +395,19 @@ public class MainActivity extends AppCompatActivity {
         EditText etDate = dialogView.findViewById(R.id.etEditTransactionDate);
         EditText etAmount = dialogView.findViewById(R.id.etEditTransactionAmount);
         EditText etComment = dialogView.findViewById(R.id.etEditTransactionComment);
+        CheckBox cbIsTransfer = dialogView.findViewById(R.id.cbIsTransfer);
+        TextView tvTransferToLabel = dialogView.findViewById(R.id.tvTransferToLabel);
+        Spinner spinnerTransferDestination = dialogView.findViewById(R.id.spinnerTransferDestination);
 
-        // Populate spinner with envelope names
         ArrayAdapter<String> envelopeAdapter = new ArrayAdapter<>(this,
                 android.R.layout.simple_spinner_item, getEnvelopeNames());
         envelopeAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         spinnerEnvelope.setAdapter(envelopeAdapter);
 
-        // Optionally set default date to 'today'
         Calendar calendar = Calendar.getInstance();
         String today = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(calendar.getTime());
         etDate.setText(today);
 
-        // Setup date picker on click
         etDate.setOnClickListener(v -> {
             DatePickerDialog datePickerDialog = new DatePickerDialog(MainActivity.this,
                     (view, year, month, dayOfMonth) -> {
@@ -368,28 +421,58 @@ public class MainActivity extends AppCompatActivity {
             datePickerDialog.show();
         });
 
+        spinnerEnvelope.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                String source = parent.getItemAtPosition(position).toString();
+                populateTransferDestinationSpinner(spinnerTransferDestination, source, null);
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+            }
+        });
+        if (spinnerEnvelope.getSelectedItem() != null) {
+            populateTransferDestinationSpinner(spinnerTransferDestination, spinnerEnvelope.getSelectedItem().toString(), null);
+        }
+
+        cbIsTransfer.setOnCheckedChangeListener((buttonView, isChecked) ->
+                setTransferControlsVisibility(isChecked, tvTransferToLabel, spinnerTransferDestination));
+        setTransferControlsVisibility(false, tvTransferToLabel, spinnerTransferDestination);
+
         builder.setView(dialogView)
                 .setTitle("New Transaction")
                 .setPositiveButton("Save", (dialog, which) -> {
                     try {
-                        // Parse fields
                         String envelopeName = spinnerEnvelope.getSelectedItem().toString();
                         double amount = Double.parseDouble(etAmount.getText().toString());
                         String comment = etComment.getText().toString();
                         String date = etDate.getText().toString();
 
-                        // Create a new Transaction
-                        Transaction newTransaction = new Transaction(
-                                envelopeName, amount, date, comment
-                        );
-
-                        // Add to the chosen Envelope
+                        Transaction newTransaction = new Transaction(envelopeName, amount, date, comment);
                         Envelope env = findEnvelopeByName(envelopeName);
-                        if (env != null) {
-                            env.addTransaction(newTransaction,currentMonth);
+                        if (env == null) {
+                            showError("Envelope not found");
+                            return;
                         }
 
-                        // Save & refresh
+                        String destination = null;
+                        if (cbIsTransfer.isChecked()) {
+                            if (spinnerTransferDestination.getSelectedItem() == null) {
+                                showError("Select where this transfer goes");
+                                return;
+                            }
+                            destination = spinnerTransferDestination.getSelectedItem().toString();
+                            if (destination.equals(envelopeName)) {
+                                showError("Transfer destination must be a different envelope");
+                                return;
+                            }
+                        }
+
+                        env.addTransaction(newTransaction, currentMonth);
+                        if (destination != null) {
+                            upsertTransferForTransaction(newTransaction, envelopeName, destination, Math.abs(amount));
+                        }
                         PrefManager.saveEnvelopes(MainActivity.this, envelopes);
                         updateDisplay();
                     } catch (NumberFormatException e) {
@@ -401,47 +484,89 @@ public class MainActivity extends AppCompatActivity {
                 .show();
     }
 
-
     @RequiresApi(api = Build.VERSION_CODES.N)
     private void updateTransactionHistory() {
+        ensureMirrorTransactionsForExistingTransfers();
         allTransactions.clear();
 
         TextView tvStartDate = findViewById(R.id.tvStartDate);
         TextView tvEndDate = findViewById(R.id.tvEndDate);
         final SimpleDateFormat sdfDisplay = new SimpleDateFormat("MMM d, yyyy", Locale.getDefault());
         final SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault());
-        Date startDate = null, endDate = null;
+
+        Date startDate = null;
+        Date endDate = null;
         try {
             startDate = sdfDisplay.parse(tvStartDate.getText().toString());
             endDate = sdfDisplay.parse(tvEndDate.getText().toString());
         } catch (ParseException e) {
-            e.printStackTrace();
+            Log.d("EnvelopeMoney", "Date range parse failed", e);
+        }
+        if (startDate == null || endDate == null) {
+            startDate = new Date(0L);
+            endDate = new Date(Long.MAX_VALUE);
         }
 
-        // Filter transactions from selected envelopes by date range
+        List<Transaction> filteredTransactions = new ArrayList<>();
+        Map<String, Double> transferTotalsByEnvelope = new HashMap<>();
+        double grossTotal = 0;
+        double outgoingTransferTotal = 0;
+        double incomingTransferTotal = 0;
+
         for (Envelope envelope : envelopes) {
-            if (envelope.isSelected()) {
-                for (Transaction t : envelope.getTransactions()) {
-                    try {
-                        Date txDate = sdf.parse(t.getDate());
-                        if (txDate != null && !txDate.before(startDate) && !txDate.after(endDate)) {
-                            allTransactions.add(t);
-                        }
-                    } catch (ParseException e) {
-                        e.printStackTrace();
+            if (!envelope.isSelected()) {
+                continue;
+            }
+            for (Transaction transaction : envelope.getTransactions()) {
+                try {
+                    Date txDate = sdf.parse(transaction.getDate());
+                    if (txDate == null || txDate.before(startDate) || txDate.after(endDate)) {
+                        continue;
                     }
+                    filteredTransactions.add(transaction);
+                    grossTotal += transaction.getAmount();
+
+                    String transferId = transaction.getTransferId();
+                    if (transferId != null && !transferId.isEmpty()) {
+                        Envelope.TransferData transfer = findTransferById(transferId);
+                        if (transfer != null && transfer.getToEnvelope() != null && !transfer.getToEnvelope().isEmpty()) {
+                            double amount = Math.abs(transaction.getAmount());
+                            Envelope ownerEnvelope = findTransferOwner(transferId);
+                            boolean isSourceSide = ownerEnvelope != null && Objects.equals(ownerEnvelope.getName(), transaction.getEnvelopeName());
+                            Envelope destinationEnvelope = findEnvelopeByName(transfer.getToEnvelope());
+                            boolean destinationSelected = destinationEnvelope != null && destinationEnvelope.isSelected();
+
+                            if (isSourceSide) {
+                                outgoingTransferTotal += amount;
+                            } else {
+                                incomingTransferTotal += amount;
+                            }
+
+                            // Show transfer totals for both directions so opposite envelopes appear,
+                            // and cancel to zero when both sides are selected.
+                            double running = transferTotalsByEnvelope.getOrDefault(transfer.getToEnvelope(), 0d);
+                            if (isSourceSide) {
+                                running += amount;
+                            }
+                            if (destinationSelected) {
+                                running -= amount;
+                            }
+                            transferTotalsByEnvelope.put(transfer.getToEnvelope(), running);
+                        }
+                    }
+                } catch (ParseException e) {
+                    Log.d("EnvelopeMoney", "Transaction date parse failed", e);
                 }
             }
         }
 
-        // Sort transactions (newest first)
+        allTransactions.addAll(filteredTransactions);
         Collections.sort(allTransactions, (t1, t2) -> {
             String d1 = t1.getDate() != null ? t1.getDate() : "";
             String d2 = t2.getDate() != null ? t2.getDate() : "";
             return d2.compareTo(d1);
         });
 
-        // Add a placeholder if empty
         if (allTransactions.isEmpty()) {
             allTransactions.add(new Transaction(
                     "No transactions yet",
@@ -451,22 +576,20 @@ public class MainActivity extends AppCompatActivity {
             ));
         }
 
-        // Update total
-        double total = 0;
-        for (Transaction t : allTransactions) {
-            total += t.getAmount();
-        }
-        tvTransactionsTotal.setText(String.format(Locale.getDefault(), "Total: $%.2f", total));
+        double displayTotal = showTransfers ? (grossTotal - outgoingTransferTotal + incomingTransferTotal) : grossTotal;
+        tvTransactionsTotal.setText(String.format(Locale.getDefault(), "Total: $%.2f", displayTotal));
+        updateTransferTotalsPanel(transferTotalsByEnvelope);
 
         transactionAdapter.notifyDataSetChanged();
     }
 
-
-
     private void updateDisplay() {
-        envelopeAdapter.notifyDataSetChanged();
-        updateTransactionHistory();
-
+        if (envelopeAdapter != null) {
+            envelopeAdapter.notifyDataSetChanged();
+        }
+        if (transactionAdapter != null) {
+            updateTransactionHistory();
+        }
     }
 
     // Adapter classes and helper methods below
@@ -544,28 +667,25 @@ public class MainActivity extends AppCompatActivity {
             TextView tvAmounts = convertView.findViewById(R.id.tvAmounts);
             ImageButton btnOptions = convertView.findViewById(R.id.btnOptions);
 
-            // Set values
             tvName.setText(envelope.getName());
             tvAmounts.setText(String.format(Locale.getDefault(),
                     "Limit: $%.2f | Remaining: $%.2f",
                     envelope.getLimit(),
                     envelope.getRemaining()));
 
+
             cbSelect.setOnCheckedChangeListener(null);
-
             cbSelect.setChecked(envelope.isSelected());
-
             cbSelect.setOnCheckedChangeListener((buttonView, isChecked) -> {
                 envelope.setSelected(isChecked);
                 updateTransactionHistory();
                 PrefManager.saveEnvelopes(getContext(), envelopes);
             });
 
-            // Options button listener
             btnOptions.setOnClickListener(v -> showEnvelopeOptionsDialog(position));
-
             return convertView;
         }
+
     }
 
     // Rest of helper methods (showEnvelopeOptionsDialog, showEnvelopeDialog,
@@ -672,6 +792,7 @@ public class MainActivity extends AppCompatActivity {
                         new AlertDialog.Builder(MainActivity.this)
                                 .setMessage("Delete this envelope?")
                                 .setPositiveButton("Delete", (d, w) -> {
+                                    removeTransferReferencesToEnvelope(envelope.getName());
                                     envelopes.remove(position);
                                     PrefManager.saveEnvelopes(MainActivity.this, envelopes);
                                     updateDisplay();
@@ -732,6 +853,7 @@ public class MainActivity extends AppCompatActivity {
                         // Update existing
                         double remaining = envelopeToEdit.getRemaining();
 
+                        String oldName = envelopeToEdit.getName();
                         envelopeToEdit.setName(name);
                         if(limit != envelopeToEdit.getLimit()) {
                             envelopeToEdit.adjustLimit(limit, currentMonth);
@@ -739,6 +861,9 @@ public class MainActivity extends AppCompatActivity {
                         if (remainder != remaining) {
                             // Set the manual override values:
                             envelopeToEdit.setManualOverrideRemaining(remainder); // store the limit at override time
+                        }
+                        if (!oldName.equals(name)) {
+                            renameTransferReferences(oldName, name);
                         }
                     }
 
@@ -759,35 +884,65 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showTransactionDialog(Transaction transactionToEdit) {
+        final Transaction editTransaction = resolveTransferAnchorTransaction(transactionToEdit);
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         View dialogView = getLayoutInflater().inflate(R.layout.dialog_transaction, null);
 
-        // Get references
         Spinner spinnerEnvelope = dialogView.findViewById(R.id.spinnerEditEnvelope);
         EditText etDate = dialogView.findViewById(R.id.etEditTransactionDate);
         EditText etAmount = dialogView.findViewById(R.id.etEditTransactionAmount);
         EditText etComment = dialogView.findViewById(R.id.etEditTransactionComment);
+        CheckBox cbIsTransfer = dialogView.findViewById(R.id.cbIsTransfer);
+        TextView tvTransferToLabel = dialogView.findViewById(R.id.tvTransferToLabel);
+        Spinner spinnerTransferDestination = dialogView.findViewById(R.id.spinnerTransferDestination);
 
-        // Setup Spinner with envelope names
         ArrayAdapter<String> envelopeAdapter = new ArrayAdapter<>(this,
                 android.R.layout.simple_spinner_item, getEnvelopeNames());
         envelopeAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         spinnerEnvelope.setAdapter(envelopeAdapter);
 
-        // Preselect the envelope matching the transaction's current envelope
-        int envelopeIndex = getEnvelopeNames().indexOf(transactionToEdit.getEnvelopeName());
+        int envelopeIndex = getEnvelopeNames().indexOf(editTransaction.getEnvelopeName());
         if (envelopeIndex >= 0) {
             spinnerEnvelope.setSelection(envelopeIndex);
         }
 
-        // Setup the date field – set current date and disable direct text input
-        etDate.setText(transactionToEdit.getDate());
+        String selectedDestination = null;
+        boolean editingMirrorTransfer = false;
+        if (editTransaction.getTransferId() != null) {
+            Envelope.TransferData transferData = findTransferById(editTransaction.getTransferId());
+            Envelope transferOwner = findTransferOwner(editTransaction.getTransferId());
+            if (transferData != null) {
+                selectedDestination = transferData.getToEnvelope();
+            }
+            editingMirrorTransfer = transferOwner != null
+                    && !Objects.equals(transferOwner.getName(), editTransaction.getEnvelopeName());
+            if (editingMirrorTransfer && transferOwner != null) {
+                selectedDestination = transferOwner.getName();
+            }
+        }
+
+        final boolean finalEditingMirrorTransfer = editingMirrorTransfer;
+        final String initialDestination = selectedDestination;
+        spinnerEnvelope.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                String source = parent.getItemAtPosition(position).toString();
+                populateTransferDestinationSpinner(spinnerTransferDestination, source, initialDestination);
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+            }
+        });
+        if (spinnerEnvelope.getSelectedItem() != null) {
+            populateTransferDestinationSpinner(spinnerTransferDestination, spinnerEnvelope.getSelectedItem().toString(), initialDestination);
+        }
+
+        etDate.setText(editTransaction.getDate());
         etDate.setOnClickListener(v -> {
-            // Use current date as default; you can parse etDate.getText() if needed
             Calendar calendar = Calendar.getInstance();
             DatePickerDialog datePickerDialog = new DatePickerDialog(MainActivity.this,
                     (view, year, month, dayOfMonth) -> {
-                        // Format date as yyyy-MM-dd (adjust as needed)
                         String selectedDate = String.format(Locale.getDefault(), "%04d-%02d-%02d",
                                 year, month + 1, dayOfMonth);
                         etDate.setText(selectedDate);
@@ -798,51 +953,68 @@ public class MainActivity extends AppCompatActivity {
             datePickerDialog.show();
         });
 
-        // Pre-fill amount and comment fields
-        etAmount.setText(String.valueOf(transactionToEdit.getAmount()));
-        etComment.setText(transactionToEdit.getComment());
+        etAmount.setText(String.valueOf(editTransaction.getAmount()));
+        etComment.setText(editTransaction.getComment());
 
-        // Build the dialog
+        boolean isTransfer = editTransaction.getTransferId() != null && !editTransaction.getTransferId().isEmpty();
+        cbIsTransfer.setChecked(isTransfer);
+        setTransferControlsVisibility(isTransfer, tvTransferToLabel, spinnerTransferDestination);
+        cbIsTransfer.setOnCheckedChangeListener((buttonView, checked) ->
+                setTransferControlsVisibility(checked, tvTransferToLabel, spinnerTransferDestination));
+
         builder.setView(dialogView)
                 .setTitle("Edit Transaction")
                 .setPositiveButton("Save", (dialog, which) -> {
                     try {
-                        double oldAmount = transactionToEdit.getAmount();
                         double newAmount = Double.parseDouble(etAmount.getText().toString());
                         String newComment = etComment.getText().toString();
                         String newDate = etDate.getText().toString();
+                        String oldEnvelopeName = editTransaction.getEnvelopeName();
                         String newEnvelopeName = spinnerEnvelope.getSelectedItem().toString();
 
-                        // Update envelope if it has changed
-                        if (!transactionToEdit.getEnvelopeName().equals(newEnvelopeName)) {
-                            Envelope oldEnvelope = findEnvelopeByName(transactionToEdit.getEnvelopeName());
+                        if (!oldEnvelopeName.equals(newEnvelopeName)) {
+                            Envelope oldEnvelope = findEnvelopeByName(oldEnvelopeName);
                             Envelope newEnvelope = findEnvelopeByName(newEnvelopeName);
                             if (oldEnvelope != null) {
-                                // Refund old amount in old envelope and remove transaction
-                                oldEnvelope.getTransactions().remove(transactionToEdit);
+                                oldEnvelope.getTransactions().remove(editTransaction);
                                 oldEnvelope.calculateRemaining(currentMonth);
                             }
                             if (newEnvelope != null) {
-                                // Deduct new amount and add transaction to new envelope
-                                newEnvelope.getTransactions().add(transactionToEdit);
+                                newEnvelope.getTransactions().add(editTransaction);
                                 newEnvelope.calculateRemaining(currentMonth);
                             }
-                            // You'll need a setter or directly update the field:
-                            transactionToEdit.setEnvelopeName(newEnvelopeName);
+                            editTransaction.setEnvelopeName(newEnvelopeName);
                         } else {
-                            // If envelope is the same, adjust remaining based on the difference
                             Envelope envelope = findEnvelopeByName(newEnvelopeName);
                             if (envelope != null) {
-                                envelope.updateTransaction(transactionToEdit, newAmount, currentMonth);
+                                envelope.updateTransaction(editTransaction, newAmount, currentMonth);
                             }
                         }
 
-                        // Update transaction fields
-                        transactionToEdit.setAmount(newAmount);
-                        transactionToEdit.setComment(newComment);
-                        transactionToEdit.setDate(newDate);
+                        editTransaction.setAmount(newAmount);
+                        editTransaction.setComment(newComment);
+                        editTransaction.setDate(newDate);
 
-                        // Persist changes and refresh UI
+                        if (cbIsTransfer.isChecked()) {
+                            if (spinnerTransferDestination.getSelectedItem() == null) {
+                                showError("Select where this transfer goes");
+                                return;
+                            }
+                            String destination = spinnerTransferDestination.getSelectedItem().toString();
+                            if (destination.equals(newEnvelopeName)) {
+                                showError("Transfer destination must be a different envelope");
+                                return;
+                            }
+                            String sourceEnvelopeNameForTransfer = finalEditingMirrorTransfer ? destination : newEnvelopeName;
+                            String destinationEnvelopeNameForTransfer = finalEditingMirrorTransfer ? newEnvelopeName : destination;
+                            upsertTransferForTransaction(editTransaction,
+                                    sourceEnvelopeNameForTransfer,
+                                    destinationEnvelopeNameForTransfer,
+                                    Math.abs(newAmount));
+                        } else {
+                            detachTransferFromTransaction(editTransaction);
+                        }
+
                         PrefManager.saveEnvelopes(MainActivity.this, envelopes);
                         updateDisplay();
                     } catch (NumberFormatException e) {
@@ -853,16 +1025,16 @@ public class MainActivity extends AppCompatActivity {
 
         builder.create().show();
     }
-
-
     @RequiresApi(api = Build.VERSION_CODES.N)
     private void deleteTransaction(Transaction transaction) {
+        final Transaction targetTransaction = resolveTransferAnchorTransaction(transaction);
         new AlertDialog.Builder(MainActivity.this)
                 .setMessage("Delete this transaction?")
                 .setPositiveButton("Delete", (d, w) -> {
-                    Envelope envelope = findEnvelopeByName(transaction.getEnvelopeName());
+                    Envelope envelope = findEnvelopeByName(targetTransaction.getEnvelopeName());
                     if(envelope != null){
-                        envelope.removeTransaction(transaction, currentMonth);
+                        detachTransferFromTransaction(targetTransaction);
+                        envelope.removeTransaction(targetTransaction, currentMonth);
                         // Save and refresh
                         PrefManager.saveEnvelopes(this, envelopes);
                         updateDisplay();
@@ -883,6 +1055,336 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
+    private Envelope findTransferOwner(String transferId) {
+        for (Envelope envelope : envelopes) {
+            for (Envelope.TransferData transfer : envelope.getTransfers()) {
+                if (Objects.equals(transfer.getId(), transferId)) {
+                    return envelope;
+                }
+            }
+        }
+        return null;
+    }
+
+    private Envelope.TransferData findTransferById(String transferId) {
+        for (Envelope envelope : envelopes) {
+            for (Envelope.TransferData transfer : envelope.getTransfers()) {
+                if (Objects.equals(transfer.getId(), transferId)) {
+                    return transfer;
+                }
+            }
+        }
+        return null;
+    }
+
+    private void removeTransferById(String transferId) {
+        Envelope owner = findTransferOwner(transferId);
+        if (owner != null) {
+            owner.removeTransfer(transferId);
+        }
+    }
+
+    private void removeTransferReferencesToEnvelope(String envelopeName) {
+        for (Envelope envelope : envelopes) {
+            envelope.getTransfers().removeIf(transfer -> Objects.equals(transfer.getToEnvelope(), envelopeName));
+        }
+    }
+
+    private void renameTransferReferences(String oldName, String newName) {
+        for (Envelope envelope : envelopes) {
+            for (Envelope.TransferData transfer : envelope.getTransfers()) {
+                if (Objects.equals(transfer.getToEnvelope(), oldName)) {
+                    transfer.setToEnvelope(newName);
+                }
+            }
+        }
+    }
+
+    private void populateTransferDestinationSpinner(Spinner spinner, String sourceEnvelopeName, @Nullable String selectedDestination) {
+        List<String> destinations = new ArrayList<>();
+        for (Envelope env : envelopes) {
+            if (!Objects.equals(env.getName(), sourceEnvelopeName)) {
+                destinations.add(env.getName());
+            }
+        }
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, destinations);
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spinner.setAdapter(adapter);
+        if (selectedDestination != null) {
+            int index = destinations.indexOf(selectedDestination);
+            if (index >= 0) {
+                spinner.setSelection(index);
+            }
+        }
+    }
+
+    private void setTransferControlsVisibility(boolean visible, TextView label, Spinner spinner) {
+        int visibility = visible ? View.VISIBLE : View.GONE;
+        label.setVisibility(visibility);
+        spinner.setVisibility(visibility);
+    }
+
+    private void upsertTransferForTransaction(Transaction transaction, String sourceEnvelopeName, String destinationEnvelopeName, double amount) {
+        String transferId = transaction.getTransferId();
+        if (transferId == null || transferId.isEmpty()) {
+            transferId = UUID.randomUUID().toString();
+            transaction.setTransferId(transferId);
+        }
+
+        Envelope sourceEnvelope = findEnvelopeByName(sourceEnvelopeName);
+        if (sourceEnvelope == null) {
+            return;
+        }
+
+        Envelope currentOwner = findTransferOwner(transferId);
+        if (currentOwner != null && !Objects.equals(currentOwner.getName(), sourceEnvelopeName)) {
+            currentOwner.removeTransfer(transferId);
+            currentOwner = null;
+        }
+
+        if (currentOwner == null) {
+            sourceEnvelope.addTransfer(transferId, destinationEnvelopeName, amount);
+        } else {
+            currentOwner.updateTransfer(transferId, destinationEnvelopeName, amount);
+        }
+
+        Transaction sourceTransaction = resolveTransferAnchorTransaction(transaction);
+        if (sourceTransaction == null) {
+            sourceTransaction = transaction;
+        }
+
+        Envelope sourceHolder = findEnvelopeByName(sourceTransaction.getEnvelopeName());
+        if (sourceHolder != null && sourceHolder != sourceEnvelope) {
+            sourceHolder.getTransactions().remove(sourceTransaction);
+            sourceHolder.calculateRemaining(currentMonth);
+            sourceEnvelope.addTransaction(sourceTransaction, currentMonth);
+        }
+
+        sourceTransaction.setEnvelopeName(sourceEnvelopeName);
+        sourceTransaction.setDate(transaction.getDate());
+        sourceTransaction.setComment(transaction.getComment());
+        sourceEnvelope.updateTransaction(sourceTransaction, Math.abs(amount), currentMonth);
+
+        syncMirrorTransferTransaction(sourceTransaction, sourceEnvelopeName, destinationEnvelopeName, amount);
+    }
+
+    private void detachTransferFromTransaction(Transaction transaction) {
+        String transferId = transaction.getTransferId();
+        if (transferId == null || transferId.isEmpty()) {
+            return;
+        }
+
+        removeTransferById(transferId);
+        removeMirrorTransactions(transferId, transaction);
+        transaction.setTransferId(null);
+    }
+
+    private Transaction resolveTransferAnchorTransaction(Transaction transaction) {
+        if (transaction == null) {
+            return null;
+        }
+
+        String transferId = transaction.getTransferId();
+        if (transferId == null || transferId.isEmpty()) {
+            return transaction;
+        }
+
+        Envelope owner = findTransferOwner(transferId);
+        if (owner == null) {
+            return transaction;
+        }
+
+        for (Transaction candidate : owner.getTransactions()) {
+            if (Objects.equals(candidate.getTransferId(), transferId)) {
+                return candidate;
+            }
+        }
+
+        return transaction;
+    }
+
+    private void syncMirrorTransferTransaction(Transaction sourceTransaction,
+                                               String sourceEnvelopeName,
+                                               String destinationEnvelopeName,
+                                               double amount) {
+        String transferId = sourceTransaction.getTransferId();
+        if (transferId == null || transferId.isEmpty()) {
+            return;
+        }
+
+        Envelope destinationEnvelope = findEnvelopeByName(destinationEnvelopeName);
+        if (destinationEnvelope == null) {
+            return;
+        }
+
+        Transaction mirror = null;
+        Envelope mirrorEnvelope = null;
+        for (Envelope envelope : envelopes) {
+            Iterator<Transaction> iterator = envelope.getTransactions().iterator();
+            while (iterator.hasNext()) {
+                Transaction candidate = iterator.next();
+                if (!Objects.equals(candidate.getTransferId(), transferId) || candidate == sourceTransaction) {
+                    continue;
+                }
+
+                if (Objects.equals(candidate.getEnvelopeName(), destinationEnvelopeName)) {
+                    mirror = candidate;
+                    mirrorEnvelope = envelope;
+                } else {
+                    iterator.remove();
+                    if (Objects.equals(candidate.getMonth(), currentMonth)) {
+                        envelope.calculateRemaining(currentMonth);
+                    }
+                }
+            }
+        }
+
+        String sourceComment = sourceTransaction.getComment();
+        String mirrorComment = (sourceComment == null || sourceComment.isEmpty())
+                ? "Transfer from " + sourceEnvelopeName
+                : "Transfer from " + sourceEnvelopeName + " | " + sourceComment;
+
+        if (mirror == null) {
+            mirror = new Transaction(destinationEnvelopeName, -Math.abs(amount), sourceTransaction.getDate(), mirrorComment);
+            mirror.setTransferId(transferId);
+            destinationEnvelope.addTransaction(mirror, currentMonth);
+            return;
+        }
+
+        if (mirrorEnvelope != null && mirrorEnvelope != destinationEnvelope) {
+            mirrorEnvelope.getTransactions().remove(mirror);
+            mirrorEnvelope.calculateRemaining(currentMonth);
+            destinationEnvelope.addTransaction(mirror, currentMonth);
+        }
+
+        mirror.setEnvelopeName(destinationEnvelopeName);
+        mirror.setDate(sourceTransaction.getDate());
+        mirror.setComment(mirrorComment);
+        destinationEnvelope.updateTransaction(mirror, -Math.abs(amount), currentMonth);
+    }
+
+    private void removeMirrorTransactions(String transferId, Transaction anchorTransaction) {
+        for (Envelope envelope : envelopes) {
+            Iterator<Transaction> iterator = envelope.getTransactions().iterator();
+            while (iterator.hasNext()) {
+                Transaction candidate = iterator.next();
+                if (!Objects.equals(candidate.getTransferId(), transferId)) {
+                    continue;
+                }
+                if (candidate == anchorTransaction) {
+                    continue;
+                }
+
+                iterator.remove();
+                if (Objects.equals(candidate.getMonth(), currentMonth)) {
+                    envelope.calculateRemaining(currentMonth);
+                }
+            }
+        }
+    }
+    private void ensureMirrorTransactionsForExistingTransfers() {
+        for (Envelope owner : envelopes) {
+            for (Envelope.TransferData transfer : owner.getTransfers()) {
+                if (transfer.getId() == null || transfer.getId().isEmpty()) {
+                    continue;
+                }
+
+                Transaction sourceTransaction = null;
+                for (Transaction candidate : owner.getTransactions()) {
+                    if (Objects.equals(candidate.getTransferId(), transfer.getId())) {
+                        sourceTransaction = candidate;
+                        break;
+                    }
+                }
+
+                if (sourceTransaction == null) {
+                    continue;
+                }
+
+                syncMirrorTransferTransaction(
+                        sourceTransaction,
+                        owner.getName(),
+                        transfer.getToEnvelope(),
+                        Math.abs(sourceTransaction.getAmount())
+                );
+            }
+        }
+    }
+    private void updateTransferTotalsPanel(Map<String, Double> totalsByEnvelope) {
+        if (layoutTransferTotals == null || spinnerTransferTotals == null || tvTransferTotalsSummary == null) {
+            return;
+        }
+
+        if (!showTransfers) {
+            layoutTransferTotals.setVisibility(View.GONE);
+            spinnerTransferTotals.setOnItemSelectedListener(null);
+            return;
+        }
+
+        layoutTransferTotals.setVisibility(View.VISIBLE);
+
+        List<TransferTotalsOption> options = new ArrayList<>();
+        for (Map.Entry<String, Double> entry : totalsByEnvelope.entrySet()) {
+            options.add(new TransferTotalsOption(entry.getKey(), entry.getValue()));
+        }
+        options.sort((a, b) -> a.envelopeName.compareToIgnoreCase(b.envelopeName));
+
+        if (options.isEmpty()) {
+            spinnerTransferTotals.setOnItemSelectedListener(null);
+            spinnerTransferTotals.setVisibility(View.GONE);
+            tvTransferTotalsSummary.setText("No transfers in range");
+            selectedTransferTotalsIndex = 0;
+            return;
+        }
+
+        List<String> labels = new ArrayList<>();
+        for (TransferTotalsOption option : options) {
+            labels.add("To " + option.envelopeName);
+        }
+
+        if (selectedTransferTotalsIndex < 0 || selectedTransferTotalsIndex >= options.size()) {
+            selectedTransferTotalsIndex = 0;
+        }
+
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_item,
+                labels);
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spinnerTransferTotals.setAdapter(adapter);
+
+        if (options.size() > 1) {
+            spinnerTransferTotals.setVisibility(View.VISIBLE);
+            spinnerTransferTotals.setSelection(selectedTransferTotalsIndex, false);
+            tvTransferTotalsSummary.setText(formatTransferTotalsSummary(options.get(selectedTransferTotalsIndex)));
+            spinnerTransferTotals.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+                @Override
+                public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                    selectedTransferTotalsIndex = position;
+                    tvTransferTotalsSummary.setText(formatTransferTotalsSummary(options.get(position)));
+                }
+
+                @Override
+                public void onNothingSelected(AdapterView<?> parent) {
+                }
+            });
+        } else {
+            spinnerTransferTotals.setOnItemSelectedListener(null);
+            spinnerTransferTotals.setVisibility(View.GONE);
+            tvTransferTotalsSummary.setText(formatTransferTotalsSummary(options.get(0)));
+            selectedTransferTotalsIndex = 0;
+        }
+    }
+
+    private String formatTransferTotalsSummary(TransferTotalsOption option) {
+        return String.format(Locale.getDefault(), "To %s: $%.2f", option.envelopeName, option.total);
+    }
+    private void updateTransferToggleButton(ImageButton button) {
+        int color = showTransfers
+                ? ContextCompat.getColor(this, android.R.color.holo_green_dark)
+                : ContextCompat.getColor(this, android.R.color.darker_gray);
+        button.setColorFilter(color);
+        button.setAlpha(showTransfers ? 1.0f : 0.65f);
+    }
     private void showError(String message) {
         new AlertDialog.Builder(this)
                 .setMessage(message)
@@ -890,3 +1392,46 @@ public class MainActivity extends AppCompatActivity {
                 .show();
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

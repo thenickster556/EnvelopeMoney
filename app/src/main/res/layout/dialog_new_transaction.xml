@@ -6,7 +6,6 @@
     android:layout_height="wrap_content"
     android:padding="16dp">
 
-    <!-- Envelope/Category Spinner -->
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -16,7 +15,6 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"/>
 
-    <!-- Date Field (with DatePicker) -->
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -30,7 +28,6 @@
         android:focusable="false"
         android:clickable="true"/>
 
-    <!-- Amount -->
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -43,7 +40,6 @@
         android:hint="Amount"
         android:inputType="numberDecimal|numberSigned"/>
 
-    <!-- Comment -->
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -55,4 +51,24 @@
         android:layout_height="wrap_content"
         android:hint="Comment"
         android:inputType="text"/>
+
+    <CheckBox
+        android:id="@+id/cbIsTransfer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="This is a transfer" />
+
+    <TextView
+        android:id="@+id/tvTransferToLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:labelFor="@id/spinnerTransferDestination"
+        android:text="Transfer To" />
+
+    <Spinner
+        android:id="@+id/spinnerTransferDestination"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"/>
 </LinearLayout>

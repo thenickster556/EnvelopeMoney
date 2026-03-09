@@ -18,13 +18,15 @@ public class Transaction {
     private String comment;
     @SerializedName("month")
     private String month;
+    @SerializedName("transferId")
+    private String transferId;
 
     public Transaction(String envelopeName, double amount, String date, String comment) {
         this.envelopeName = envelopeName != null ? envelopeName : "Uncategorized";
         this.amount = amount;
         this.date = date != null ? date : "";
         this.comment = comment != null ? comment : "";
-        // Set the month based on the provided date, or default to current month if not provided.
+        this.transferId = null;
         if (this.date.isEmpty()) {
             this.month = MonthTracker.formatMonth(new Date());
         } else {
@@ -32,30 +34,31 @@ public class Transaction {
         }
     }
 
-
-    // Add getters
     public String getEnvelopeName() { return envelopeName; }
     public double getAmount() { return amount; }
     public String getDate() { return date; }
     public String getComment() { return comment; }
     public String getMonth() { return month; }
-    public void setAmount(double amount) {  this.amount = amount; }
-    public void  setComment(String comment) { this.comment = comment; }
-    // When setting the date, update the month as well.
+    public String getTransferId() { return transferId; }
+
+    public void setAmount(double amount) { this.amount = amount; }
+    public void setComment(String comment) { this.comment = comment; }
+    public void setEnvelopeName(String envelopeName) { this.envelopeName = envelopeName; }
+    public void setMonth(String month) { this.month = month; }
+    public void setTransferId(String transferId) { this.transferId = transferId; }
+
     public void setDate(String date) {
         this.date = date;
-        if(date != null && !date.isEmpty()){
+        if (date != null && !date.isEmpty()) {
             String parsedMonth = parseDateToMonth(date);
-            if(parsedMonth != null){
+            if (parsedMonth != null) {
                 this.month = parsedMonth;
             }
         }
     }
-    public void  setEnvelopeName(String envelopeName) { this.envelopeName = envelopeName; }
-    public void setMonth(String month) {this.month = month; }
+
     private String parseDateToMonth(String dateStr) {
         try {
-            // Adjust the input format if your date string uses a different format.
             SimpleDateFormat inputFormat = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault());
             Date parsedDate = inputFormat.parse(dateStr);
             SimpleDateFormat monthFormat = new SimpleDateFormat("yyyy-MM", Locale.getDefault());
@@ -65,6 +68,4 @@ public class Transaction {
             return null;
         }
     }
-
-
 }

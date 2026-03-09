@@ -7,7 +7,6 @@
     android:orientation="vertical"
     android:padding="16dp">
 
-    <!-- Input Section -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -36,6 +35,7 @@
             android:layout_height="30dp"
             android:src="@android:drawable/ic_media_next" />
     </LinearLayout>
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -59,7 +59,7 @@
             android:layout_marginStart="16dp"
             android:layout_marginLeft="16dp" />
     </LinearLayout>
-    <!-- Transaction History Title Row -->
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -78,6 +78,16 @@
             android:layout_marginLeft="8dp" />
 
         <ImageButton
+            android:id="@+id/btnToggleTransfers"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:src="@drawable/ic_transfers_toggle"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Toggle transfers"
+            android:layout_marginEnd="8dp"
+            android:layout_marginRight="8dp" />
+
+        <ImageButton
             android:id="@+id/btnAddTransaction"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -88,7 +98,6 @@
             android:layout_marginRight="8dp" />
     </LinearLayout>
 
-    <!-- Transaction List & Total -->
     <ListView
         android:id="@+id/listViewTransactions"
         android:layout_width="match_parent"
@@ -96,17 +105,51 @@
         android:layout_weight="1"
         android:layout_marginTop="8dp"/>
 
-    <TextView
-        android:id="@+id/tvTransactionsTotal"
+    <LinearLayout
+        android:id="@+id/layoutTransactionsTotalsRow"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Total: $0.00"
-        android:textSize="16sp"
-        android:textStyle="bold"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
         android:padding="8dp"
-        android:background="@android:color/holo_green_light" />
+        android:background="@android:color/holo_green_light">
 
-    <!-- Envelopes Title Row -->
+        <TextView
+            android:id="@+id/tvTransactionsTotal"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Total: $0.00"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:id="@+id/layoutTransferTotals"
+            android:layout_width="170dp"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="end"
+            android:layout_gravity="end|center_vertical"
+            android:visibility="gone">
+
+            <Spinner
+                android:id="@+id/spinnerTransferTotals"
+                android:layout_width="170dp"
+                android:layout_height="wrap_content"
+                android:minWidth="170dp" />
+
+            <TextView
+                android:id="@+id/tvTransferTotalsSummary"
+                android:layout_width="170dp"
+                android:layout_height="wrap_content"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:gravity="end"
+                android:textAlignment="viewEnd"
+                android:text="Transfers: $0.00" />
+        </LinearLayout>
+    </LinearLayout>
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -136,13 +179,11 @@
             android:layout_marginRight="8dp" />
     </LinearLayout>
 
-    <!-- Envelopes List -->
     <ListView
         android:id="@+id/listViewEnvelopes"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
         android:layout_marginTop="8dp"/>
-
 
 </LinearLayout>

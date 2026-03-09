@@ -14,8 +14,34 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 
 public class Envelope {
+    public static class TransferData {
+        @SerializedName("id")
+        private String id;
+        @SerializedName("toEnvelope")
+        private String toEnvelope;
+        @SerializedName("amount")
+        private double amount;
+
+        public TransferData(String toEnvelope, double amount) {
+            this(UUID.randomUUID().toString(), toEnvelope, amount);
+        }
+
+        public TransferData(String id, String toEnvelope, double amount) {
+            this.id = id;
+            this.toEnvelope = toEnvelope;
+            this.amount = amount;
+        }
+
+        public String getId() { return id; }
+        public String getToEnvelope() { return toEnvelope; }
+        public double getAmount() { return amount; }
+        public void setToEnvelope(String toEnvelope) { this.toEnvelope = toEnvelope; }
+        public void setAmount(double amount) { this.amount = amount; }
+    }
+
     public static class MonthData {
         public double limit;
         public double remaining;
@@ -42,6 +68,8 @@ public class Envelope {
     private boolean isSelected = true;
     @SerializedName("monthlyData")
     private Map<String, MonthData> monthlyData = new HashMap<>();
+    @SerializedName("transfers")
+    private List<TransferData> transfers = new ArrayList<>();
 
     private Double manualRemaining = null;     // if null => no manual override
     private double baselineLimit = 0;         // the limit at the moment of manual override
@@ -197,6 +225,35 @@ public class Envelope {
             transactions = new ArrayList<>();
         }
         return transactions;
+    }
+
+    public List<TransferData> getTransfers() {
+        if (transfers == null) {
+            transfers = new ArrayList<>();
+        }
+        return transfers;
+    }
+
+    public void addTransfer(String toEnvelope, double amount) {
+        getTransfers().add(new TransferData(toEnvelope, amount));
+    }
+
+    public void addTransfer(String id, String toEnvelope, double amount) {
+        getTransfers().add(new TransferData(id, toEnvelope, amount));
+    }
+
+    public void updateTransfer(String id, String toEnvelope, double amount) {
+        for (TransferData transfer : getTransfers()) {
+            if (Objects.equals(transfer.getId(), id)) {
+                transfer.setToEnvelope(toEnvelope);
+                transfer.setAmount(amount);
+                return;
+            }
+        }
+    }
+
+    public void removeTransfer(String id) {
+        getTransfers().removeIf(t -> Objects.equals(t.getId(), id));
     }
 
     // Recalculate remaining from the global transaction list
@@ -357,3 +414,5 @@ public class Envelope {
     public boolean isSelected() { return isSelected; }
     public void setSelected(boolean selected) { isSelected = selected; }
 }
+
+
