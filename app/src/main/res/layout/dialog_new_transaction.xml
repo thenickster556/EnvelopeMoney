@@ -202,8 +202,13 @@
         android:padding="10dp"
         android:background="@drawable/recurring_option_unselected"
         android:text="Select days"
+        android:drawableEnd="@android:drawable/ic_menu_my_calendar"
+        android:drawablePadding="8dp"
+        android:gravity="center_vertical"
         android:focusable="false"
-        android:clickable="true" />
+        android:clickable="true"
+        android:importantForAccessibility="yes"
+        android:contentDescription="Open recurring day selector" />
 
     <TextView
         android:layout_width="wrap_content"
@@ -237,3 +242,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"/>
 </LinearLayout>
+
+
+
+

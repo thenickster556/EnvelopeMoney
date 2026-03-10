@@ -749,7 +749,11 @@ public class MainActivity extends AppCompatActivity {
             // Populate data
             String envelopeDisplayName = transaction.getEnvelopeName();
             if (transaction.isRecurring()) {
-                envelopeDisplayName += " (reoccuring)";
+                String frequencyLabel = "Recurring";
+                if (transaction.getRecurringFrequency() != null && !transaction.getRecurringFrequency().isEmpty()) {
+                    frequencyLabel = recurringFrequencyDisplay(normalizeRecurringFrequency(transaction.getRecurringFrequency()));
+                }
+                envelopeDisplayName += " (" + frequencyLabel + ")";
             }
             String amountText = String.format(Locale.getDefault(),
                     "%s - $%.2f", envelopeDisplayName, transaction.getAmount());
@@ -758,6 +762,9 @@ public class MainActivity extends AppCompatActivity {
             String details = transaction.getDate();
             if (transaction.getComment() != null && !transaction.getComment().isEmpty()) {
                 details += " | " + transaction.getComment();
+            }
+            if (transaction.isRecurring() && transaction.getRecurringFrequency() != null && !transaction.getRecurringFrequency().isEmpty()) {
+                details += " | " + recurringFrequencyDisplay(normalizeRecurringFrequency(transaction.getRecurringFrequency()));
             }
             tvDetails.setText(details);
 
@@ -1593,8 +1600,13 @@ public class MainActivity extends AppCompatActivity {
         header.setGravity(android.view.Gravity.CENTER_VERTICAL);
 
         TextView btnPrev = new TextView(this);
-        btnPrev.setText("<");
-        btnPrev.setTextSize(20f);
+        btnPrev.setText("\u2039");
+        btnPrev.setTextSize(22f);
+        btnPrev.setTypeface(btnPrev.getTypeface(), android.graphics.Typeface.BOLD);
+        btnPrev.setTextColor(ContextCompat.getColor(this, android.R.color.black));
+        btnPrev.setGravity(android.view.Gravity.CENTER);
+        btnPrev.setMinWidth(dp(40));
+        btnPrev.setContentDescription("Previous month");
         btnPrev.setPadding(dp(10), dp(6), dp(10), dp(6));
         btnPrev.setBackgroundResource(R.drawable.recurring_option_unselected);
 
@@ -1606,8 +1618,13 @@ public class MainActivity extends AppCompatActivity {
         tvMonth.setGravity(android.view.Gravity.CENTER);
 
         TextView btnNext = new TextView(this);
-        btnNext.setText(">");
-        btnNext.setTextSize(20f);
+        btnNext.setText("\u203A");
+        btnNext.setTextSize(22f);
+        btnNext.setTypeface(btnNext.getTypeface(), android.graphics.Typeface.BOLD);
+        btnNext.setTextColor(ContextCompat.getColor(this, android.R.color.black));
+        btnNext.setGravity(android.view.Gravity.CENTER);
+        btnNext.setMinWidth(dp(40));
+        btnNext.setContentDescription("Next month");
         btnNext.setPadding(dp(10), dp(6), dp(10), dp(6));
         btnNext.setBackgroundResource(R.drawable.recurring_option_unselected);
 
@@ -2128,6 +2145,10 @@ public class MainActivity extends AppCompatActivity {
                 .show();
     }
 }
+
+
+
+
 
 
 
