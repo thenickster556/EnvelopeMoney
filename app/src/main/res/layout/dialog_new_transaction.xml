@@ -40,6 +40,18 @@
         android:hint="Amount"
         android:inputType="numberDecimal|numberSigned"/>
 
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Comment"
+        android:layout_marginTop="8dp"/>
+    <EditText
+        android:id="@+id/etEditTransactionComment"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Comment"
+        android:inputType="text"/>
+
     <CheckBox
         android:id="@+id/cbIsRecurring"
         android:layout_width="match_parent"
@@ -210,18 +222,6 @@
         android:importantForAccessibility="yes"
         android:contentDescription="Open recurring day selector" />
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Comment"
-        android:layout_marginTop="8dp"/>
-    <EditText
-        android:id="@+id/etEditTransactionComment"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:hint="Comment"
-        android:inputType="text"/>
-
     <CheckBox
         android:id="@+id/cbIsTransfer"
         android:layout_width="match_parent"
@@ -242,7 +242,3 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"/>
 </LinearLayout>
-
-
-
-
