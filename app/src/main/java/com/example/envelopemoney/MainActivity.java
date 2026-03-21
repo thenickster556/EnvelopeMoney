@@ -578,60 +578,66 @@ public class MainActivity extends AppCompatActivity {
 
         builder.setView(dialogView)
                 .setTitle("New Transaction")
-                .setPositiveButton("Save", (dialog, which) -> {
-                    try {
-                        String envelopeName = spinnerEnvelope.getSelectedItem().toString();
-                        double amount = Double.parseDouble(etAmount.getText().toString());
-                        String comment = etComment.getText().toString();
-                        String date = etDate.getText().toString();
-                        PrefManager.setLastAddTransactionEnvelope(MainActivity.this, envelopeName);
+                .setPositiveButton("Save", null)
+                .setNegativeButton("Cancel", null);
 
-                        Transaction newTransaction = new Transaction(envelopeName, amount, date, comment);
-                        if (cbIsRecurring.isChecked()) {
-                            if (selectedRecurringDays.isEmpty()) {
-                                showError("Recurring requires at least one selected day");
-                                return;
-                            }
-                            newTransaction.setRecurring(true);
-                            newTransaction.setRecurringFrequency(selectedRecurringFrequency[0]);
-                            newTransaction.setRecurringDays(selectedRecurringDays);
-                            newTransaction.setRecurringSeriesId(UUID.randomUUID().toString());
-                            newTransaction.setRecurringTemplate(true);
-                        }
+        AlertDialog dialog = builder.create();
+        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            try {
+                String envelopeName = spinnerEnvelope.getSelectedItem().toString();
+                double amount = Double.parseDouble(etAmount.getText().toString());
+                String comment = etComment.getText().toString();
+                String date = etDate.getText().toString();
 
-                        Envelope env = findEnvelopeByName(envelopeName);
-                        if (env == null) {
-                            showError("Envelope not found");
-                            return;
-                        }
-
-                        String destination = null;
-                        if (cbIsTransfer.isChecked()) {
-                            if (spinnerTransferDestination.getSelectedItem() == null) {
-                                showError("Select where this transfer goes");
-                                return;
-                            }
-                            destination = spinnerTransferDestination.getSelectedItem().toString();
-                            PrefManager.setLastAddTransferDestination(MainActivity.this, envelopeName, destination);
-                            if (destination.equals(envelopeName)) {
-                                showError("Transfer destination must be a different envelope");
-                                return;
-                            }
-                        }
-
-                        env.addTransaction(newTransaction, currentMonth);
-                        if (destination != null) {
-                            upsertTransferForTransaction(newTransaction, envelopeName, destination, Math.abs(amount));
-                        }
-                        PrefManager.saveEnvelopes(MainActivity.this, envelopes);
-                        updateDisplay();
-                    } catch (NumberFormatException e) {
-                        showError("Invalid amount entered!");
+                Transaction newTransaction = new Transaction(envelopeName, amount, date, comment);
+                if (cbIsRecurring.isChecked()) {
+                    if (selectedRecurringDays.isEmpty()) {
+                        showError("Recurring requires at least one selected day");
+                        return;
                     }
-                })
-                .setNegativeButton("Cancel", null)
-                .create()
-                .show();
+                    newTransaction.setRecurring(true);
+                    newTransaction.setRecurringFrequency(selectedRecurringFrequency[0]);
+                    newTransaction.setRecurringDays(selectedRecurringDays);
+                    newTransaction.setRecurringSeriesId(UUID.randomUUID().toString());
+                    newTransaction.setRecurringTemplate(true);
+                }
+
+                Envelope env = findEnvelopeByName(envelopeName);
+                if (env == null) {
+                    showError("Envelope not found");
+                    return;
+                }
+
+                String destination = null;
+                if (cbIsTransfer.isChecked()) {
+                    if (spinnerTransferDestination.getSelectedItem() == null) {
+                        showError("Select where this transfer goes");
+                        return;
+                    }
+                    destination = spinnerTransferDestination.getSelectedItem().toString();
+                    if (destination.equals(envelopeName)) {
+                        showError("Transfer destination must be a different envelope");
+                        return;
+                    }
+                }
+
+                PrefManager.setLastAddTransactionEnvelope(MainActivity.this, envelopeName);
+                if (destination != null) {
+                    PrefManager.setLastAddTransferDestination(MainActivity.this, envelopeName, destination);
+                }
+
+                env.addTransaction(newTransaction, currentMonth);
+                if (destination != null) {
+                    upsertTransferForTransaction(newTransaction, envelopeName, destination, Math.abs(amount));
+                }
+                PrefManager.saveEnvelopes(MainActivity.this, envelopes);
+                updateDisplay();
+                dialog.dismiss();
+            } catch (NumberFormatException e) {
+                showError("Invalid amount entered!");
+            }
+        }));
+        dialog.show();
     }
     private void updateTransactionHistory() {
         ensureRecurringTransactionsForCurrentMonth();
@@ -1246,87 +1252,100 @@ public class MainActivity extends AppCompatActivity {
 
         builder.setView(dialogView)
                 .setTitle("Edit Transaction")
-                .setPositiveButton("Save", (dialog, which) -> {
-                    try {
-                        double newAmount = Double.parseDouble(etAmount.getText().toString());
-                        String newComment = etComment.getText().toString();
-                        String newDate = etDate.getText().toString();
-                        String oldEnvelopeName = editTransaction.getEnvelopeName();
-                        String newEnvelopeName = spinnerEnvelope.getSelectedItem().toString();
-
-                        if (cbIsRecurring.isChecked() && selectedRecurringDays.isEmpty()) {
-                            showError("Recurring requires at least one selected day");
-                            return;
-                        }
-
-                        if (!oldEnvelopeName.equals(newEnvelopeName)) {
-                            Envelope oldEnvelope = findEnvelopeByName(oldEnvelopeName);
-                            Envelope newEnvelope = findEnvelopeByName(newEnvelopeName);
-                            if (oldEnvelope != null) {
-                                oldEnvelope.getTransactions().remove(editTransaction);
-                                oldEnvelope.calculateRemaining(currentMonth);
-                            }
-                            if (newEnvelope != null) {
-                                newEnvelope.getTransactions().add(editTransaction);
-                                newEnvelope.calculateRemaining(currentMonth);
-                            }
-                            editTransaction.setEnvelopeName(newEnvelopeName);
-                        } else {
-                            Envelope envelope = findEnvelopeByName(newEnvelopeName);
-                            if (envelope != null) {
-                                envelope.updateTransaction(editTransaction, newAmount, currentMonth);
-                            }
-                        }
-
-                        editTransaction.setAmount(newAmount);
-                        editTransaction.setComment(newComment);
-                        editTransaction.setDate(newDate);
-
-                        if (cbIsRecurring.isChecked()) {
-                            editTransaction.setRecurring(true);
-                            editTransaction.setRecurringFrequency(selectedRecurringFrequency[0]);
-                            editTransaction.setRecurringDays(selectedRecurringDays);
-                            if (editTransaction.getRecurringSeriesId() == null || editTransaction.getRecurringSeriesId().isEmpty()) {
-                                editTransaction.setRecurringSeriesId(UUID.randomUUID().toString());
-                            }
-                            editTransaction.setRecurringTemplate(wasRecurringBefore ? editTransaction.isRecurringTemplate() : true);
-                        } else {
-                            editTransaction.setRecurring(false);
-                            editTransaction.setRecurringFrequency(null);
-                            editTransaction.setRecurringDays(new ArrayList<>());
-                            editTransaction.setRecurringSeriesId(null);
-                            editTransaction.setRecurringTemplate(false);
-                        }
-
-                        if (cbIsTransfer.isChecked()) {
-                            if (spinnerTransferDestination.getSelectedItem() == null) {
-                                showError("Select where this transfer goes");
-                                return;
-                            }
-                            String destination = spinnerTransferDestination.getSelectedItem().toString();
-                            if (destination.equals(newEnvelopeName)) {
-                                showError("Transfer destination must be a different envelope");
-                                return;
-                            }
-                            String sourceEnvelopeNameForTransfer = finalEditingMirrorTransfer ? destination : newEnvelopeName;
-                            String destinationEnvelopeNameForTransfer = finalEditingMirrorTransfer ? newEnvelopeName : destination;
-                            upsertTransferForTransaction(editTransaction,
-                                    sourceEnvelopeNameForTransfer,
-                                    destinationEnvelopeNameForTransfer,
-                                    Math.abs(newAmount));
-                        } else {
-                            detachTransferFromTransaction(editTransaction);
-                        }
-
-                        PrefManager.saveEnvelopes(MainActivity.this, envelopes);
-                        updateDisplay();
-                    } catch (NumberFormatException e) {
-                        showError("Invalid amount entered!");
-                    }
-                })
+                .setPositiveButton("Save", null)
                 .setNegativeButton("Cancel", null);
 
-        builder.create().show();
+        AlertDialog dialog = builder.create();
+        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            try {
+                double newAmount = Double.parseDouble(etAmount.getText().toString());
+                String newComment = etComment.getText().toString();
+                String newDate = etDate.getText().toString();
+                String oldEnvelopeName = editTransaction.getEnvelopeName();
+                String newEnvelopeName = spinnerEnvelope.getSelectedItem().toString();
+                String previousMonth = resolveTransactionMonth(editTransaction);
+
+                if (cbIsRecurring.isChecked() && selectedRecurringDays.isEmpty()) {
+                    showError("Recurring requires at least one selected day");
+                    return;
+                }
+
+                String destination = null;
+                if (cbIsTransfer.isChecked()) {
+                    if (spinnerTransferDestination.getSelectedItem() == null) {
+                        showError("Select where this transfer goes");
+                        return;
+                    }
+                    destination = spinnerTransferDestination.getSelectedItem().toString();
+                    if (destination.equals(newEnvelopeName)) {
+                        showError("Transfer destination must be a different envelope");
+                        return;
+                    }
+                }
+
+                if (!oldEnvelopeName.equals(newEnvelopeName)) {
+                    Envelope oldEnvelope = findEnvelopeByName(oldEnvelopeName);
+                    Envelope newEnvelope = findEnvelopeByName(newEnvelopeName);
+                    if (oldEnvelope != null) {
+                        oldEnvelope.getTransactions().remove(editTransaction);
+                        synchronizeEnvelopeMonth(oldEnvelope, resolveTransactionMonth(editTransaction));
+                    }
+                    if (newEnvelope != null) {
+                        newEnvelope.getTransactions().add(editTransaction);
+                        synchronizeEnvelopeMonth(newEnvelope, resolveTransactionMonth(editTransaction));
+                    }
+                    editTransaction.setEnvelopeName(newEnvelopeName);
+                } else {
+                    Envelope envelope = findEnvelopeByName(newEnvelopeName);
+                    if (envelope != null) {
+                        envelope.updateTransaction(editTransaction, newAmount, currentMonth);
+                    }
+                }
+
+                editTransaction.setAmount(newAmount);
+                editTransaction.setComment(newComment);
+                editTransaction.setDate(newDate);
+
+                if (cbIsRecurring.isChecked()) {
+                    editTransaction.setRecurring(true);
+                    editTransaction.setRecurringFrequency(selectedRecurringFrequency[0]);
+                    editTransaction.setRecurringDays(selectedRecurringDays);
+                    if (editTransaction.getRecurringSeriesId() == null || editTransaction.getRecurringSeriesId().isEmpty()) {
+                        editTransaction.setRecurringSeriesId(UUID.randomUUID().toString());
+                    }
+                    editTransaction.setRecurringTemplate(wasRecurringBefore ? editTransaction.isRecurringTemplate() : true);
+                } else {
+                    editTransaction.setRecurring(false);
+                    editTransaction.setRecurringFrequency(null);
+                    editTransaction.setRecurringDays(new ArrayList<>());
+                    editTransaction.setRecurringSeriesId(null);
+                    editTransaction.setRecurringTemplate(false);
+                }
+
+                if (cbIsTransfer.isChecked()) {
+                    String sourceEnvelopeNameForTransfer = finalEditingMirrorTransfer ? destination : newEnvelopeName;
+                    String destinationEnvelopeNameForTransfer = finalEditingMirrorTransfer ? newEnvelopeName : destination;
+                    upsertTransferForTransaction(editTransaction,
+                            sourceEnvelopeNameForTransfer,
+                            destinationEnvelopeNameForTransfer,
+                            Math.abs(newAmount));
+                } else {
+                    detachTransferFromTransaction(editTransaction);
+                }
+
+                Envelope updatedEnvelope = findEnvelopeByName(editTransaction.getEnvelopeName());
+                synchronizeEnvelopeMonth(updatedEnvelope, previousMonth);
+                synchronizeEnvelopeMonth(updatedEnvelope, resolveTransactionMonth(editTransaction));
+
+                PrefManager.saveEnvelopes(MainActivity.this, envelopes);
+                updateDisplay();
+                dialog.dismiss();
+            } catch (NumberFormatException e) {
+                showError("Invalid amount entered!");
+            }
+        }));
+
+        dialog.show();
     }
     @RequiresApi(api = Build.VERSION_CODES.N)
     private void deleteTransaction(Transaction transaction) {
@@ -1909,6 +1928,30 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private String resolveTransactionMonth(Transaction transaction) {
+        if (transaction == null) {
+            return currentMonth;
+        }
+        if (transaction.getMonth() != null && !transaction.getMonth().isEmpty()) {
+            return transaction.getMonth();
+        }
+        Date parsedDate = parseIsoDate(transaction.getDate());
+        if (parsedDate != null) {
+            return MonthTracker.formatMonth(parsedDate);
+        }
+        return currentMonth;
+    }
+
+    private void synchronizeEnvelopeMonth(Envelope envelope, String month) {
+        if (envelope == null || month == null || month.isEmpty()) {
+            return;
+        }
+        envelope.initializeMonth(month, false);
+        if (Objects.equals(month, currentMonth)) {
+            envelope.calculateRemaining(month);
+        }
+    }
+
     private void upsertTransferForTransaction(Transaction transaction, String sourceEnvelopeName, String destinationEnvelopeName, double amount) {
         String transferId = transaction.getTransferId();
         if (transferId == null || transferId.isEmpty()) {
@@ -1938,17 +1981,21 @@ public class MainActivity extends AppCompatActivity {
             sourceTransaction = transaction;
         }
 
+        String sourceTransactionMonth = resolveTransactionMonth(sourceTransaction);
         Envelope sourceHolder = findEnvelopeByName(sourceTransaction.getEnvelopeName());
         if (sourceHolder != null && sourceHolder != sourceEnvelope) {
             sourceHolder.getTransactions().remove(sourceTransaction);
-            sourceHolder.calculateRemaining(currentMonth);
-            sourceEnvelope.addTransaction(sourceTransaction, currentMonth);
+            synchronizeEnvelopeMonth(sourceHolder, sourceTransactionMonth);
+            sourceEnvelope.addTransaction(sourceTransaction, sourceTransactionMonth);
         }
 
         sourceTransaction.setEnvelopeName(sourceEnvelopeName);
         sourceTransaction.setDate(transaction.getDate());
         sourceTransaction.setComment(transaction.getComment());
-        sourceEnvelope.updateTransaction(sourceTransaction, Math.abs(amount), currentMonth);
+        String updatedSourceMonth = resolveTransactionMonth(sourceTransaction);
+        sourceEnvelope.updateTransaction(sourceTransaction, Math.abs(amount), updatedSourceMonth);
+        synchronizeEnvelopeMonth(sourceEnvelope, sourceTransactionMonth);
+        synchronizeEnvelopeMonth(sourceEnvelope, updatedSourceMonth);
 
         syncMirrorTransferTransaction(sourceTransaction, sourceEnvelopeName, destinationEnvelopeName, amount);
     }
@@ -2002,6 +2049,7 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
+        String mirrorTargetMonth = resolveTransactionMonth(sourceTransaction);
         Transaction mirror = null;
         Envelope mirrorEnvelope = null;
         for (Envelope envelope : envelopes) {
@@ -2017,9 +2065,7 @@ public class MainActivity extends AppCompatActivity {
                     mirrorEnvelope = envelope;
                 } else {
                     iterator.remove();
-                    if (Objects.equals(candidate.getMonth(), currentMonth)) {
-                        envelope.calculateRemaining(currentMonth);
-                    }
+                    synchronizeEnvelopeMonth(envelope, resolveTransactionMonth(candidate));
                 }
             }
         }
@@ -2032,20 +2078,26 @@ public class MainActivity extends AppCompatActivity {
         if (mirror == null) {
             mirror = new Transaction(destinationEnvelopeName, -Math.abs(amount), sourceTransaction.getDate(), mirrorComment);
             mirror.setTransferId(transferId);
-            destinationEnvelope.addTransaction(mirror, currentMonth);
+            destinationEnvelope.addTransaction(mirror, mirrorTargetMonth);
+            synchronizeEnvelopeMonth(destinationEnvelope, mirrorTargetMonth);
             return;
         }
 
         if (mirrorEnvelope != null && mirrorEnvelope != destinationEnvelope) {
+            String previousMirrorMonth = resolveTransactionMonth(mirror);
             mirrorEnvelope.getTransactions().remove(mirror);
-            mirrorEnvelope.calculateRemaining(currentMonth);
-            destinationEnvelope.addTransaction(mirror, currentMonth);
+            synchronizeEnvelopeMonth(mirrorEnvelope, previousMirrorMonth);
+            destinationEnvelope.addTransaction(mirror, previousMirrorMonth);
         }
 
+        String previousMirrorMonth = resolveTransactionMonth(mirror);
         mirror.setEnvelopeName(destinationEnvelopeName);
         mirror.setDate(sourceTransaction.getDate());
         mirror.setComment(mirrorComment);
-        destinationEnvelope.updateTransaction(mirror, -Math.abs(amount), currentMonth);
+        String updatedMirrorMonth = resolveTransactionMonth(mirror);
+        destinationEnvelope.updateTransaction(mirror, -Math.abs(amount), updatedMirrorMonth);
+        synchronizeEnvelopeMonth(destinationEnvelope, previousMirrorMonth);
+        synchronizeEnvelopeMonth(destinationEnvelope, updatedMirrorMonth);
     }
 
     private void removeMirrorTransactions(String transferId, Transaction anchorTransaction) {
