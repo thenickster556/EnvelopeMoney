@@ -66,10 +66,14 @@ public class MainActivity extends AppCompatActivity {
 
 
     private static class TransferTotalsOption {
+        final String optionKey;
+        final String labelPrefix;
         final String envelopeName;
         final double total;
 
-        TransferTotalsOption(String envelopeName, double total) {
+        TransferTotalsOption(String optionKey, String labelPrefix, String envelopeName, double total) {
+            this.optionKey = optionKey;
+            this.labelPrefix = labelPrefix;
             this.envelopeName = envelopeName;
             this.total = total;
         }
@@ -440,6 +444,14 @@ public class MainActivity extends AppCompatActivity {
                 android.R.layout.simple_spinner_item, getEnvelopeNames());
         envelopeAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         spinnerEnvelope.setAdapter(envelopeAdapter);
+        String savedSourceEnvelope = PrefManager.getLastAddTransactionEnvelope(this);
+        List<String> envelopeNames = getEnvelopeNames();
+        if (savedSourceEnvelope != null) {
+            int savedSourceIndex = envelopeNames.indexOf(savedSourceEnvelope);
+            if (savedSourceIndex >= 0) {
+                spinnerEnvelope.setSelection(savedSourceIndex);
+            }
+        }
 
         List<Integer> selectedRecurringDays = new ArrayList<>();
         final String[] selectedRecurringFrequency = new String[]{"weekly"};
@@ -546,7 +558,8 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
                 String source = parent.getItemAtPosition(position).toString();
-                populateTransferDestinationSpinner(spinnerTransferDestination, source, null);
+                String savedDestination = PrefManager.getLastAddTransferDestination(MainActivity.this, source);
+                populateTransferDestinationSpinner(spinnerTransferDestination, source, savedDestination);
             }
 
             @Override
@@ -554,7 +567,9 @@ public class MainActivity extends AppCompatActivity {
             }
         });
         if (spinnerEnvelope.getSelectedItem() != null) {
-            populateTransferDestinationSpinner(spinnerTransferDestination, spinnerEnvelope.getSelectedItem().toString(), null);
+            String source = spinnerEnvelope.getSelectedItem().toString();
+            String savedDestination = PrefManager.getLastAddTransferDestination(this, source);
+            populateTransferDestinationSpinner(spinnerTransferDestination, source, savedDestination);
         }
 
         cbIsTransfer.setOnCheckedChangeListener((buttonView, isChecked) ->
@@ -569,6 +584,7 @@ public class MainActivity extends AppCompatActivity {
                         double amount = Double.parseDouble(etAmount.getText().toString());
                         String comment = etComment.getText().toString();
                         String date = etDate.getText().toString();
+                        PrefManager.setLastAddTransactionEnvelope(MainActivity.this, envelopeName);
 
                         Transaction newTransaction = new Transaction(envelopeName, amount, date, comment);
                         if (cbIsRecurring.isChecked()) {
@@ -596,6 +612,7 @@ public class MainActivity extends AppCompatActivity {
                                 return;
                             }
                             destination = spinnerTransferDestination.getSelectedItem().toString();
+                            PrefManager.setLastAddTransferDestination(MainActivity.this, envelopeName, destination);
                             if (destination.equals(envelopeName)) {
                                 showError("Transfer destination must be a different envelope");
                                 return;
@@ -640,7 +657,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         List<Transaction> filteredTransactions = new ArrayList<>();
-        Map<String, Double> transferTotalsByEnvelope = new HashMap<>();
+        Map<String, TransferTotalsOption> transferTotalsByEnvelope = new HashMap<>();
         double grossTotal = 0;
         double outgoingTransferTotal = 0;
         double incomingTransferTotal = 0;
@@ -648,8 +665,7 @@ public class MainActivity extends AppCompatActivity {
         for (Envelope envelope : envelopes) {
             boolean includeEnvelope = envelope.isSelected();
             for (Transaction transaction : envelope.getTransactions()) {
-                boolean includeTransaction = includeEnvelope || (showTransfers && transaction.getTransferId() != null && !transaction.getTransferId().isEmpty());
-                if (!includeTransaction) {
+                if (!includeEnvelope) {
                     continue;
                 }
                 try {
@@ -676,16 +692,32 @@ public class MainActivity extends AppCompatActivity {
                                 incomingTransferTotal += amount;
                             }
 
-                            // Show transfer totals for both directions so opposite envelopes appear,
-                            // and cancel to zero when both sides are selected.
-                            double running = transferTotalsByEnvelope.getOrDefault(transfer.getToEnvelope(), 0d);
+                            String summaryKey;
+                            String labelPrefix;
+                            String relatedEnvelopeName;
+                            if (isSourceSide) {
+                                summaryKey = "to:" + transfer.getToEnvelope();
+                                labelPrefix = "To";
+                                relatedEnvelopeName = transfer.getToEnvelope();
+                            } else {
+                                String ownerName = ownerEnvelope != null ? ownerEnvelope.getName() : transfer.getToEnvelope();
+                                summaryKey = "from:" + ownerName;
+                                labelPrefix = "From";
+                                relatedEnvelopeName = ownerName;
+                            }
+
+                            TransferTotalsOption existing = transferTotalsByEnvelope.get(summaryKey);
+                            double running = existing != null ? existing.total : 0d;
                             if (isSourceSide) {
                                 running += amount;
+                                if (destinationSelected) {
+                                    running -= amount;
+                                }
+                            } else {
+                                running += amount;
                             }
-                            if (destinationSelected) {
-                                running -= amount;
-                            }
-                            transferTotalsByEnvelope.put(transfer.getToEnvelope(), running);
+                            transferTotalsByEnvelope.put(summaryKey,
+                                    new TransferTotalsOption(summaryKey, labelPrefix, relatedEnvelopeName, running));
                         }
                     }
                 } catch (ParseException e) {
@@ -712,7 +744,7 @@ public class MainActivity extends AppCompatActivity {
 
         double displayTotal = showTransfers ? (grossTotal - outgoingTransferTotal + incomingTransferTotal) : grossTotal;
         tvTransactionsTotal.setText(String.format(Locale.getDefault(), "Total: $%.2f", displayTotal));
-        updateTransferTotalsPanel(transferTotalsByEnvelope);
+        updateTransferTotalsPanel(new ArrayList<>(transferTotalsByEnvelope.values()));
 
         transactionAdapter.notifyDataSetChanged();
     }
@@ -2063,7 +2095,7 @@ public class MainActivity extends AppCompatActivity {
             }
         }
     }
-    private void updateTransferTotalsPanel(Map<String, Double> totalsByEnvelope) {
+    private void updateTransferTotalsPanel(List<TransferTotalsOption> options) {
         if (layoutTransferTotals == null || spinnerTransferTotals == null || tvTransferTotalsSummary == null) {
             return;
         }
@@ -2076,28 +2108,44 @@ public class MainActivity extends AppCompatActivity {
 
         layoutTransferTotals.setVisibility(View.VISIBLE);
 
-        List<TransferTotalsOption> options = new ArrayList<>();
-        for (Map.Entry<String, Double> entry : totalsByEnvelope.entrySet()) {
-            options.add(new TransferTotalsOption(entry.getKey(), entry.getValue()));
-        }
-        options.sort((a, b) -> a.envelopeName.compareToIgnoreCase(b.envelopeName));
+        options.sort((a, b) -> {
+            int prefixCompare = a.labelPrefix.compareToIgnoreCase(b.labelPrefix);
+            if (prefixCompare != 0) {
+                return prefixCompare;
+            }
+            return a.envelopeName.compareToIgnoreCase(b.envelopeName);
+        });
 
         if (options.isEmpty()) {
             spinnerTransferTotals.setOnItemSelectedListener(null);
             spinnerTransferTotals.setVisibility(View.GONE);
             tvTransferTotalsSummary.setText("No transfers in range");
             selectedTransferTotalsIndex = 0;
+            PrefManager.clearLastTransferTotalsOptionKey(this);
             return;
         }
 
         List<String> labels = new ArrayList<>();
         for (TransferTotalsOption option : options) {
-            labels.add("To " + option.envelopeName);
+            labels.add(option.labelPrefix + " " + option.envelopeName);
         }
 
-        if (selectedTransferTotalsIndex < 0 || selectedTransferTotalsIndex >= options.size()) {
+        String savedOptionKey = PrefManager.getLastTransferTotalsOptionKey(this);
+        int restoredIndex = -1;
+        if (savedOptionKey != null) {
+            for (int i = 0; i < options.size(); i++) {
+                if (Objects.equals(options.get(i).optionKey, savedOptionKey)) {
+                    restoredIndex = i;
+                    break;
+                }
+            }
+        }
+        if (restoredIndex >= 0) {
+            selectedTransferTotalsIndex = restoredIndex;
+        } else if (selectedTransferTotalsIndex < 0 || selectedTransferTotalsIndex >= options.size()) {
             selectedTransferTotalsIndex = 0;
         }
+        PrefManager.setLastTransferTotalsOptionKey(this, options.get(selectedTransferTotalsIndex).optionKey);
 
         ArrayAdapter<String> adapter = new ArrayAdapter<>(this,
                 android.R.layout.simple_spinner_item,
@@ -2113,6 +2161,7 @@ public class MainActivity extends AppCompatActivity {
                 @Override
                 public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
                     selectedTransferTotalsIndex = position;
+                    PrefManager.setLastTransferTotalsOptionKey(MainActivity.this, options.get(position).optionKey);
                     tvTransferTotalsSummary.setText(formatTransferTotalsSummary(options.get(position)));
                 }
 
@@ -2125,11 +2174,12 @@ public class MainActivity extends AppCompatActivity {
             spinnerTransferTotals.setVisibility(View.GONE);
             tvTransferTotalsSummary.setText(formatTransferTotalsSummary(options.get(0)));
             selectedTransferTotalsIndex = 0;
+            PrefManager.setLastTransferTotalsOptionKey(this, options.get(0).optionKey);
         }
     }
 
     private String formatTransferTotalsSummary(TransferTotalsOption option) {
-        return String.format(Locale.getDefault(), "To %s: $%.2f", option.envelopeName, option.total);
+        return String.format(Locale.getDefault(), "%s %s: $%.2f", option.labelPrefix, option.envelopeName, option.total);
     }
     private void updateTransferToggleButton(ImageButton button) {
         int color = showTransfers
