@@ -669,62 +669,84 @@ public class MainActivity extends AppCompatActivity {
         double incomingTransferTotal = 0;
 
         for (Envelope envelope : envelopes) {
-            boolean includeEnvelope = envelope.isSelected();
+            boolean envelopeSelected = envelope.isSelected();
             for (Transaction transaction : envelope.getTransactions()) {
-                if (!includeEnvelope) {
-                    continue;
-                }
                 try {
                     Date txDate = sdf.parse(transaction.getDate());
                     if (txDate == null || txDate.before(startDate) || txDate.after(endDate)) {
                         continue;
                     }
+
+                    String transferId = transaction.getTransferId();
+                    Envelope.TransferData transfer = null;
+                    Envelope ownerEnvelope = null;
+                    Envelope destinationEnvelope = null;
+                    boolean isTransfer = transferId != null && !transferId.isEmpty();
+                    boolean isSourceSide = false;
+                    boolean destinationSelected = false;
+                    boolean ownerSelected = false;
+                    boolean includeTransaction = envelopeSelected;
+
+                    if (isTransfer) {
+                        transfer = findTransferById(transferId);
+                        if (transfer != null && transfer.getToEnvelope() != null && !transfer.getToEnvelope().isEmpty()) {
+                            ownerEnvelope = findTransferOwner(transferId);
+                            destinationEnvelope = findEnvelopeByName(transfer.getToEnvelope());
+                            isSourceSide = ownerEnvelope != null
+                                    && Objects.equals(ownerEnvelope.getName(), transaction.getEnvelopeName());
+                            destinationSelected = destinationEnvelope != null && destinationEnvelope.isSelected();
+                            ownerSelected = ownerEnvelope != null && ownerEnvelope.isSelected();
+                            if (!includeTransaction && showTransfers && (ownerSelected || destinationSelected)) {
+                                includeTransaction = true;
+                            }
+                        }
+                    }
+
+                    if (!includeTransaction) {
+                        continue;
+                    }
+
                     filteredTransactions.add(transaction);
                     grossTotal += transaction.getAmount();
 
-                    String transferId = transaction.getTransferId();
-                    if (transferId != null && !transferId.isEmpty()) {
-                        Envelope.TransferData transfer = findTransferById(transferId);
-                        if (transfer != null && transfer.getToEnvelope() != null && !transfer.getToEnvelope().isEmpty()) {
-                            double amount = Math.abs(transaction.getAmount());
-                            Envelope ownerEnvelope = findTransferOwner(transferId);
-                            boolean isSourceSide = ownerEnvelope != null && Objects.equals(ownerEnvelope.getName(), transaction.getEnvelopeName());
-                            Envelope destinationEnvelope = findEnvelopeByName(transfer.getToEnvelope());
-                            boolean destinationSelected = destinationEnvelope != null && destinationEnvelope.isSelected();
+                    if (transfer != null && transfer.getToEnvelope() != null && !transfer.getToEnvelope().isEmpty()) {
+                        double amount = Math.abs(transaction.getAmount());
 
-                            if (isSourceSide) {
-                                outgoingTransferTotal += amount;
-                            } else {
-                                incomingTransferTotal += amount;
-                            }
-
-                            String summaryKey;
-                            String labelPrefix;
-                            String relatedEnvelopeName;
-                            if (isSourceSide) {
-                                summaryKey = "to:" + transfer.getToEnvelope();
-                                labelPrefix = "To";
-                                relatedEnvelopeName = transfer.getToEnvelope();
-                            } else {
-                                String ownerName = ownerEnvelope != null ? ownerEnvelope.getName() : transfer.getToEnvelope();
-                                summaryKey = "from:" + ownerName;
-                                labelPrefix = "From";
-                                relatedEnvelopeName = ownerName;
-                            }
-
-                            TransferTotalsOption existing = transferTotalsByEnvelope.get(summaryKey);
-                            double running = existing != null ? existing.total : 0d;
-                            if (isSourceSide) {
-                                running += amount;
-                                if (destinationSelected) {
-                                    running -= amount;
-                                }
-                            } else {
-                                running += amount;
-                            }
-                            transferTotalsByEnvelope.put(summaryKey,
-                                    new TransferTotalsOption(summaryKey, labelPrefix, relatedEnvelopeName, running));
+                        if (isSourceSide) {
+                            outgoingTransferTotal += amount;
+                        } else {
+                            incomingTransferTotal += amount;
                         }
+
+                        String summaryKey;
+                        String labelPrefix;
+                        String relatedEnvelopeName;
+                        if (isSourceSide) {
+                            summaryKey = "to:" + transfer.getToEnvelope();
+                            labelPrefix = "To";
+                            relatedEnvelopeName = transfer.getToEnvelope();
+                        } else {
+                            String ownerName = ownerEnvelope != null ? ownerEnvelope.getName() : transfer.getToEnvelope();
+                            summaryKey = "from:" + ownerName;
+                            labelPrefix = "From";
+                            relatedEnvelopeName = ownerName;
+                        }
+
+                        TransferTotalsOption existing = transferTotalsByEnvelope.get(summaryKey);
+                        double running = existing != null ? existing.total : 0d;
+                        if (isSourceSide) {
+                            running += amount;
+                            if (destinationSelected) {
+                                running -= amount;
+                            }
+                        } else {
+                            running += amount;
+                            if (ownerSelected) {
+                                running -= amount;
+                            }
+                        }
+                        transferTotalsByEnvelope.put(summaryKey,
+                                new TransferTotalsOption(summaryKey, labelPrefix, relatedEnvelopeName, running));
                     }
                 } catch (ParseException e) {
                     Log.d("EnvelopeMoney", "Transaction date parse failed", e);
