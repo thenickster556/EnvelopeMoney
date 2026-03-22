@@ -352,6 +352,13 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private void refreshDataForMonth() {
+        for (Envelope env : envelopes) {
+            env.getMonthlyData(currentMonth);
+        }
+        updateDisplay();
+    }
+
     private String formatDisplayMonth(String month) {
         try {
             SimpleDateFormat inputFormat = new SimpleDateFormat("yyyy-MM", Locale.getDefault());
