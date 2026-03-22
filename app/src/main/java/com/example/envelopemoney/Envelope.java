@@ -90,8 +90,8 @@ public class Envelope {
     public double getOriginalLimit(){ return originalLimit; }
     public Double getManualRemaining() { return manualRemaining; }
     public Boolean hasBaseline() {
-        return Double.isFinite(baselineLimit) && Double.isFinite(baselineRemaining);
-    }
+        return Double.isNaN(baselineRemaining);
+        }
     public MonthData getMonthlyData(String month) {
         if (!monthlyData.containsKey(month)) {
             // Initialize with default values if month doesn't exist
@@ -120,10 +120,6 @@ public class Envelope {
     public void setLimit(double limit) {
         this.limit = limit;
         this.originalLimit = limit;
-    }
-
-    public void setOriginalLimit(double originalLimit) {
-        this.originalLimit = originalLimit;
     }
 
     /**
@@ -238,13 +234,6 @@ public class Envelope {
         return transfers;
     }
 
-    public Map<String, MonthData> getMonthlyDataMap() {
-        if (monthlyData == null) {
-            monthlyData = new HashMap<>();
-        }
-        return monthlyData;
-    }
-
     public void addTransfer(String toEnvelope, double amount) {
         getTransfers().add(new TransferData(toEnvelope, amount));
     }
@@ -347,65 +336,6 @@ public class Envelope {
         currentData.remaining = currentData.limit - spent;
     }
 
-    /**
-     * Repairs nullable collections and non-finite numeric state before month-based logic runs.
-     * This is the defensive entry point used during startup and rollover recovery.
-     */
-    public void sanitizeState(String fallbackMonth) {
-        getTransactions();
-        getTransfers();
-        getMonthlyDataMap();
-
-        if (!Double.isFinite(limit)) {
-            limit = 0d;
-        }
-        if (!Double.isFinite(originalLimit)) {
-            originalLimit = limit;
-        }
-        if (!Double.isFinite(remaining)) {
-            remaining = originalLimit;
-        }
-
-        if (manualRemaining != null && !Double.isFinite(manualRemaining)) {
-            manualRemaining = null;
-        }
-        if (!Double.isFinite(baselineLimit)) {
-            baselineLimit = originalLimit;
-        }
-        if (!Double.isFinite(baselineRemaining)) {
-            baselineRemaining = manualRemaining != null ? manualRemaining : remaining;
-        }
-
-        migrateLegacyTransactions(fallbackMonth);
-    }
-
-    public void replaceMonthData(String month, double monthLimit) {
-        MonthData monthData = new MonthData(safe(monthLimit), safe(monthLimit));
-        getMonthlyDataMap().put(month, monthData);
-        rebuildMonthData(month);
-    }
-
-    public void rebuildMonthData(String month) {
-        MonthData monthData = getMonthlyData(month);
-        if (monthData.transactions == null) {
-            monthData.transactions = new ArrayList<>();
-        } else {
-            monthData.transactions.clear();
-        }
-        if (!Double.isFinite(monthData.limit)) {
-            monthData.limit = safe(originalLimit);
-        }
-
-        double spent = 0d;
-        for (Transaction transaction : getTransactions()) {
-            if (transaction != null && Objects.equals(transaction.getMonth(), month)) {
-                monthData.transactions.add(transaction);
-                spent += safe(transaction.getAmount());
-            }
-        }
-        monthData.remaining = monthData.limit - spent;
-    }
-
     private String getPreviousMonth(String currentMonth) {
         try {
             SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM", Locale.getDefault());
@@ -464,20 +394,15 @@ public class Envelope {
     // Helper to parse date like "2025-03-01 18:07" -> "2025-03"
     private String parseDateToYearMonth(String dateStr) {
         if (dateStr == null || dateStr.isEmpty()) return null;
-        String[] supportedFormats = new String[]{"yyyy-MM-dd HH:mm", "yyyy-MM-dd"};
-        for (String format : supportedFormats) {
-            try {
-                SimpleDateFormat input = new SimpleDateFormat(format, Locale.getDefault());
-                Date date = input.parse(dateStr);
-                if (date == null) {
-                    continue;
-                }
-                SimpleDateFormat output = new SimpleDateFormat("yyyy-MM", Locale.getDefault());
-                return output.format(date);
-            } catch (ParseException ignored) {
-            }
+        try {
+            SimpleDateFormat input = new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault());
+            Date date = input.parse(dateStr);
+            SimpleDateFormat output = new SimpleDateFormat("yyyy-MM", Locale.getDefault());
+            return output.format(date);
+        } catch (ParseException e) {
+            e.printStackTrace();
+            return null;
         }
-        return null;
     }
     private double getBaselineRemainingOr(double fallback) {
         return (Double.isNaN(baselineRemaining)) ? fallback : baselineRemaining;
