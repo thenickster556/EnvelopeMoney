@@ -323,6 +323,46 @@ public class MainActivity extends AppCompatActivity {
             monthRolloverInProgress = false;
         }
     }
+
+    private void changeMonth(int direction) {
+        if (currentMonth == null || currentMonth.isEmpty()) {
+            return;
+        }
+        try {
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM", Locale.getDefault());
+            Date date = sdf.parse(currentMonth);
+            if (date == null) {
+                return;
+            }
+            Calendar cal = Calendar.getInstance();
+            cal.setTime(date);
+            cal.add(Calendar.MONTH, direction);
+            String newMonth = sdf.format(cal.getTime());
+
+            if (newMonth.compareTo(MonthTracker.formatMonth(new Date())) > 0) {
+                return;
+            }
+            currentMonth = newMonth;
+            MonthTracker.setCurrentMonth(this, newMonth);
+            refreshDataForMonth();
+            setupMonthNavigation();
+            updateDisplay();
+        } catch (Exception e) {
+            Log.d("EnvelopeMoney", "Month navigation failed", e);
+        }
+    }
+
+    private String formatDisplayMonth(String month) {
+        try {
+            SimpleDateFormat inputFormat = new SimpleDateFormat("yyyy-MM", Locale.getDefault());
+            SimpleDateFormat outputFormat = new SimpleDateFormat("MMM yyyy", Locale.getDefault());
+            Date date = inputFormat.parse(month);
+            return outputFormat.format(date);
+        } catch (ParseException e) {
+            return month;
+        }
+    }
+
     private static double safe(Double v) {
         if (v == null) return 0d;
         if (Double.isNaN(v) || Double.isInfinite(v)) return 0d;
