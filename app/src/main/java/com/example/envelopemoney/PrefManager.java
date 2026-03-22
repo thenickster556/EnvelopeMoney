@@ -42,8 +42,13 @@ public class PrefManager {
         String json = prefs.getString(ENVELOPES_KEY, null);
         if (json == null) return createDefaultEnvelopes(context);
 
-        Type type = new TypeToken<ArrayList<Envelope>>(){}.getType();
-        return new Gson().fromJson(json, (java.lang.reflect.Type) type);
+        try {
+            Type type = new TypeToken<ArrayList<Envelope>>(){}.getType();
+            List<Envelope> envelopes = new Gson().fromJson(json, (java.lang.reflect.Type) type);
+            return envelopes != null ? envelopes : createDefaultEnvelopes(context);
+        } catch (RuntimeException exception) {
+            return createDefaultEnvelopes(context);
+        }
     }
 
     public static void setEnvelopesCollapsed(Context context, boolean collapsed) {

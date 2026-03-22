@@ -117,26 +117,25 @@ public class MainActivity extends AppCompatActivity {
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
 
-        // Load envelopes
+        // Load envelopes through the rollover repair path so startup only adopts sanitized state.
         envelopes = PrefManager.getEnvelopes(this);
         if(TEST){
             addData();
         }
 
-        if (MonthTracker.isFirstMonth(this)) {
-            // Initialize with current transactions
-            String currentMonth = MonthTracker.formatMonth(new Date());
-            for (Envelope env : envelopes) {
-                env.initializeMonth(currentMonth, false);
-                env.migrateLegacyTransactions(currentMonth);
-            }
-        }
+        MonthRolloverHelper.Result launchState = MonthRolloverHelper.prepareForLaunch(
+                envelopes,
+                MonthTracker.getStoredMonthOrNull(this),
+                MonthTracker.getRealCurrentMonth(),
+                true
+        );
+        envelopes = launchState.getEnvelopes();
         // Initialize total view
         tvTransactionsTotal = findViewById(R.id.tvTransactionsTotal);
-        currentMonth = MonthTracker.getCurrentMonth(this);
-        // Check for new month
-        if (MonthTracker.isNewMonth(this)) {
-            handleNewMonth(true); // Auto-reset with carry-over
+        currentMonth = launchState.getActiveMonth();
+        MonthTracker.setCurrentMonth(this, currentMonth);
+        if (launchState.requiresPersistence()) {
+            PrefManager.saveEnvelopes(this, envelopes);
         }
         setupMonthNavigation();
         setupDatePickers();
@@ -300,61 +299,26 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void handleNewMonth(boolean carryOver) {
-        if (monthRolloverInProgress) return;                 // prevent re-entry
+        if (monthRolloverInProgress) return;
         monthRolloverInProgress = true;
         try {
-            final String newMonth = MonthTracker.formatMonth(new Date());
-            final String alreadySet = MonthTracker.getCurrentMonth(this);
-            if (newMonth.equals(alreadySet)) return;         // nothing to do (idempotent)
-
-            // Work on a snapshot to avoid ConcurrentModification during UI binds
-            List<Envelope> snapshot = new ArrayList<>(envelopes);
-
-            for (Envelope env : snapshot) {
-                // ---- null-safety (see section 2) ----
-                double orig = safe(env.getOriginalLimit());
-                double rem  = safe(env.getRemaining());
-                Double manual = env.getManualRemaining();
-                double manualVal = (manual != null) ? manual : rem;
-
-                if (carryOver) {
-                    double newTotal = orig + manualVal;      // base + leftover (manual preferred)
-                    // Seed *both* manual + baselines so later recomputes are correct
-                    env.setManualRemaining(newTotal);
-                    // If you have baseline fields, seed them here too
-                    if (env.hasBaseline()) {
-                        env.setBaselineRemaining(newTotal);
-                        env.setBaselineLimit(newTotal);     // or env.getLimit() if that’s your anchor
-                    }
-                    env.setRemaining(newTotal);
-                } else {
-                    env.setManualRemaining(null);
-                    if (env.hasBaseline()) {
-                        env.setBaselineRemaining(orig);
-                        env.setBaselineLimit(orig);
-                    }
-                    env.setRemaining(orig);
-                }
-
-                // Ensure monthlyData exists for newMonth
-                env.initializeMonth(newMonth, carryOver);
-            }
-
-            // Commit month AFTER envelopes are stable
-            currentMonth = newMonth;
-            MonthTracker.setCurrentMonth(this, newMonth);
-
-            // One clean UI refresh at the end
+            MonthRolloverHelper.Result rolloverResult = MonthRolloverHelper.prepareForLaunch(
+                    envelopes,
+                    currentMonth,
+                    MonthTracker.getRealCurrentMonth(),
+                    carryOver
+            );
+            envelopes = rolloverResult.getEnvelopes();
+            currentMonth = rolloverResult.getActiveMonth();
+            MonthTracker.setCurrentMonth(this, currentMonth);
             PrefManager.saveEnvelopes(this, envelopes);
             if (envelopeAdapter != null && transactionAdapter != null) {
+                envelopeAdapter = new EnvelopeAdapter(this, envelopes);
+                listViewEnvelopes.setAdapter(envelopeAdapter);
                 updateDisplay();
             }
-
-        } catch (Throwable t) {
-            // Don’t crash-loop: surface a message and swallow the exception
-//            showError("We hit a rollover issue: " + t.getClass().getSimpleName());
-            // Optional: Log.d("EnvelopeMoney", "Rollover crash", t);
-            Log.d("EnvelopeMoney", "Rollover crash", t);
+        } catch (RuntimeException exception) {
+            Log.d("EnvelopeMoney", "Rollover recovery failed", exception);
         } finally {
             monthRolloverInProgress = false;
         }
@@ -363,53 +327,6 @@ public class MainActivity extends AppCompatActivity {
         if (v == null) return 0d;
         if (Double.isNaN(v) || Double.isInfinite(v)) return 0d;
         return v;
-    }
-
-
-    private void changeMonth(int direction) {
-        if (currentMonth == null || currentMonth.isEmpty()) {
-            return;
-        }
-        try {
-            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM", Locale.getDefault());
-            Date date = sdf.parse(currentMonth);
-            if (date == null) {
-                return;
-            }
-            Calendar cal = Calendar.getInstance();
-            cal.setTime(date);
-            cal.add(Calendar.MONTH, direction);
-            String newMonth = sdf.format(cal.getTime());
-
-            // Prevent navigating to future months
-            if (newMonth.compareTo(MonthTracker.formatMonth(new Date())) > 0) {
-                return;
-            }
-            currentMonth = newMonth;
-            MonthTracker.setCurrentMonth(this, newMonth);
-            refreshDataForMonth();
-            setupMonthNavigation();
-            updateDisplay();
-        } catch (Exception e) {
-            Log.d("EnvelopeMoney", "Month navigation failed", e);
-        }
-    }
-    private void refreshDataForMonth() {
-        // Load data for current month
-        for (Envelope env : envelopes) {
-            env.getMonthlyData(currentMonth); // Initialize if needed
-        }
-        updateDisplay();
-    }
-    private String formatDisplayMonth(String month) {
-        try {
-            SimpleDateFormat inputFormat = new SimpleDateFormat("yyyy-MM", Locale.getDefault());
-            SimpleDateFormat outputFormat = new SimpleDateFormat("MMM yyyy", Locale.getDefault());
-            Date date = inputFormat.parse(month);
-            return outputFormat.format(date);
-        } catch (ParseException e) {
-            return month;
-        }
     }
 
     @RequiresApi(api = Build.VERSION_CODES.N)
