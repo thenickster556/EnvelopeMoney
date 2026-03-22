@@ -15,9 +15,6 @@ public class PrefManager {
     private static final String PREFS_NAME = "envelope_prefs";
     private static final String ENVELOPES_KEY = "envelopes";
     private static final String ENVELOPES_COLLAPSED_KEY = "envelopes_collapsed";
-    private static final String LAST_ADD_TRANSACTION_ENVELOPE_KEY = "last_add_transaction_envelope";
-    private static final String LAST_ADD_TRANSFER_DESTINATION_PREFIX = "last_add_transfer_destination_";
-    private static final String LAST_TRANSFER_TOTALS_OPTION_KEY = "last_transfer_totals_option";
     private String name;
     private double limit;
     private double remaining;
@@ -42,13 +39,8 @@ public class PrefManager {
         String json = prefs.getString(ENVELOPES_KEY, null);
         if (json == null) return createDefaultEnvelopes(context);
 
-        try {
-            Type type = new TypeToken<ArrayList<Envelope>>(){}.getType();
-            List<Envelope> envelopes = new Gson().fromJson(json, (java.lang.reflect.Type) type);
-            return envelopes != null ? envelopes : createDefaultEnvelopes(context);
-        } catch (RuntimeException exception) {
-            return createDefaultEnvelopes(context);
-        }
+        Type type = new TypeToken<ArrayList<Envelope>>(){}.getType();
+        return new Gson().fromJson(json, (java.lang.reflect.Type) type);
     }
 
     public static void setEnvelopesCollapsed(Context context, boolean collapsed) {
@@ -60,51 +52,6 @@ public class PrefManager {
     public static boolean isEnvelopesCollapsed(Context context) {
         SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         return prefs.getBoolean(ENVELOPES_COLLAPSED_KEY, false);
-    }
-
-    public static void setLastAddTransactionEnvelope(Context context, String envelopeName) {
-        SharedPreferences.Editor editor = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit();
-        editor.putString(LAST_ADD_TRANSACTION_ENVELOPE_KEY, envelopeName);
-        editor.apply();
-    }
-
-    public static String getLastAddTransactionEnvelope(Context context) {
-        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-        return prefs.getString(LAST_ADD_TRANSACTION_ENVELOPE_KEY, null);
-    }
-
-    public static void setLastAddTransferDestination(Context context, String sourceEnvelopeName, String destinationEnvelopeName) {
-        if (sourceEnvelopeName == null || sourceEnvelopeName.isEmpty()) {
-            return;
-        }
-        SharedPreferences.Editor editor = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit();
-        editor.putString(LAST_ADD_TRANSFER_DESTINATION_PREFIX + sourceEnvelopeName, destinationEnvelopeName);
-        editor.apply();
-    }
-
-    public static String getLastAddTransferDestination(Context context, String sourceEnvelopeName) {
-        if (sourceEnvelopeName == null || sourceEnvelopeName.isEmpty()) {
-            return null;
-        }
-        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-        return prefs.getString(LAST_ADD_TRANSFER_DESTINATION_PREFIX + sourceEnvelopeName, null);
-    }
-
-    public static void setLastTransferTotalsOptionKey(Context context, String optionKey) {
-        SharedPreferences.Editor editor = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit();
-        editor.putString(LAST_TRANSFER_TOTALS_OPTION_KEY, optionKey);
-        editor.apply();
-    }
-
-    public static String getLastTransferTotalsOptionKey(Context context) {
-        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-        return prefs.getString(LAST_TRANSFER_TOTALS_OPTION_KEY, null);
-    }
-
-    public static void clearLastTransferTotalsOptionKey(Context context) {
-        SharedPreferences.Editor editor = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit();
-        editor.remove(LAST_TRANSFER_TOTALS_OPTION_KEY);
-        editor.apply();
     }
 
     private static List<Envelope> createDefaultEnvelopes(Context context) {
