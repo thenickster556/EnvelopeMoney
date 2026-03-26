@@ -5,9 +5,11 @@ import android.content.Context;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
+import android.graphics.Rect;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.TouchDelegate;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
@@ -104,6 +106,7 @@ public class MainActivity extends AppCompatActivity {
         layoutEnvelopesSection = findViewById(R.id.layoutEnvelopesSection);
         envelopesCollapsed = PrefManager.isEnvelopesCollapsed(this);
         applyEnvelopesCollapsedState();
+        expandTouchTarget(btnToggleEnvelopes, 8);
         btnToggleEnvelopes.setOnClickListener(v -> {
             envelopesCollapsed = !envelopesCollapsed;
             PrefManager.setEnvelopesCollapsed(MainActivity.this, envelopesCollapsed);
@@ -157,6 +160,30 @@ public class MainActivity extends AppCompatActivity {
         }
         layoutEnvelopesSection.setVisibility(envelopesCollapsed ? View.GONE : View.VISIBLE);
         btnToggleEnvelopes.setImageResource(envelopesCollapsed ? android.R.drawable.arrow_down_float : android.R.drawable.arrow_up_float);
+    }
+
+    /**
+     * Expands the effective hit box without changing the visual icon size, which makes taps register
+     * reliably on smaller screens and when the user is pressing near the icon edge.
+     */
+    private void expandTouchTarget(View target, int extraPaddingDp) {
+        if (target == null) {
+            return;
+        }
+        View parent = (View) target.getParent();
+        if (parent == null) {
+            return;
+        }
+        final int extraPaddingPx = Math.round(extraPaddingDp * getResources().getDisplayMetrics().density);
+        parent.post(() -> {
+            Rect hitRect = new Rect();
+            target.getHitRect(hitRect);
+            hitRect.top -= extraPaddingPx;
+            hitRect.bottom += extraPaddingPx;
+            hitRect.left -= extraPaddingPx;
+            hitRect.right += extraPaddingPx;
+            parent.setTouchDelegate(new TouchDelegate(hitRect, target));
+        });
     }
     private void addData() {
         // Dummy transactions for "Emergency Fund"

@@ -171,10 +171,14 @@
 
         <ImageButton
             android:id="@+id/btnToggleEnvelopes"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
             android:src="@android:drawable/arrow_up_float"
             android:background="?attr/selectableItemBackgroundBorderless"
+            android:padding="10dp"
+            android:scaleType="centerInside"
+            android:clickable="true"
+            android:focusable="true"
             android:contentDescription="Collapse envelopes"
             android:layout_marginEnd="8dp"
             android:layout_marginRight="8dp" />
