@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Spinner / dropdown popups pick up primary + surface from overlay -->
+    <style name="ThemeOverlay.MountainMoney.Spinner" parent="ThemeOverlay.MaterialComponents.Light">
+        <item name="colorPrimary">@color/mountain_primary</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <item name="colorSurface">@color/white</item>
+        <item name="colorOnSurface">@color/black</item>
+    </style>
+</resources>

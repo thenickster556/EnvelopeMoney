@@ -38,6 +38,8 @@
     <string name="content_desc_add_pond">Add pond</string>
     <string name="content_desc_add_transaction">Add transaction</string>
     <string name="content_desc_toggle_transfers">Toggle transfers</string>
+    <string name="content_desc_prev_month">Previous month</string>
+    <string name="content_desc_next_month">Next month</string>
 
     <string name="toast_configure_bills_days_first">Choose bills days using the calendar in the top bar first.</string>
     <string name="toast_no_bills_anchor">Could not find a bills day on or before today.</string>

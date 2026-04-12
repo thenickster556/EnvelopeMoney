@@ -1,5 +1,7 @@
 # Data Schema
 
+> **Note:** There is no separate SQL database in this app. This document is the **persistence schema**: SharedPreferences keys and Gson-serialized models. In protocol terms, “tables” = **preference keys and model types**.
+
 ## Persistence Store
 The app persists most business state via SharedPreferences.
 

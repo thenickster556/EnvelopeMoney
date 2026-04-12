@@ -13,7 +13,8 @@
     <Spinner
         android:id="@+id/spinnerEditEnvelope"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content" />
+        android:layout_height="wrap_content"
+        android:theme="@style/ThemeOverlay.MountainMoney.Spinner" />
 
     <TextView
         android:layout_width="wrap_content"
@@ -238,6 +239,7 @@
     <Spinner
         android:id="@+id/spinnerTransferDestination"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content" />
+        android:layout_height="wrap_content"
+        android:theme="@style/ThemeOverlay.MountainMoney.Spinner" />
 
 </LinearLayout>

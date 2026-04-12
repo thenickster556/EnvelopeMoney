@@ -30,6 +30,8 @@ import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import androidx.core.content.ContextCompat;
 
 import com.example.envelopemoney.BillsDayAnchor;
@@ -433,7 +435,7 @@ public class MainActivity extends AppCompatActivity {
 
     @RequiresApi(api = Build.VERSION_CODES.N)
     private void showNewTransactionDialog() {
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(this);
         View dialogView = getLayoutInflater().inflate(R.layout.dialog_new_transaction, null);
 
         Spinner spinnerEnvelope = dialogView.findViewById(R.id.spinnerEditEnvelope);
@@ -857,7 +859,7 @@ public class MainActivity extends AppCompatActivity {
     @RequiresApi(api = Build.VERSION_CODES.N)
     private void showTransactionOptionsDialog(Transaction transaction) {
         // We'll show an AlertDialog with "Edit" and "Delete" options
-        new AlertDialog.Builder(this)
+        new MaterialAlertDialogBuilder(this)
                 .setTitle("Transaction Options")
                 .setItems(new CharSequence[]{"Edit", "Delete"}, (dialog, which) -> {
                     if (which == 0) {
@@ -922,7 +924,7 @@ public class MainActivity extends AppCompatActivity {
 
     @RequiresApi(api = Build.VERSION_CODES.N)
     private void showResetConfirmationDialog() {
-        new AlertDialog.Builder(this)
+        new MaterialAlertDialogBuilder(this)
                 .setTitle(R.string.dialog_recalculate_title)
                 .setMessage(R.string.dialog_recalculate_message)
                 .setPositiveButton(R.string.dialog_recalculate_positive, (dialog, which) -> {
@@ -996,7 +998,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void showEnvelopeOptionsDialog(int position) {
         Envelope envelope = envelopes.get(position);
-        new AlertDialog.Builder(this)
+        new MaterialAlertDialogBuilder(this)
                 .setTitle(R.string.dialog_pond_options_title)
                 .setItems(new CharSequence[]{
                         getString(R.string.action_edit),
@@ -1005,7 +1007,7 @@ public class MainActivity extends AppCompatActivity {
                     if (which == 0) {
                         showEnvelopeDialog(envelope);
                     } else {
-                        new AlertDialog.Builder(MainActivity.this)
+                        new MaterialAlertDialogBuilder(MainActivity.this)
                                 .setMessage(R.string.dialog_delete_pond_message)
                                 .setPositiveButton(R.string.action_delete, (d, w) -> {
                                     removeTransferReferencesToEnvelope(envelope.getName());
@@ -1021,7 +1023,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showEnvelopeDialog(@Nullable Envelope envelopeToEdit) {
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(this);
         View dialogView = getLayoutInflater().inflate(R.layout.dialog_envelope, null);
         EditText etName = dialogView.findViewById(R.id.etEnvelopeName);
         EditText etLimit = dialogView.findViewById(R.id.etEnvelopeLimit);
@@ -1116,7 +1118,7 @@ public class MainActivity extends AppCompatActivity {
     private void showTransactionDialog(Transaction transactionToEdit) {
         final Transaction editTransaction = resolveTransferAnchorTransaction(transactionToEdit);
         final boolean wasRecurringBefore = editTransaction.isRecurring();
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(this);
         View dialogView = getLayoutInflater().inflate(R.layout.dialog_transaction, null);
 
         Spinner spinnerEnvelope = dialogView.findViewById(R.id.spinnerEditEnvelope);
@@ -1397,7 +1399,7 @@ public class MainActivity extends AppCompatActivity {
     @RequiresApi(api = Build.VERSION_CODES.N)
     private void deleteTransaction(Transaction transaction) {
         final Transaction targetTransaction = resolveTransferAnchorTransaction(transaction);
-        new AlertDialog.Builder(MainActivity.this)
+        new MaterialAlertDialogBuilder(MainActivity.this)
                 .setMessage("Delete this transaction?")
                 .setPositiveButton("Delete", (d, w) -> {
                     Envelope envelope = findEnvelopeByName(targetTransaction.getEnvelopeName());
@@ -1662,7 +1664,7 @@ public class MainActivity extends AppCompatActivity {
             checked[i] = selectedDays.contains(values.get(i));
         }
 
-        new AlertDialog.Builder(this)
+        new MaterialAlertDialogBuilder(this)
                 .setTitle("Choose recurring days")
                 .setMultiChoiceItems(labels, checked, (dialog, which, isChecked) -> {
                     Integer value = values.get(which);
@@ -1832,7 +1834,7 @@ public class MainActivity extends AppCompatActivity {
         root.addView(calendarBody);
         renderCalendar.run();
 
-        new AlertDialog.Builder(this)
+        new MaterialAlertDialogBuilder(this)
                 .setTitle("Select monthly days")
                 .setView(root)
                 .setPositiveButton("OK", (dialog, which) -> {
@@ -2425,7 +2427,7 @@ public class MainActivity extends AppCompatActivity {
         }
         ScrollView scroll = new ScrollView(this);
         scroll.addView(table);
-        new AlertDialog.Builder(this)
+        new MaterialAlertDialogBuilder(this)
                 .setTitle(R.string.dialog_bills_days_title)
                 .setMessage(R.string.dialog_bills_days_message)
                 .setView(scroll)
@@ -2448,13 +2450,13 @@ public class MainActivity extends AppCompatActivity {
 
     private void updateTransferToggleButton(ImageButton button) {
         int color = showTransfers
-                ? ContextCompat.getColor(this, android.R.color.holo_green_dark)
+                ? ContextCompat.getColor(this, R.color.mountain_primary)
                 : ContextCompat.getColor(this, android.R.color.darker_gray);
         button.setColorFilter(color);
         button.setAlpha(showTransfers ? 1.0f : 0.65f);
     }
     private void showError(String message) {
-        new AlertDialog.Builder(this)
+        new MaterialAlertDialogBuilder(this)
                 .setMessage(message)
                 .setPositiveButton("OK", null)
                 .show();

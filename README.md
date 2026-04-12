@@ -16,8 +16,9 @@ This repository uses a lightweight project memory system so AI-assisted developm
 - `prompts/codex_rules.md`
 
 ## Development Expectations
-- Read the repository memory files before changing code.
+- Read the repository memory files before changing code (`docs/AI_CHANGE_PROTOCOL.md`, `prompts/codex_rules.md`).
 - Verify changes against architecture, feature behavior, and user flows.
+- Prefer **theme attributes** (`?attr/colorControlNormal`, `@color/mountain_primary`, Material overlays) for new buttons and spinners so UI stays consistent with DayNight.
 - Add or update tests when behavior changes.
 - Confirm compile/test status before finalizing.
 - Update docs and task state whenever behavior or structure changes.
@@ -51,3 +52,4 @@ BillsDayAnchorTest
 - 2026-03-21: Added `MonthRolloverHelper`, startup rollover sanitization, envelope state repair helpers, and month normalization tests.
 - 2026-03-21: Verification is currently blocked locally because this machine only exposes Java 25 while Gradle 6.7.1 requires an older compatible JDK.
 - 2026-04-12: Mountain Money rebrand (strings/theme), custom outlined top bar with bills-days calendar and recalculate, per-pond `accountBalance`, bills-period filter next to transfers, `BillsDayAnchor` + `BillsDayAnchorTest`, `docs/PROJECT_INDEX.md`, and expanded docs. Local `./gradlew` may still require a JDK compatible with Gradle 6.7.1.
+- 2026-04-12: Repository memory protocol refreshed (`PROJECT_INDEX`, `AI_CHANGE_PROTOCOL`, `codex_rules` with precheck + finalization). UI aligned to theme: `MaterialAlertDialogBuilder`, spinner overlay, `colorControlNormal` tints, totals row + recurring chip colors, `DATA_SCHEMA` note on persistence vs SQL.

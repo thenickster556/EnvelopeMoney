@@ -44,7 +44,8 @@
                 android:contentDescription="@string/content_desc_bills_days_setup"
                 android:padding="10dp"
                 android:scaleType="centerInside"
-                android:src="@drawable/ic_calendar_bills_setup" />
+                android:src="@drawable/ic_calendar_bills_setup"
+                android:tint="?attr/colorControlNormal" />
 
             <ImageButton
                 android:id="@+id/btnRecalculateBalances"
@@ -54,7 +55,8 @@
                 android:contentDescription="@string/content_desc_recalculate_balances"
                 android:padding="10dp"
                 android:scaleType="centerInside"
-                android:src="@drawable/ic_reset" />
+                android:src="@drawable/ic_reset"
+                android:tint="?attr/colorControlNormal" />
         </LinearLayout>
 
         <include layout="@layout/content_main" />

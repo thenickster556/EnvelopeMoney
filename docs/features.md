@@ -36,3 +36,10 @@
 
 ## Chrome
 - Primary screen uses a **custom outlined top bar** (no ActionBar menu for reset): app title, bills-days setup calendar, and recalculate balances.
+
+## UI and theming
+- App theme: **`Theme.EnvelopeMoney`** / **`Theme.EnvelopeMoney.NoActionBar`** (`Theme.MaterialComponents.DayNight`) with Mountain palette (`mountain_primary`, teal accents).
+- **ImageButtons** use `?attr/selectableItemBackgroundBorderless` and `?attr/colorControlNormal` tint where icons are platform vectors.
+- **Spinners** use `ThemeOverlay.MountainMoney.Spinner` so dropdowns match primary colors.
+- **Alerts** from `MainActivity` use **`MaterialAlertDialogBuilder`** so action buttons follow Material styling.
+- Recurring day chips use drawables tied to **`recurring_chip_*`** colors, not stock holo greens.

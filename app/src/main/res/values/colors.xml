@@ -10,4 +10,8 @@
     <color name="mountain_top_bar_fill">#FFF5F9F7</color>
     <color name="mountain_top_bar_stroke">#FFB8D4C8</color>
     <color name="mountain_primary">#FF2E7D6E</color>
+    <!-- Themed surfaces (replace holo greens in layouts/drawables) -->
+    <color name="totals_row_background">#FFE8F5F3</color>
+    <color name="recurring_chip_fill_selected">#FFB2DFDB</color>
+    <color name="recurring_chip_stroke">#FF2E7D6E</color>
 </resources>
