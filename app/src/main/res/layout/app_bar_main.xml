@@ -1,27 +1,63 @@
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     tools:context=".MainActivity">
 
-
-    <com.google.android.material.appbar.AppBarLayout
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:theme="@style/Theme.EnvelopeMoney.AppBarOverlay">
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:fitsSystemWindows="true">
 
-        <androidx.appcompat.widget.Toolbar
-            android:id="@+id/toolbar"
+        <LinearLayout
+            android:id="@+id/layoutCustomTopBar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="@android:color/holo_green_dark"
-            app:popupTheme="@style/Theme.EnvelopeMoney.PopupOverlay" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingStart="12dp"
+            android:paddingEnd="8dp"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp"
+            android:layout_marginStart="12dp"
+            android:layout_marginEnd="12dp"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_top_bar_outline">
 
+            <TextView
+                android:id="@+id/tvAppTitle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/app_name"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="@color/mountain_primary" />
 
-    </com.google.android.material.appbar.AppBarLayout>
+            <ImageButton
+                android:id="@+id/btnBillsDaysSetup"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/content_desc_bills_days_setup"
+                android:padding="10dp"
+                android:scaleType="centerInside"
+                android:src="@drawable/ic_calendar_bills_setup" />
 
-    <include layout="@layout/content_main" />
+            <ImageButton
+                android:id="@+id/btnRecalculateBalances"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/content_desc_recalculate_balances"
+                android:padding="10dp"
+                android:scaleType="centerInside"
+                android:src="@drawable/ic_reset" />
+        </LinearLayout>
+
+        <include layout="@layout/content_main" />
+    </LinearLayout>
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

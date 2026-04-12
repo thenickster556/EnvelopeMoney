@@ -12,7 +12,7 @@
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center"
-        android:paddingTop="?attr/actionBarSize"
+        android:paddingTop="8dp"
         android:paddingBottom="3dp">
 
         <ImageButton
@@ -71,11 +71,21 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Transaction History"
+            android:text="@string/transaction_history_title"
             android:textSize="18sp"
             android:textStyle="bold"
             android:layout_marginStart="8dp"
             android:layout_marginLeft="8dp" />
+
+        <ImageButton
+            android:id="@+id/btnBillsPeriodFilter"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:src="@drawable/ic_bills_period_filter"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/content_desc_bills_period_filter"
+            android:layout_marginEnd="4dp"
+            android:layout_marginRight="4dp" />
 
         <ImageButton
             android:id="@+id/btnToggleTransfers"
@@ -83,7 +93,7 @@
             android:layout_height="wrap_content"
             android:src="@drawable/ic_transfers_toggle"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="Toggle transfers"
+            android:contentDescription="@string/content_desc_toggle_transfers"
             android:layout_marginEnd="8dp"
             android:layout_marginRight="8dp" />
 
@@ -93,7 +103,7 @@
             android:layout_height="wrap_content"
             android:src="@android:drawable/ic_menu_add"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="Add Transaction"
+            android:contentDescription="@string/content_desc_add_transaction"
             android:layout_marginEnd="8dp"
             android:layout_marginRight="8dp" />
     </LinearLayout>
@@ -163,7 +173,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Envelopes"
+            android:text="@string/ponds_section_title"
             android:textSize="18sp"
             android:textStyle="bold"
             android:layout_marginStart="8dp"
@@ -179,7 +189,7 @@
             android:scaleType="centerInside"
             android:clickable="true"
             android:focusable="true"
-            android:contentDescription="Collapse envelopes"
+            android:contentDescription="@string/content_desc_collapse_ponds"
             android:layout_marginEnd="8dp"
             android:layout_marginRight="8dp" />
 
@@ -189,7 +199,7 @@
             android:layout_height="wrap_content"
             android:src="@android:drawable/ic_menu_add"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="Add Envelope"
+            android:contentDescription="@string/content_desc_add_pond"
             android:layout_marginEnd="8dp"
             android:layout_marginRight="8dp" />
     </LinearLayout>
@@ -204,8 +214,19 @@
         <ListView
             android:id="@+id/listViewEnvelopes"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
             android:layout_marginTop="8dp"/>
+
+        <TextView
+            android:id="@+id/tvPondTotalsFooter"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="12sp"
+            android:paddingTop="6dp"
+            android:paddingBottom="4dp"
+            android:textColor="@android:color/darker_gray"
+            tools:text="Account sum: $0 | Remaining sum: $0 | Diff: $0" />
     </LinearLayout>
 
 </LinearLayout>

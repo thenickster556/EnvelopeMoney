@@ -5,15 +5,19 @@ import android.content.Context;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
+import android.graphics.PorterDuff;
 import android.graphics.Rect;
+import android.view.Gravity;
 import android.view.LayoutInflater;
-import android.view.Menu;
-import android.view.MenuItem;
 import android.view.TouchDelegate;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
+import android.widget.ScrollView;
+import android.widget.TableLayout;
+import android.widget.TableRow;
+import android.widget.Toast;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.ImageButton;
@@ -26,7 +30,6 @@ import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.appcompat.widget.Toolbar;
 import androidx.core.content.ContextCompat;
 
 import java.lang.reflect.Field;
@@ -65,6 +68,8 @@ public class MainActivity extends AppCompatActivity {
     private LinearLayout layoutEnvelopesSection;
     private ImageButton btnToggleEnvelopes;
     private boolean envelopesCollapsed = false;
+    private boolean billsPeriodFilterActive = false;
+    private TextView tvPondTotalsFooter;
 
 
     private static class TransferTotalsOption {
@@ -98,6 +103,19 @@ public class MainActivity extends AppCompatActivity {
             updateDisplay();
         });
 
+        ImageButton btnBillsPeriodFilter = findViewById(R.id.btnBillsPeriodFilter);
+        billsPeriodFilterActive = PrefManager.isBillsFilterActive(this);
+        btnBillsPeriodFilter.setOnClickListener(v -> toggleBillsPeriodFilter());
+        updateBillsPeriodFilterButton(btnBillsPeriodFilter);
+
+        ImageButton btnBillsDaysSetup = findViewById(R.id.btnBillsDaysSetup);
+        btnBillsDaysSetup.setOnClickListener(v -> showBillsDaysPickerDialog());
+        expandTouchTarget(btnBillsDaysSetup, 8);
+
+        ImageButton btnRecalculateBalances = findViewById(R.id.btnRecalculateBalances);
+        btnRecalculateBalances.setOnClickListener(v -> showResetConfirmationDialog());
+        expandTouchTarget(btnRecalculateBalances, 8);
+
         ImageButton btnAddEnvelope = findViewById(R.id.btnAddEnvelope);
         btnAddEnvelope.setOnClickListener(v -> showEnvelopeDialog(null));
 
@@ -116,9 +134,7 @@ public class MainActivity extends AppCompatActivity {
         layoutTransferTotals = findViewById(R.id.layoutTransferTotals);
         spinnerTransferTotals = findViewById(R.id.spinnerTransferTotals);
         tvTransferTotalsSummary = findViewById(R.id.tvTransferTotalsSummary);
-        // Hook up the Toolbar as your ActionBar
-        Toolbar toolbar = findViewById(R.id.toolbar);
-        setSupportActionBar(toolbar);
+        tvPondTotalsFooter = findViewById(R.id.tvPondTotalsFooter);
 
         // Load envelopes through the rollover repair path so startup only adopts sanitized state.
         envelopes = PrefManager.getEnvelopes(this);
@@ -142,6 +158,8 @@ public class MainActivity extends AppCompatActivity {
         }
         setupMonthNavigation();
         setupDatePickers();
+        applyPersistedBillsFilterState();
+        updatePondTotalsFooter();
 
         // Initialize adapters
         transactionAdapter = new TransactionAdapter(this, allTransactions);
@@ -152,6 +170,7 @@ public class MainActivity extends AppCompatActivity {
 
 
         updateTransactionHistory();
+        updatePondTotalsFooter();
     }
 
     private void applyEnvelopesCollapsedState() {
@@ -355,6 +374,7 @@ public class MainActivity extends AppCompatActivity {
         if (currentMonth == null || currentMonth.isEmpty()) {
             return;
         }
+        clearBillsPeriodFilterState();
         try {
             SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM", Locale.getDefault());
             Date date = sdf.parse(currentMonth);
@@ -775,6 +795,7 @@ public class MainActivity extends AppCompatActivity {
         if (transactionAdapter != null) {
             updateTransactionHistory();
         }
+        updatePondTotalsFooter();
     }
 
     // Adapter classes and helper methods below
@@ -864,10 +885,14 @@ public class MainActivity extends AppCompatActivity {
             ImageButton btnOptions = convertView.findViewById(R.id.btnOptions);
 
             tvName.setText(envelope.getName());
-            tvAmounts.setText(String.format(Locale.getDefault(),
+            String amounts = String.format(Locale.getDefault(),
                     "Limit: $%.2f | Remaining: $%.2f",
                     envelope.getLimit(),
-                    envelope.getRemaining()));
+                    envelope.getRemaining());
+            if (envelope.getAccountBalance() != null) {
+                amounts += String.format(Locale.getDefault(), " | Account: $%.2f", envelope.getAccountBalance());
+            }
+            tvAmounts.setText(amounts);
 
 
             cbSelect.setOnCheckedChangeListener(null);
@@ -887,30 +912,15 @@ public class MainActivity extends AppCompatActivity {
     // Rest of helper methods (showEnvelopeOptionsDialog, showEnvelopeDialog,
     // getEnvelopeNames, showError) remain identical to your original implementation
 
-    @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        getMenuInflater().inflate(R.menu.main, menu);
-        return true;
-    }
-
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        if (item.getItemId() == R.id.action_reset) {
-            showResetConfirmationDialog();
-            return true;
-        }
-        return super.onOptionsItemSelected(item);
-    }
-
     @RequiresApi(api = Build.VERSION_CODES.N)
     private void showResetConfirmationDialog() {
         new AlertDialog.Builder(this)
-                .setTitle("Recalculate Balances?")
-                .setMessage("This will recompute each envelope’s remaining balance from your existing transactions. Continue?")
-                .setPositiveButton("Recalculate", (dialog, which) -> {
+                .setTitle(R.string.dialog_recalculate_title)
+                .setMessage(R.string.dialog_recalculate_message)
+                .setPositiveButton(R.string.dialog_recalculate_positive, (dialog, which) -> {
                     performMonthlyReset();
                 })
-                .setNegativeButton("Cancel", null)
+                .setNegativeButton(android.R.string.cancel, null)
                 .show();
     }
     private void setupDatePickers() {
@@ -934,8 +944,7 @@ public class MainActivity extends AppCompatActivity {
                         // month is 0-indexed, so add 1.
                         calendar.set(year, month, dayOfMonth);
                         tvStartDate.setText(sdf.format(calendar.getTime()));
-                        // Refresh your transaction history based on the new filter
-                        updateTransactionHistory();
+                        onManualDateRangeChanged();
                     },
                     calendar.get(Calendar.YEAR),
                     calendar.get(Calendar.MONTH),
@@ -956,7 +965,7 @@ public class MainActivity extends AppCompatActivity {
                     (view, year, month, dayOfMonth) -> {
                         calendar.set(year, month, dayOfMonth);
                         tvEndDate.setText(sdf.format(calendar.getTime()));
-                        updateTransactionHistory();
+                        onManualDateRangeChanged();
                     },
                     calendar.get(Calendar.YEAR),
                     calendar.get(Calendar.MONTH),
@@ -974,26 +983,29 @@ public class MainActivity extends AppCompatActivity {
         }
         PrefManager.saveEnvelopes(this, envelopes);
         updateDisplay();
-        showError("Balances recalculated successfully!");
+        Toast.makeText(this, R.string.toast_balances_recalculated, Toast.LENGTH_SHORT).show();
     }
 
     private void showEnvelopeOptionsDialog(int position) {
         Envelope envelope = envelopes.get(position);
         new AlertDialog.Builder(this)
-                .setTitle("Envelope Options")
-                .setItems(new CharSequence[]{"Edit", "Delete"}, (dialog, which) -> {
+                .setTitle(R.string.dialog_pond_options_title)
+                .setItems(new CharSequence[]{
+                        getString(R.string.action_edit),
+                        getString(R.string.action_delete)
+                }, (dialog, which) -> {
                     if (which == 0) {
                         showEnvelopeDialog(envelope);
                     } else {
                         new AlertDialog.Builder(MainActivity.this)
-                                .setMessage("Delete this envelope?")
-                                .setPositiveButton("Delete", (d, w) -> {
+                                .setMessage(R.string.dialog_delete_pond_message)
+                                .setPositiveButton(R.string.action_delete, (d, w) -> {
                                     removeTransferReferencesToEnvelope(envelope.getName());
                                     envelopes.remove(position);
                                     PrefManager.saveEnvelopes(MainActivity.this, envelopes);
                                     updateDisplay();
                                 })
-                                .setNegativeButton("Cancel", null)
+                                .setNegativeButton(android.R.string.cancel, null)
                                 .show();
                     }
                 })
@@ -1007,19 +1019,27 @@ public class MainActivity extends AppCompatActivity {
         EditText etLimit = dialogView.findViewById(R.id.etEnvelopeLimit);
         EditText etRemainder = dialogView.findViewById(R.id.etEnvelopeRemainder);
         TextView etReminderLabel = dialogView.findViewById(R.id.etEnvelopeRemainderLabel);
-        if(envelopeToEdit == null){
+        EditText etAccount = dialogView.findViewById(R.id.etEnvelopeAccount);
+        TextView tvAccountLabel = dialogView.findViewById(R.id.tvEnvelopeAccountLabel);
+        if (envelopeToEdit == null) {
             etReminderLabel.setVisibility(View.GONE);
             etRemainder.setVisibility(View.GONE);
+            tvAccountLabel.setVisibility(View.GONE);
+            etAccount.setVisibility(View.GONE);
         }
         if (envelopeToEdit != null) {
             etName.setText(envelopeToEdit.getName());
             etLimit.setText(String.valueOf(envelopeToEdit.getLimit()));
             etRemainder.setText(String.valueOf(envelopeToEdit.getRemaining()));
+            Double acct = envelopeToEdit.getAccountBalance();
+            if (acct != null) {
+                etAccount.setText(String.valueOf(acct));
+            }
         }
 
         builder.setView(dialogView)
-                .setTitle(envelopeToEdit == null ? "New Envelope" : "Edit Envelope")
-                .setPositiveButton("Save", (dialog, which) -> {
+                .setTitle(envelopeToEdit == null ? R.string.dialog_new_pond_title : R.string.dialog_edit_pond_title)
+                .setPositiveButton(R.string.save, (dialog, which) -> {
                     String name = etName.getText().toString();
                     String limitStr = etLimit.getText().toString();
 
@@ -1061,12 +1081,18 @@ public class MainActivity extends AppCompatActivity {
                         if (!oldName.equals(name)) {
                             renameTransferReferences(oldName, name);
                         }
+                        String acctStr = etAccount.getText().toString().trim();
+                        if (acctStr.isEmpty()) {
+                            envelopeToEdit.setAccountBalance(null);
+                        } else {
+                            envelopeToEdit.setAccountBalance(Double.parseDouble(acctStr));
+                        }
                     }
 
                     PrefManager.saveEnvelopes(this, envelopes);
                     updateDisplay();
                 })
-                .setNegativeButton("Cancel", null);
+                .setNegativeButton(android.R.string.cancel, null);
 
         builder.create().show();
     }
@@ -2246,6 +2272,172 @@ public class MainActivity extends AppCompatActivity {
     private String formatTransferTotalsSummary(TransferTotalsOption option) {
         return String.format(Locale.getDefault(), "%s %s: $%.2f", option.labelPrefix, option.envelopeName, option.total);
     }
+
+    private void clearBillsPeriodFilterState() {
+        billsPeriodFilterActive = false;
+        PrefManager.setBillsFilterActive(this, false);
+        PrefManager.clearBillsFilterSavedRange(this);
+        updateBillsPeriodFilterButton(findViewById(R.id.btnBillsPeriodFilter));
+    }
+
+    private void applyPersistedBillsFilterState() {
+        if (!PrefManager.isBillsFilterActive(this)) {
+            return;
+        }
+        List<Integer> days = PrefManager.getBillsDays(this);
+        if (days.isEmpty()) {
+            PrefManager.setBillsFilterActive(this, false);
+            return;
+        }
+        TextView tvStart = findViewById(R.id.tvStartDate);
+        TextView tvEnd = findViewById(R.id.tvEndDate);
+        SimpleDateFormat sdf = new SimpleDateFormat("MMM d, yyyy", Locale.getDefault());
+        String savedStart = PrefManager.getBillsFilterSavedStartDisplay(this);
+        if (savedStart != null) {
+            tvStart.setText(savedStart);
+        }
+        Date anchor = BillsDayAnchor.computeAnchorDate(Calendar.getInstance(), days);
+        if (anchor != null) {
+            tvEnd.setText(sdf.format(anchor));
+        }
+        billsPeriodFilterActive = true;
+        updateBillsPeriodFilterButton(findViewById(R.id.btnBillsPeriodFilter));
+    }
+
+    private void toggleBillsPeriodFilter() {
+        List<Integer> days = PrefManager.getBillsDays(this);
+        if (days.isEmpty()) {
+            Toast.makeText(this, R.string.toast_configure_bills_days_first, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        TextView tvStart = findViewById(R.id.tvStartDate);
+        TextView tvEnd = findViewById(R.id.tvEndDate);
+        SimpleDateFormat sdf = new SimpleDateFormat("MMM d, yyyy", Locale.getDefault());
+        if (!billsPeriodFilterActive) {
+            PrefManager.saveBillsFilterSavedRange(this, tvStart.getText().toString(), tvEnd.getText().toString());
+            Date anchor = BillsDayAnchor.computeAnchorDate(Calendar.getInstance(), days);
+            if (anchor == null) {
+                Toast.makeText(this, R.string.toast_no_bills_anchor, Toast.LENGTH_SHORT).show();
+                return;
+            }
+            tvEnd.setText(sdf.format(anchor));
+            billsPeriodFilterActive = true;
+            PrefManager.setBillsFilterActive(this, true);
+        } else {
+            String rs = PrefManager.getBillsFilterSavedStartDisplay(this);
+            String re = PrefManager.getBillsFilterSavedEndDisplay(this);
+            if (rs != null) {
+                tvStart.setText(rs);
+            }
+            if (re != null) {
+                tvEnd.setText(re);
+            }
+            billsPeriodFilterActive = false;
+            PrefManager.setBillsFilterActive(this, false);
+            PrefManager.clearBillsFilterSavedRange(this);
+        }
+        updateBillsPeriodFilterButton(findViewById(R.id.btnBillsPeriodFilter));
+        updateTransactionHistory();
+    }
+
+    private void updateBillsPeriodFilterButton(ImageButton button) {
+        if (button == null) {
+            return;
+        }
+        if (billsPeriodFilterActive) {
+            button.setColorFilter(ContextCompat.getColor(this, R.color.mountain_primary), PorterDuff.Mode.SRC_IN);
+            button.setAlpha(1f);
+        } else {
+            button.clearColorFilter();
+            button.setAlpha(0.65f);
+        }
+    }
+
+    private void onManualDateRangeChanged() {
+        if (billsPeriodFilterActive) {
+            billsPeriodFilterActive = false;
+            PrefManager.setBillsFilterActive(this, false);
+            PrefManager.clearBillsFilterSavedRange(this);
+            updateBillsPeriodFilterButton(findViewById(R.id.btnBillsPeriodFilter));
+        }
+        updateTransactionHistory();
+    }
+
+    private void updatePondTotalsFooter() {
+        if (tvPondTotalsFooter == null) {
+            return;
+        }
+        double sumRem = 0d;
+        for (Envelope e : envelopes) {
+            sumRem += e.getRemaining();
+        }
+        double sumAcct = 0d;
+        int acctCount = 0;
+        for (Envelope e : envelopes) {
+            if (e.getAccountBalance() != null) {
+                sumAcct += e.getAccountBalance();
+                acctCount++;
+            }
+        }
+        if (acctCount == 0) {
+            tvPondTotalsFooter.setText(String.format(Locale.getDefault(), getString(R.string.pond_footer_partial), sumRem));
+            return;
+        }
+        double diff = sumAcct - sumRem;
+        tvPondTotalsFooter.setText(String.format(Locale.getDefault(), getString(R.string.pond_footer_full), sumAcct, sumRem, diff));
+    }
+
+    private void showBillsDaysPickerDialog() {
+        HashSet<Integer> selected = new HashSet<>(PrefManager.getBillsDays(this));
+        int pad = (int) (8 * getResources().getDisplayMetrics().density);
+        TableLayout table = new TableLayout(this);
+        table.setPadding(pad, pad, pad, pad);
+        int day = 1;
+        while (day <= 31) {
+            TableRow row = new TableRow(this);
+            for (int c = 0; c < 7 && day <= 31; c++) {
+                final int d = day;
+                day++;
+                TextView cell = new TextView(this);
+                cell.setText(String.valueOf(d));
+                cell.setGravity(Gravity.CENTER);
+                cell.setPadding(pad, pad, pad, pad);
+                billsDayRefreshCell(cell, selected.contains(d));
+                cell.setOnClickListener(v -> {
+                    if (selected.contains(d)) {
+                        selected.remove(d);
+                    } else {
+                        selected.add(d);
+                    }
+                    billsDayRefreshCell(cell, selected.contains(d));
+                });
+                row.addView(cell);
+            }
+            table.addView(row);
+        }
+        ScrollView scroll = new ScrollView(this);
+        scroll.addView(table);
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.dialog_bills_days_title)
+                .setMessage(R.string.dialog_bills_days_message)
+                .setView(scroll)
+                .setPositiveButton(R.string.save, (di, w) -> {
+                    ArrayList<Integer> list = new ArrayList<>(selected);
+                    Collections.sort(list);
+                    PrefManager.saveBillsDays(this, list);
+                })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
+
+    private void billsDayRefreshCell(TextView cell, boolean on) {
+        if (on) {
+            cell.setBackgroundColor(ContextCompat.getColor(this, R.color.teal_200));
+        } else {
+            cell.setBackgroundColor(ContextCompat.getColor(this, android.R.color.transparent));
+        }
+    }
+
     private void updateTransferToggleButton(ImageButton button) {
         int color = showTransfers
                 ? ContextCompat.getColor(this, android.R.color.holo_green_dark)

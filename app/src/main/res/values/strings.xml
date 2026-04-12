@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">EnvelopeMoney</string>
+    <string name="app_name">Mountain Money</string>
     <string name="navigation_drawer_open">Open navigation drawer</string>
     <string name="navigation_drawer_close">Close navigation drawer</string>
     <string name="nav_header_title">Android Studio</string>
@@ -10,4 +10,37 @@
     <string name="menu_home">Home</string>
     <string name="menu_gallery">Gallery</string>
     <string name="menu_slideshow">Slideshow</string>
+
+    <string name="ponds_section_title">Ponds</string>
+    <string name="transaction_history_title">Transaction History</string>
+    <string name="select_pond_label">Select pond</string>
+    <string name="pond_account_label">Account (bank slice)</string>
+    <string name="pond_account_hint">Optional — cash in bank for this pond</string>
+    <string name="pond_footer_partial">Remaining (all ponds): $%.2f</string>
+    <string name="pond_footer_full">Account (entered): $%.2f | Remaining: $%.2f | Difference: $%.2f</string>
+
+    <string name="dialog_new_pond_title">New pond</string>
+    <string name="dialog_edit_pond_title">Edit pond</string>
+    <string name="dialog_pond_options_title">Pond options</string>
+    <string name="action_edit">Edit</string>
+    <string name="action_delete">Delete</string>
+    <string name="dialog_delete_pond_message">Delete this pond?</string>
+    <string name="dialog_bills_days_title">Bills days</string>
+    <string name="dialog_bills_days_message">Choose which days of each month you handle bills (not tied to a single calendar month).</string>
+    <string name="dialog_recalculate_title">Recalculate balances?</string>
+    <string name="dialog_recalculate_message">This will recompute each pond’s remaining balance from your existing transactions. Continue?</string>
+    <string name="dialog_recalculate_positive">Recalculate</string>
+
+    <string name="content_desc_bills_days_setup">Choose which days of the month are bills days</string>
+    <string name="content_desc_bills_period_filter">Show transactions through last bills day</string>
+    <string name="content_desc_recalculate_balances">Recalculate pond balances from transactions</string>
+    <string name="content_desc_collapse_ponds">Collapse ponds</string>
+    <string name="content_desc_add_pond">Add pond</string>
+    <string name="content_desc_add_transaction">Add transaction</string>
+    <string name="content_desc_toggle_transfers">Toggle transfers</string>
+
+    <string name="toast_configure_bills_days_first">Choose bills days using the calendar in the top bar first.</string>
+    <string name="toast_no_bills_anchor">Could not find a bills day on or before today.</string>
+    <string name="toast_balances_recalculated">Balances recalculated successfully.</string>
+    <string name="save">Save</string>
 </resources>

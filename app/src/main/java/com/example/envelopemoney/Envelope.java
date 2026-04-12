@@ -70,6 +70,9 @@ public class Envelope {
     private Map<String, MonthData> monthlyData = new HashMap<>();
     @SerializedName("transfers")
     private List<TransferData> transfers = new ArrayList<>();
+    /** Optional real-world bank slice for this pond (not the budget remainder). */
+    @SerializedName("accountBalance")
+    private Double accountBalance = null;
 
     private Double manualRemaining = null;     // if null => no manual override
     private double baselineLimit = 0;         // the limit at the moment of manual override
@@ -89,6 +92,14 @@ public class Envelope {
     public double getRemaining() { return remaining; }
     public double getOriginalLimit(){ return originalLimit; }
     public Double getManualRemaining() { return manualRemaining; }
+
+    public Double getAccountBalance() {
+        return accountBalance;
+    }
+
+    public void setAccountBalance(Double accountBalance) {
+        this.accountBalance = accountBalance;
+    }
     public Boolean hasBaseline() {
         return Double.isFinite(baselineLimit) && Double.isFinite(baselineRemaining);
     }
