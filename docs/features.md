@@ -40,6 +40,7 @@
 ## UI and theming
 - App theme: **`Theme.EnvelopeMoney`** / **`Theme.EnvelopeMoney.NoActionBar`** (`Theme.MaterialComponents.DayNight`) with Mountain palette (`mountain_primary`, teal accents).
 - **ImageButtons** use `?attr/selectableItemBackgroundBorderless` and `?attr/colorControlNormal` tint where icons are platform vectors.
-- **Spinners** use `ThemeOverlay.MountainMoney.Spinner` so dropdowns match primary colors.
+- **Spinners** use `ThemeOverlay.MountainMoney.Spinner` (Material overlay + `spinner_popup_*` / night `values-night/colors`) so dropdown surfaces follow DayNight.
 - **Alerts** from `MainActivity` use **`MaterialAlertDialogBuilder`** so action buttons follow Material styling.
 - Recurring day chips use drawables tied to **`recurring_chip_*`** colors, not stock holo greens.
+- Programmatic controls in **`MainActivity`** (recurring frequency/weekday chips, monthly day grid, bills-days grid, transfer/bills toggles) resolve **`textColorPrimary` / `textColorSecondary` / `colorControlNormal`** and **`mountain_primary`** instead of platform black/gray/teal fills.

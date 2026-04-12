@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="spinner_popup_surface">#FF1E1E1E</color>
+    <color name="spinner_popup_on_surface">#FFE3E3E3</color>
+    <color name="recurring_calendar_cell_unselected_fill">#FF2C2C2C</color>
+    <color name="recurring_calendar_cell_stroke">#66FFFFFF</color>
+    <color name="totals_row_background">#FF1A2F2A</color>
+</resources>

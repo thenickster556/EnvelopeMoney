@@ -14,4 +14,9 @@
     <color name="totals_row_background">#FFE8F5F3</color>
     <color name="recurring_chip_fill_selected">#FFB2DFDB</color>
     <color name="recurring_chip_stroke">#FF2E7D6E</color>
+    <!-- Day-mode surfaces for spinners / calendar cells (overridden in values-night) -->
+    <color name="spinner_popup_surface">#FFFFFFFF</color>
+    <color name="spinner_popup_on_surface">#DE000000</color>
+    <color name="recurring_calendar_cell_unselected_fill">#FFFFFFFF</color>
+    <color name="recurring_calendar_cell_stroke">#99A0A0A0</color>
 </resources>

@@ -22,6 +22,10 @@
     {
       "id": "repo-protocol-and-theme-alignment-2026-04",
       "title": "AI protocol docs refresh + Material-themed buttons, spinners, dialogs"
+    },
+    {
+      "id": "theme-buttons-dropdowns-daynight-2026-04",
+      "title": "Theme-aligned ImageButtons, spinner night colors, programmatic chips/calendars"
     }
   ],
   "last_updated": "2026-04-12"

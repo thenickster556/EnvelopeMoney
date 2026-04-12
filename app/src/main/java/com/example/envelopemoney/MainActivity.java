@@ -2,9 +2,11 @@ package com.example.envelopemoney;
 
 import android.app.DatePickerDialog;
 import android.content.Context;
+import android.content.res.Resources;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
+import android.util.TypedValue;
 import android.graphics.PorterDuff;
 import android.graphics.Rect;
 import android.view.Gravity;
@@ -1554,8 +1556,8 @@ public class MainActivity extends AppCompatActivity {
 
     private void applyRecurringWeekdayButtonSelection(Map<Integer, TextView> dayButtons,
                                                        List<Integer> selectedDays) {
-        int selectedColor = ContextCompat.getColor(this, android.R.color.black);
-        int normalColor = ContextCompat.getColor(this, android.R.color.darker_gray);
+        int selectedColor = ContextCompat.getColor(this, R.color.mountain_primary);
+        int normalColor = resolveThemeColor(android.R.attr.textColorSecondary);
         for (Map.Entry<Integer, TextView> entry : dayButtons.entrySet()) {
             boolean selected = selectedDays.contains(entry.getKey());
             TextView button = entry.getValue();
@@ -1580,8 +1582,8 @@ public class MainActivity extends AppCompatActivity {
                 ? R.drawable.recurring_option_selected
                 : R.drawable.recurring_option_unselected);
 
-        int selectedColor = ContextCompat.getColor(this, android.R.color.black);
-        int normalColor = ContextCompat.getColor(this, android.R.color.darker_gray);
+        int selectedColor = ContextCompat.getColor(this, R.color.mountain_primary);
+        int normalColor = resolveThemeColor(android.R.attr.textColorSecondary);
         weekly.setTextColor("weekly".equals(selectedFrequency) ? selectedColor : normalColor);
         biWeekly.setTextColor("bi-weekly".equals(selectedFrequency) ? selectedColor : normalColor);
         monthly.setTextColor("monthly".equals(selectedFrequency) ? selectedColor : normalColor);
@@ -1703,7 +1705,7 @@ public class MainActivity extends AppCompatActivity {
         btnPrev.setText("\u2039");
         btnPrev.setTextSize(22f);
         btnPrev.setTypeface(btnPrev.getTypeface(), android.graphics.Typeface.BOLD);
-        btnPrev.setTextColor(ContextCompat.getColor(this, android.R.color.black));
+        btnPrev.setTextColor(resolveThemeColor(android.R.attr.textColorPrimary));
         btnPrev.setGravity(android.view.Gravity.CENTER);
         btnPrev.setMinWidth(dp(40));
         btnPrev.setContentDescription("Previous month");
@@ -1721,7 +1723,7 @@ public class MainActivity extends AppCompatActivity {
         btnNext.setText("\u203A");
         btnNext.setTextSize(22f);
         btnNext.setTypeface(btnNext.getTypeface(), android.graphics.Typeface.BOLD);
-        btnNext.setTextColor(ContextCompat.getColor(this, android.R.color.black));
+        btnNext.setTextColor(resolveThemeColor(android.R.attr.textColorPrimary));
         btnNext.setGravity(android.view.Gravity.CENTER);
         btnNext.setMinWidth(dp(40));
         btnNext.setContentDescription("Next month");
@@ -1739,6 +1741,10 @@ public class MainActivity extends AppCompatActivity {
         Runnable renderCalendar = () -> {
             calendarBody.removeAllViews();
             tvMonth.setText(new SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(displayedMonth.getTime()));
+            tvMonth.setTextColor(resolveThemeColor(android.R.attr.textColorPrimary));
+
+            int onSurface = resolveThemeColor(android.R.attr.textColorPrimary);
+            int onChip = ContextCompat.getColor(MainActivity.this, R.color.mountain_primary);
 
             String[] dow = new String[]{"S", "M", "T", "W", "T", "F", "S"};
             LinearLayout dowRow = new LinearLayout(this);
@@ -1778,7 +1784,6 @@ public class MainActivity extends AppCompatActivity {
                 dayCell.setGravity(android.view.Gravity.CENTER);
                 dayCell.setTextSize(13f);
                 dayCell.setPadding(0, dp(4), 0, dp(4));
-                dayCell.setTextColor(ContextCompat.getColor(this, android.R.color.black));
                 LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(40), 1f);
                 lp.setMargins(dp(2), dp(2), dp(2), dp(2));
                 dayCell.setLayoutParams(lp);
@@ -1787,6 +1792,7 @@ public class MainActivity extends AppCompatActivity {
                 dayCell.setBackgroundResource(isSelected
                         ? R.drawable.recurring_calendar_day_selected
                         : R.drawable.recurring_calendar_day_unselected);
+                dayCell.setTextColor(isSelected ? onChip : onSurface);
                 dayCell.setOnClickListener(v -> {
                     if (workingSelection.contains(dayValue)) {
                         workingSelection.remove(dayValue);
@@ -1797,7 +1803,7 @@ public class MainActivity extends AppCompatActivity {
                     dayCell.setBackgroundResource(selected
                             ? R.drawable.recurring_calendar_day_selected
                             : R.drawable.recurring_calendar_day_unselected);
-                    dayCell.setTextColor(ContextCompat.getColor(this, android.R.color.black));
+                    dayCell.setTextColor(selected ? onChip : onSurface);
                 });
 
                 weekRow.addView(dayCell);
@@ -1847,6 +1853,24 @@ public class MainActivity extends AppCompatActivity {
                 })
                 .setNegativeButton("Cancel", null)
                 .show();
+    }
+
+    private int resolveThemeColor(int attrId) {
+        TypedValue tv = new TypedValue();
+        if (!getTheme().resolveAttribute(attrId, tv, true)) {
+            return ContextCompat.getColor(this, R.color.mountain_primary);
+        }
+        if (tv.type >= TypedValue.TYPE_FIRST_COLOR_INT && tv.type <= TypedValue.TYPE_LAST_COLOR_INT) {
+            return tv.data;
+        }
+        if (tv.resourceId != 0) {
+            try {
+                return ContextCompat.getColor(this, tv.resourceId);
+            } catch (Resources.NotFoundException e) {
+                return ContextCompat.getColor(this, R.color.mountain_primary);
+            }
+        }
+        return ContextCompat.getColor(this, R.color.mountain_primary);
     }
 
     private int dp(int value) {
@@ -2358,7 +2382,7 @@ public class MainActivity extends AppCompatActivity {
             button.setColorFilter(ContextCompat.getColor(this, R.color.mountain_primary), PorterDuff.Mode.SRC_IN);
             button.setAlpha(1f);
         } else {
-            button.clearColorFilter();
+            button.setColorFilter(resolveThemeColor(androidx.appcompat.R.attr.colorControlNormal), PorterDuff.Mode.SRC_IN);
             button.setAlpha(0.65f);
         }
     }
@@ -2442,17 +2466,19 @@ public class MainActivity extends AppCompatActivity {
 
     private void billsDayRefreshCell(TextView cell, boolean on) {
         if (on) {
-            cell.setBackgroundColor(ContextCompat.getColor(this, R.color.teal_200));
+            cell.setBackgroundResource(R.drawable.recurring_option_selected);
+            cell.setTextColor(ContextCompat.getColor(this, R.color.mountain_primary));
         } else {
             cell.setBackgroundColor(ContextCompat.getColor(this, android.R.color.transparent));
+            cell.setTextColor(resolveThemeColor(android.R.attr.textColorPrimary));
         }
     }
 
     private void updateTransferToggleButton(ImageButton button) {
         int color = showTransfers
                 ? ContextCompat.getColor(this, R.color.mountain_primary)
-                : ContextCompat.getColor(this, android.R.color.darker_gray);
-        button.setColorFilter(color);
+                : resolveThemeColor(androidx.appcompat.R.attr.colorControlNormal);
+        button.setColorFilter(color, PorterDuff.Mode.SRC_IN);
         button.setAlpha(showTransfers ? 1.0f : 0.65f);
     }
     private void showError(String message) {
