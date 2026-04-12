@@ -1747,7 +1747,7 @@ public class MainActivity extends AppCompatActivity {
                 TextView t = new TextView(this);
                 t.setText(label);
                 t.setGravity(android.view.Gravity.CENTER);
-                t.setTextColor(ContextCompat.getColor(this, android.R.color.holo_green_dark));
+                t.setTextColor(ContextCompat.getColor(this, R.color.mountain_primary));
                 t.setTypeface(t.getTypeface(), android.graphics.Typeface.BOLD);
                 LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
                 t.setLayoutParams(lp);

@@ -53,3 +53,4 @@ BillsDayAnchorTest
 - 2026-03-21: Verification is currently blocked locally because this machine only exposes Java 25 while Gradle 6.7.1 requires an older compatible JDK.
 - 2026-04-12: Mountain Money rebrand (strings/theme), custom outlined top bar with bills-days calendar and recalculate, per-pond `accountBalance`, bills-period filter next to transfers, `BillsDayAnchor` + `BillsDayAnchorTest`, `docs/PROJECT_INDEX.md`, and expanded docs. Local `./gradlew` may still require a JDK compatible with Gradle 6.7.1.
 - 2026-04-12: Repository memory protocol refreshed (`PROJECT_INDEX`, `AI_CHANGE_PROTOCOL`, `codex_rules` with precheck + finalization). UI aligned to theme: `MaterialAlertDialogBuilder`, spinner overlay, `colorControlNormal` tints, totals row + recurring chip colors, `DATA_SCHEMA` note on persistence vs SQL.
+- 2026-04-12: Bills-days calendar weekday header text now uses `mountain_primary` instead of platform holo green.
