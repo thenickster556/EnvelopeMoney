@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Custom top bar: dark surfaces (light values stay in values/colors.xml) -->
+    <color name="mountain_top_bar_fill">#FF1A2824</color>
+    <color name="mountain_top_bar_stroke">#FF3D6A5E</color>
     <color name="spinner_popup_surface">#FF1E1E1E</color>
     <color name="spinner_popup_on_surface">#FFE3E3E3</color>
     <color name="recurring_calendar_cell_unselected_fill">#FF2C2C2C</color>

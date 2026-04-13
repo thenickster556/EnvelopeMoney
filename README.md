@@ -55,3 +55,4 @@ BillsDayAnchorTest
 - 2026-04-12: Repository memory protocol refreshed (`PROJECT_INDEX`, `AI_CHANGE_PROTOCOL`, `codex_rules` with precheck + finalization). UI aligned to theme: `MaterialAlertDialogBuilder`, spinner overlay, `colorControlNormal` tints, totals row + recurring chip colors, `DATA_SCHEMA` note on persistence vs SQL.
 - 2026-04-12: Bills-days calendar weekday header text now uses `mountain_primary` instead of platform holo green.
 - 2026-04-12: Full control theme pass: `btnAddTransaction` tint; spinner overlay DayNight (`values-night/colors`, non-Light overlay parent); recurring calendar unselected cell + totals row night colors; `MainActivity` `resolveThemeColor` for chips, monthly grid, bills-day cells, transfer/bills icon filters (`colorControlNormal` when inactive).
+- 2026-04-12: Custom top bar DayNight: `values-night` `mountain_top_bar_fill` / `mountain_top_bar_stroke`; `tvAppTitle` uses `?attr/colorPrimary` (`app_bar_main.xml`).

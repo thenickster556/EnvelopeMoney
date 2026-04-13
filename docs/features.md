@@ -35,7 +35,7 @@
 - The active month is persisted only after the repaired envelope state is ready.
 
 ## Chrome
-- Primary screen uses a **custom outlined top bar** (no ActionBar menu for reset): app title, bills-days setup calendar, and recalculate balances.
+- Primary screen uses a **custom outlined top bar** (no ActionBar menu for reset): app title, bills-days setup calendar, and recalculate balances. Background uses **`mountain_top_bar_fill` / `mountain_top_bar_stroke`** (`bg_top_bar_outline`) with **`values-night`** overrides; title uses **`?attr/colorPrimary`**; bar actions use **`?attr/colorControlNormal`** tints like the rest of the app.
 
 ## UI and theming
 - App theme: **`Theme.EnvelopeMoney`** / **`Theme.EnvelopeMoney.NoActionBar`** (`Theme.MaterialComponents.DayNight`) with Mountain palette (`mountain_primary`, teal accents).

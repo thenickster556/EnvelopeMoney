@@ -26,6 +26,10 @@
     {
       "id": "theme-buttons-dropdowns-daynight-2026-04",
       "title": "Theme-aligned ImageButtons, spinner night colors, programmatic chips/calendars"
+    },
+    {
+      "id": "custom-top-bar-daynight-2026-04",
+      "title": "Custom top bar fill/stroke night colors; title colorPrimary"
     }
   ],
   "last_updated": "2026-04-12"
