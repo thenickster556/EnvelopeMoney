@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:orientation="vertical"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -53,19 +54,21 @@
         android:hint="Comment"
         android:inputType="text"/>
 
-    <CheckBox
+    <androidx.appcompat.widget.AppCompatCheckBox
         android:id="@+id/cbIsRecurring"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:text="This is reoccuring" />
+        android:text="This is reoccuring"
+        app:buttonTint="?attr/colorPrimary" />
 
     <TextView
         android:id="@+id/tvRecurringFrequencyLabel"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:text="Recurring Frequency" />
+        android:text="Recurring Frequency"
+        android:textColor="?android:attr/textColorSecondary" />
 
     <LinearLayout
         android:id="@+id/layoutRecurringFrequencyOptions"
@@ -83,7 +86,8 @@
             android:gravity="center"
             android:text="Weekly"
             android:textStyle="bold"
-            android:background="@drawable/recurring_option_unselected"
+            android:textColor="?android:attr/textColorSecondary"
+            android:background="@drawable/recurring_option_unselected_ripple"
             android:clickable="true"
             android:focusable="true" />
 
@@ -96,7 +100,8 @@
             android:gravity="center"
             android:text="Bi-weekly"
             android:textStyle="bold"
-            android:background="@drawable/recurring_option_unselected"
+            android:textColor="?android:attr/textColorSecondary"
+            android:background="@drawable/recurring_option_unselected_ripple"
             android:clickable="true"
             android:focusable="true" />
 
@@ -109,7 +114,8 @@
             android:gravity="center"
             android:text="Monthly"
             android:textStyle="bold"
-            android:background="@drawable/recurring_option_unselected"
+            android:textColor="?android:attr/textColorSecondary"
+            android:background="@drawable/recurring_option_unselected_ripple"
             android:clickable="true"
             android:focusable="true" />
     </LinearLayout>
@@ -119,7 +125,8 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:text="Recurring Days" />
+        android:text="Recurring Days"
+        android:textColor="?android:attr/textColorSecondary" />
 
     <LinearLayout
         android:id="@+id/layoutRecurringWeekdayButtons"
@@ -137,7 +144,8 @@
             android:gravity="center"
             android:text="M"
             android:textStyle="bold"
-            android:background="@drawable/recurring_option_unselected"
+            android:textColor="?android:attr/textColorSecondary"
+            android:background="@drawable/recurring_option_unselected_ripple"
             android:clickable="true"
             android:focusable="true" />
 
@@ -150,7 +158,8 @@
             android:gravity="center"
             android:text="T"
             android:textStyle="bold"
-            android:background="@drawable/recurring_option_unselected"
+            android:textColor="?android:attr/textColorSecondary"
+            android:background="@drawable/recurring_option_unselected_ripple"
             android:clickable="true"
             android:focusable="true" />
 
@@ -163,7 +172,8 @@
             android:gravity="center"
             android:text="W"
             android:textStyle="bold"
-            android:background="@drawable/recurring_option_unselected"
+            android:textColor="?android:attr/textColorSecondary"
+            android:background="@drawable/recurring_option_unselected_ripple"
             android:clickable="true"
             android:focusable="true" />
 
@@ -176,7 +186,8 @@
             android:gravity="center"
             android:text="Th"
             android:textStyle="bold"
-            android:background="@drawable/recurring_option_unselected"
+            android:textColor="?android:attr/textColorSecondary"
+            android:background="@drawable/recurring_option_unselected_ripple"
             android:clickable="true"
             android:focusable="true" />
 
@@ -189,7 +200,8 @@
             android:gravity="center"
             android:text="F"
             android:textStyle="bold"
-            android:background="@drawable/recurring_option_unselected"
+            android:textColor="?android:attr/textColorSecondary"
+            android:background="@drawable/recurring_option_unselected_ripple"
             android:clickable="true"
             android:focusable="true" />
 
@@ -202,33 +214,37 @@
             android:gravity="center"
             android:text="S"
             android:textStyle="bold"
-            android:background="@drawable/recurring_option_unselected"
+            android:textColor="?android:attr/textColorSecondary"
+            android:background="@drawable/recurring_option_unselected_ripple"
             android:clickable="true"
             android:focusable="true" />
     </LinearLayout>
 
-    <TextView
+    <androidx.appcompat.widget.AppCompatTextView
         android:id="@+id/tvRecurringDaysValue"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:minHeight="40dp"
         android:padding="10dp"
-        android:background="@drawable/recurring_option_unselected"
+        android:background="@drawable/recurring_option_unselected_ripple"
         android:text="Select days"
-        android:drawableEnd="@android:drawable/ic_menu_my_calendar"
+        android:textColor="?android:attr/textColorPrimary"
+        app:drawableEndCompat="@drawable/ic_calendar_bills_setup"
+        app:drawableTint="?attr/colorControlNormal"
         android:drawablePadding="8dp"
         android:gravity="center_vertical"
         android:focusable="false"
         android:clickable="true"
         android:importantForAccessibility="yes"
-        android:contentDescription="Open recurring day selector" />
+        android:contentDescription="@string/content_desc_recurring_day_picker" />
 
-    <CheckBox
+    <androidx.appcompat.widget.AppCompatCheckBox
         android:id="@+id/cbIsTransfer"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:text="This is a transfer" />
+        android:text="This is a transfer"
+        app:buttonTint="?attr/colorPrimary" />
 
     <TextView
         android:id="@+id/tvTransferToLabel"

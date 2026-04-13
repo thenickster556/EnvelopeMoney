@@ -9,6 +9,8 @@ import android.util.Log;
 import android.util.TypedValue;
 import android.graphics.PorterDuff;
 import android.graphics.Rect;
+import android.graphics.drawable.Drawable;
+import android.widget.Button;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.TouchDelegate;
@@ -35,6 +37,7 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import androidx.core.content.ContextCompat;
+import androidx.core.graphics.drawable.DrawableCompat;
 
 import com.example.envelopemoney.BillsDayAnchor;
 import com.example.envelopemoney.Envelope;
@@ -601,11 +604,13 @@ public class MainActivity extends AppCompatActivity {
 
         builder.setView(dialogView)
                 .setTitle("New Transaction")
-                .setPositiveButton("Save", null)
-                .setNegativeButton("Cancel", null);
+                .setPositiveButton(android.R.string.ok, null)
+                .setNegativeButton(android.R.string.cancel, null);
 
         AlertDialog dialog = builder.create();
-        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+        dialog.setOnShowListener(ignored -> {
+            applyIconMaterialDialogActions(dialog);
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
             try {
                 String envelopeName = spinnerEnvelope.getSelectedItem().toString();
                 double amount = Double.parseDouble(etAmount.getText().toString());
@@ -659,7 +664,8 @@ public class MainActivity extends AppCompatActivity {
             } catch (NumberFormatException e) {
                 showError("Invalid amount entered!");
             }
-        }));
+        });
+        });
         dialog.show();
     }
     private void updateTransactionHistory() {
@@ -1303,11 +1309,13 @@ public class MainActivity extends AppCompatActivity {
 
         builder.setView(dialogView)
                 .setTitle("Edit Transaction")
-                .setPositiveButton("Save", null)
-                .setNegativeButton("Cancel", null);
+                .setPositiveButton(android.R.string.ok, null)
+                .setNegativeButton(android.R.string.cancel, null);
 
         AlertDialog dialog = builder.create();
-        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+        dialog.setOnShowListener(ignored -> {
+            applyIconMaterialDialogActions(dialog);
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
             try {
                 double newAmount = Double.parseDouble(etAmount.getText().toString());
                 String newComment = etComment.getText().toString();
@@ -1394,7 +1402,8 @@ public class MainActivity extends AppCompatActivity {
             } catch (NumberFormatException e) {
                 showError("Invalid amount entered!");
             }
-        }));
+        });
+        });
 
         dialog.show();
     }
@@ -1562,8 +1571,8 @@ public class MainActivity extends AppCompatActivity {
             boolean selected = selectedDays.contains(entry.getKey());
             TextView button = entry.getValue();
             button.setBackgroundResource(selected
-                    ? R.drawable.recurring_option_selected
-                    : R.drawable.recurring_option_unselected);
+                    ? R.drawable.recurring_option_selected_ripple
+                    : R.drawable.recurring_option_unselected_ripple);
             button.setTextColor(selected ? selectedColor : normalColor);
         }
     }
@@ -1573,14 +1582,14 @@ public class MainActivity extends AppCompatActivity {
                                                         TextView monthly,
                                                         String selectedFrequency) {
         weekly.setBackgroundResource("weekly".equals(selectedFrequency)
-                ? R.drawable.recurring_option_selected
-                : R.drawable.recurring_option_unselected);
+                ? R.drawable.recurring_option_selected_ripple
+                : R.drawable.recurring_option_unselected_ripple);
         biWeekly.setBackgroundResource("bi-weekly".equals(selectedFrequency)
-                ? R.drawable.recurring_option_selected
-                : R.drawable.recurring_option_unselected);
+                ? R.drawable.recurring_option_selected_ripple
+                : R.drawable.recurring_option_unselected_ripple);
         monthly.setBackgroundResource("monthly".equals(selectedFrequency)
-                ? R.drawable.recurring_option_selected
-                : R.drawable.recurring_option_unselected);
+                ? R.drawable.recurring_option_selected_ripple
+                : R.drawable.recurring_option_unselected_ripple);
 
         int selectedColor = ContextCompat.getColor(this, R.color.mountain_primary);
         int normalColor = resolveThemeColor(android.R.attr.textColorSecondary);
@@ -1666,9 +1675,9 @@ public class MainActivity extends AppCompatActivity {
             checked[i] = selectedDays.contains(values.get(i));
         }
 
-        new MaterialAlertDialogBuilder(this)
+        MaterialAlertDialogBuilder dayBuilder = new MaterialAlertDialogBuilder(this)
                 .setTitle("Choose recurring days")
-                .setMultiChoiceItems(labels, checked, (dialog, which, isChecked) -> {
+                .setMultiChoiceItems(labels, checked, (dlg, which, isChecked) -> {
                     Integer value = values.get(which);
                     if (isChecked) {
                         if (!selectedDays.contains(value)) {
@@ -1678,14 +1687,16 @@ public class MainActivity extends AppCompatActivity {
                         selectedDays.remove(value);
                     }
                 })
-                .setPositiveButton("OK", (dialog, which) -> {
+                .setPositiveButton(android.R.string.ok, (dlg, which) -> {
                     Collections.sort(selectedDays);
                     if (onSelectionChanged != null) {
                         onSelectionChanged.run();
                     }
                 })
-                .setNegativeButton("Cancel", null)
-                .show();
+                .setNegativeButton(android.R.string.cancel, null);
+        AlertDialog dayDialog = dayBuilder.create();
+        dayDialog.setOnShowListener(ignored -> applyIconMaterialDialogActions(dayDialog));
+        dayDialog.show();
     }
 
     private void showMonthlyRecurringCalendarDialog(List<Integer> selectedDays, Runnable onSelectionChanged) {
@@ -1840,10 +1851,10 @@ public class MainActivity extends AppCompatActivity {
         root.addView(calendarBody);
         renderCalendar.run();
 
-        new MaterialAlertDialogBuilder(this)
+        MaterialAlertDialogBuilder monthBuilder = new MaterialAlertDialogBuilder(this)
                 .setTitle("Select monthly days")
                 .setView(root)
-                .setPositiveButton("OK", (dialog, which) -> {
+                .setPositiveButton(android.R.string.ok, (dlg, which) -> {
                     selectedDays.clear();
                     selectedDays.addAll(workingSelection);
                     Collections.sort(selectedDays);
@@ -1851,8 +1862,40 @@ public class MainActivity extends AppCompatActivity {
                         onSelectionChanged.run();
                     }
                 })
-                .setNegativeButton("Cancel", null)
-                .show();
+                .setNegativeButton(android.R.string.cancel, null);
+        AlertDialog monthDialog = monthBuilder.create();
+        monthDialog.setOnShowListener(ignored -> applyIconMaterialDialogActions(monthDialog));
+        monthDialog.show();
+    }
+
+    /** Check (primary) and close (neutral) icons on Material alert actions; clears button labels. */
+    private void applyIconMaterialDialogActions(AlertDialog dialog) {
+        if (dialog == null) {
+            return;
+        }
+        Button positive = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+        Button negative = dialog.getButton(AlertDialog.BUTTON_NEGATIVE);
+        int pad = dp(8);
+        Drawable check = ContextCompat.getDrawable(this, R.drawable.ic_dialog_check);
+        Drawable close = ContextCompat.getDrawable(this, R.drawable.ic_dialog_close);
+        if (positive != null && check != null) {
+            Drawable wrap = DrawableCompat.wrap(check.mutate());
+            DrawableCompat.setTint(wrap, ContextCompat.getColor(this, R.color.mountain_primary));
+            positive.setText("");
+            positive.setContentDescription(getString(R.string.content_desc_dialog_save));
+            positive.setCompoundDrawablesRelativeWithIntrinsicBounds(wrap, null, null, null);
+            positive.setCompoundDrawablePadding(0);
+            positive.setPadding(pad, positive.getPaddingTop(), pad, positive.getPaddingBottom());
+        }
+        if (negative != null && close != null) {
+            Drawable wrap = DrawableCompat.wrap(close.mutate());
+            DrawableCompat.setTint(wrap, resolveThemeColor(androidx.appcompat.R.attr.colorControlNormal));
+            negative.setText("");
+            negative.setContentDescription(getString(R.string.content_desc_dialog_cancel));
+            negative.setCompoundDrawablesRelativeWithIntrinsicBounds(wrap, null, null, null);
+            negative.setCompoundDrawablePadding(0);
+            negative.setPadding(pad, negative.getPaddingTop(), pad, negative.getPaddingBottom());
+        }
     }
 
     private int resolveThemeColor(int attrId) {

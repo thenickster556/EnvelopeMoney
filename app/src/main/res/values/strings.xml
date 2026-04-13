@@ -33,6 +33,9 @@
 
     <string name="content_desc_bills_days_setup">Choose which days of the month are bills days</string>
     <string name="content_desc_bills_period_filter">Filter from last bills day through today</string>
+    <string name="content_desc_dialog_save">Save</string>
+    <string name="content_desc_dialog_cancel">Cancel</string>
+    <string name="content_desc_recurring_day_picker">Open monthly day calendar</string>
     <string name="content_desc_recalculate_balances">Recalculate pond balances from transactions</string>
     <string name="content_desc_collapse_ponds">Collapse ponds</string>
     <string name="content_desc_add_pond">Add pond</string>

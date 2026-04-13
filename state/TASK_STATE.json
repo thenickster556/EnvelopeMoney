@@ -34,6 +34,10 @@
     {
       "id": "bills-period-filter-start-anchor-end-today-2026-04",
       "title": "Bills-period filter: start = anchor, end = today; docs and strings"
+    },
+    {
+      "id": "recurring-dialog-theme-icon-actions-2026-04",
+      "title": "Transaction dialogs: recurring theme chips, check/X actions, API 21 ripple fallbacks"
     }
   ],
   "last_updated": "2026-04-13"

@@ -27,6 +27,7 @@
 - Recurring transactions support weekly, bi-weekly, and monthly patterns.
 - Weekly/bi-weekly use weekday toggles.
 - Monthly uses a day-picker calendar.
+- In **add/edit transaction** dialogs, recurring controls use **ripple chip backgrounds** (API 21+), **`AppCompatCheckBox`** with **`colorPrimary`** tint, **`AppCompatTextView`** monthly row with **tinted calendar** icon, and **check / close** icon actions (themed) instead of “Save”/“Cancel” text on the dialog and on nested recurring day pickers.
 
 ## Month Rollover
 - On a new month, the app sanitizes persisted state before switching months.
@@ -41,6 +42,6 @@
 - App theme: **`Theme.EnvelopeMoney`** / **`Theme.EnvelopeMoney.NoActionBar`** (`Theme.MaterialComponents.DayNight`) with Mountain palette (`mountain_primary`, teal accents).
 - **ImageButtons** use `?attr/selectableItemBackgroundBorderless` and `?attr/colorControlNormal` tint where icons are platform vectors.
 - **Spinners** use `ThemeOverlay.MountainMoney.Spinner` (Material overlay + `spinner_popup_*` / night `values-night/colors`) so dropdown surfaces follow DayNight.
-- **Alerts** from `MainActivity` use **`MaterialAlertDialogBuilder`** so action buttons follow Material styling.
+- **Alerts** from `MainActivity` use **`MaterialAlertDialogBuilder`**; add/edit transaction and recurring sub-dialogs use **`applyIconMaterialDialogActions`** (check = confirm, X = dismiss) with **`mountain_primary`** / **`colorControlNormal`** tints.
 - Recurring day chips use drawables tied to **`recurring_chip_*`** colors, not stock holo greens.
 - Programmatic controls in **`MainActivity`** (recurring frequency/weekday chips, monthly day grid, bills-days grid, transfer/bills toggles) resolve **`textColorPrimary` / `textColorSecondary` / `colorControlNormal`** and **`mountain_primary`** instead of platform black/gray/teal fills.

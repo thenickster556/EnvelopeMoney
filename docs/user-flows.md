@@ -9,8 +9,8 @@
 6. Pond and transaction lists render for the active month.
 
 ## Add Transaction Flow
-1. User opens the transaction dialog.
-2. User selects pond, amount, date, comment, and optional recurring/transfer settings.
+1. User opens the transaction dialog (check icon confirms, close icon cancels).
+2. User selects pond, amount, date, comment, and optional recurring/transfer settings (recurring chips, weekday toggles, monthly calendar row follow Mountain / DayNight theme).
 3. Validation runs without dismissing the dialog on errors.
 4. Transaction is persisted and visible in history.
 
