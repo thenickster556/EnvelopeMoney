@@ -32,7 +32,7 @@
     <string name="dialog_recalculate_positive">Recalculate</string>
 
     <string name="content_desc_bills_days_setup">Choose which days of the month are bills days</string>
-    <string name="content_desc_bills_period_filter">Show transactions through last bills day</string>
+    <string name="content_desc_bills_period_filter">Filter from last bills day through today</string>
     <string name="content_desc_recalculate_balances">Recalculate pond balances from transactions</string>
     <string name="content_desc_collapse_ponds">Collapse ponds</string>
     <string name="content_desc_add_pond">Add pond</string>

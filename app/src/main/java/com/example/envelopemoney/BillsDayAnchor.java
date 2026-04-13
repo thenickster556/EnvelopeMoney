@@ -8,6 +8,7 @@ import java.util.TreeSet;
 /**
  * Resolves the latest bills day-of-month on or before "today", walking backward month-by-month
  * when the current month has no bills day ≤ today (e.g. bills on 10 and 25, today Apr 5 → Mar 25).
+ * Used as the transaction filter start date when the bills-period filter is enabled (end date is today).
  */
 public final class BillsDayAnchor {
 

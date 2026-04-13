@@ -14,7 +14,7 @@
 
 ## Bills days
 - Users configure recurring **days of each month** (1–31) from the **calendar icon on the custom top bar** (not a full month calendar).
-- A separate **bills-period filter** icon next to the transfers toggle snaps the **end date** of the transaction filter to the latest configured bills day on or before today (walking to prior months if needed). Toggling off restores the previously saved date range.
+- A separate **bills-period filter** icon next to the transfers toggle sets the **start date** to the latest configured bills day on or before today (walking to prior months if needed) and sets the **end date** to **today**. Toggling off restores the previously saved date range.
 - Changing the visible month clears the bills-period filter.
 
 ## Transfers

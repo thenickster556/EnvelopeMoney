@@ -56,3 +56,4 @@ BillsDayAnchorTest
 - 2026-04-12: Bills-days calendar weekday header text now uses `mountain_primary` instead of platform holo green.
 - 2026-04-12: Full control theme pass: `btnAddTransaction` tint; spinner overlay DayNight (`values-night/colors`, non-Light overlay parent); recurring calendar unselected cell + totals row night colors; `MainActivity` `resolveThemeColor` for chips, monthly grid, bills-day cells, transfer/bills icon filters (`colorControlNormal` when inactive).
 - 2026-04-12: Custom top bar DayNight: `values-night` `mountain_top_bar_fill` / `mountain_top_bar_stroke`; `tvAppTitle` uses `?attr/colorPrimary` (`app_bar_main.xml`).
+- 2026-04-13: Bills-period filter behavior: **start** date snaps to `BillsDayAnchor`, **end** date is **today** (was incorrectly setting end to anchor). `applyPersistedBillsFilterState` matches; prefs still store pre-filter range for toggle-off restore. Docs, `strings.xml`, `PrefManager` javadoc updated.

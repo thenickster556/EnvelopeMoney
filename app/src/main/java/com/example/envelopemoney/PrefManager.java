@@ -148,6 +148,7 @@ public class PrefManager {
                 .getBoolean(BILLS_FILTER_ACTIVE_KEY, false);
     }
 
+    /** Persists the user's start/end labels before enabling the bills-period filter; restored when the filter is turned off. */
     public static void saveBillsFilterSavedRange(Context context, String startDisplay, String endDisplay) {
         SharedPreferences.Editor editor = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit();
         editor.putString(BILLS_FILTER_SAVED_START_KEY, startDisplay);

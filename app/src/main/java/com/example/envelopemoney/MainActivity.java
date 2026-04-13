@@ -2307,6 +2307,16 @@ public class MainActivity extends AppCompatActivity {
         return String.format(Locale.getDefault(), "%s %s: $%.2f", option.labelPrefix, option.envelopeName, option.total);
     }
 
+    /** Start of local today (00:00) for consistent range end when the bills-period filter is on. */
+    private static Date startOfToday() {
+        Calendar c = Calendar.getInstance();
+        c.set(Calendar.HOUR_OF_DAY, 0);
+        c.set(Calendar.MINUTE, 0);
+        c.set(Calendar.SECOND, 0);
+        c.set(Calendar.MILLISECOND, 0);
+        return c.getTime();
+    }
+
     private void clearBillsPeriodFilterState() {
         billsPeriodFilterActive = false;
         PrefManager.setBillsFilterActive(this, false);
@@ -2326,14 +2336,13 @@ public class MainActivity extends AppCompatActivity {
         TextView tvStart = findViewById(R.id.tvStartDate);
         TextView tvEnd = findViewById(R.id.tvEndDate);
         SimpleDateFormat sdf = new SimpleDateFormat("MMM d, yyyy", Locale.getDefault());
-        String savedStart = PrefManager.getBillsFilterSavedStartDisplay(this);
-        if (savedStart != null) {
-            tvStart.setText(savedStart);
-        }
         Date anchor = BillsDayAnchor.computeAnchorDate(Calendar.getInstance(), days);
-        if (anchor != null) {
-            tvEnd.setText(sdf.format(anchor));
+        if (anchor == null) {
+            PrefManager.setBillsFilterActive(this, false);
+            return;
         }
+        tvStart.setText(sdf.format(anchor));
+        tvEnd.setText(sdf.format(startOfToday()));
         billsPeriodFilterActive = true;
         updateBillsPeriodFilterButton(findViewById(R.id.btnBillsPeriodFilter));
     }
@@ -2354,7 +2363,8 @@ public class MainActivity extends AppCompatActivity {
                 Toast.makeText(this, R.string.toast_no_bills_anchor, Toast.LENGTH_SHORT).show();
                 return;
             }
-            tvEnd.setText(sdf.format(anchor));
+            tvStart.setText(sdf.format(anchor));
+            tvEnd.setText(sdf.format(startOfToday()));
             billsPeriodFilterActive = true;
             PrefManager.setBillsFilterActive(this, true);
         } else {

@@ -5,7 +5,7 @@
 2. `MonthRolloverHelper` sanitizes envelope collections, numeric fields, and legacy transaction months.
 3. If a new month is required, rollover is applied on a deep copy.
 4. The repaired envelopes and active month are committed once.
-5. If the bills-period filter was left on, start/end date text views are restored from prefs and the end date is aligned to the computed bills anchor.
+5. If the bills-period filter was left on, the start date is set to the computed bills anchor and the end date to today (saved prefs hold the pre-filter range for restore when toggled off).
 6. Pond and transaction lists render for the active month.
 
 ## Add Transaction Flow
@@ -26,7 +26,7 @@
 
 ## Bills period filter
 1. User taps the **filter** icon beside the transfers toggle (disabled or toast if no bills days configured).
-2. App saves the current start/end display strings, sets end date to the anchor date, and persists filter state.
+2. App saves the current start/end display strings, sets **start** to the bills anchor date and **end** to today, and persists filter state.
 3. User taps again to turn off; previous start/end strings are restored.
 
 ## Month Navigation Flow

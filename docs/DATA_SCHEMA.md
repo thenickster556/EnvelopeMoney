@@ -15,8 +15,8 @@ The app persists most business state via SharedPreferences.
   - `last_add_transfer_destination_<sourceEnvelope>`
   - `last_transfer_totals_option`
   - `bills_days_json`: Gson-serialized list of integers (day-of-month 1–31); empty means none configured
-  - `bills_filter_active`: whether the bills-period filter (end date snapped to anchor) is on
-  - `bills_filter_saved_start_display` / `bills_filter_saved_end_display`: `MMM d, yyyy` strings saved when enabling the filter, restored when disabling
+  - `bills_filter_active`: whether the bills-period filter is on (UI start = anchor, end = today)
+  - `bills_filter_saved_start_display` / `bills_filter_saved_end_display`: `MMM d, yyyy` strings for the user's range **before** enabling the filter, restored when disabling
 
 ## Envelope Model
 - `name: String`
