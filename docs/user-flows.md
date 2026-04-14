@@ -34,3 +34,8 @@
 2. Bills-period filter is cleared; date range resets to the month’s first/last day.
 3. App loads the relevant month snapshots and transactions.
 4. Future months are not navigable.
+
+## Recalculate balances (top bar)
+1. User taps **Recalculate balances** on the custom top bar.
+2. For each pond, the app runs **`reset(false)`** (syncs `limit`/`remaining` to the stored monthly budget and clears manual remainder override) then **`calculateRemaining`** for the active month so remaining matches transactions.
+3. State is saved and lists refresh. This is **Option A** behavior: it does not implement carry in this step; it realigns math to the user’s budget and current activity.

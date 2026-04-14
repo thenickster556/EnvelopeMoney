@@ -303,20 +303,20 @@ public class Envelope {
     }
 
     /**
-     * Resets for a new month.
-     * If carryOver==true, new limit = base allowance + leftover,
-     * and remaining = that new limit.
-     * Otherwise both reset to base allowance only.
+     * Resets availability for a new month. Does not change the user-defined monthly
+     * budget ({@link #limit} / {@link #originalLimit}) when {@code carryOver} is true — carry is applied
+     * to {@link #remaining} only, matching {@link MonthRolloverHelper} semantics.
+     * When {@code carryOver} is false, syncs {@code limit} to {@code originalLimit} and clears manual state.
      */
     public void reset(boolean carryOver) {
-        double prevRemaining = this.remaining;        // e.g. $200
+        double prevRemaining = this.remaining;
         if (carryOver) {
-            // new limit should be base allowance + leftover
-            this.limit     = this.originalLimit + prevRemaining; // 100 + 200 = 300
-            this.remaining = this.limit;                          // start month at full
+            double base = Double.isFinite(originalLimit) ? originalLimit : 0d;
+            double prev = Double.isFinite(prevRemaining) ? prevRemaining : 0d;
+            this.remaining = base + prev;
         } else {
-            this.limit     = this.originalLimit;  // back to 100
-            this.remaining = this.limit;          // remaining = 100
+            this.limit = this.originalLimit;
+            this.remaining = this.limit;
         }
         this.manualRemaining = null;
     }
@@ -339,8 +339,12 @@ public class Envelope {
             String previousMonth = getPreviousMonth(month);
             MonthData previousData = monthlyData.get(previousMonth);
             if (carryOver && previousData != null) {
-                double newLimit = previousData.limit + previousData.remaining;
-                monthlyData.put(month, new MonthData(newLimit, newLimit));
+                // Match MonthRolloverHelper: effective pool = base monthly budget + unused from prior month,
+                // not previousData.limit + remaining (avoids double-count when prior month limit included carry).
+                double base = Double.isFinite(originalLimit) ? originalLimit : 0d;
+                double prevLeft = Double.isFinite(previousData.remaining) ? previousData.remaining : 0d;
+                double effectivePool = base + prevLeft;
+                monthlyData.put(month, new MonthData(effectivePool, effectivePool));
             } else {
                 monthlyData.put(month, new MonthData(originalLimit, originalLimit));
             }

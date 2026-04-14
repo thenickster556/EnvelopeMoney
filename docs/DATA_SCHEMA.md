@@ -20,7 +20,7 @@ The app persists most business state via SharedPreferences.
 
 ## Envelope Model
 - `name: String`
-- `limit: double`
+- `limit: double` — **user-defined monthly budget** for the pond (same meaning as `originalLimit` after edits; **not** inflated by month carry-over; carry increases **remaining** and per-month pools instead).
 - `originalLimit: double`
 - `remaining: double`
 - `transactions: List<Transaction>`
@@ -33,7 +33,7 @@ The app persists most business state via SharedPreferences.
 - `accountBalance: Double?` — optional real-world bank slice for this pond (not the budget remainder)
 
 ## MonthData Model
-- `limit: double`
+- `limit: double` — **effective budget ceiling for that calendar month** in snapshots (may equal base + unused from the prior month when carry-over applies); distinct from envelope `limit` above.
 - `remaining: double`
 - `transactions: List<Transaction>`
 

@@ -2,6 +2,7 @@
 
 ## Pond budgeting (user-facing “ponds”; code may still use `Envelope` types)
 - Users create ponds with monthly limits.
+- **Limit** in the pond list is the **monthly budget** the user set; **carry-over adds to Remaining** (available to spend), not to Limit. Per-month snapshots (`MonthData`) may store an effective ceiling that includes carry for that month’s math.
 - Ponds track remaining funds (budget math) and month-specific snapshots.
 - Optional **Account** field per pond: user-entered cash in the bank for that slice, for reconciliation against budget remainder.
 - Ponds can be collapsed in the UI and that preference is persisted.

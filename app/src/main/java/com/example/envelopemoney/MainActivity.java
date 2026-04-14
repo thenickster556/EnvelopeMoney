@@ -995,7 +995,8 @@ public class MainActivity extends AppCompatActivity {
     @RequiresApi(api = Build.VERSION_CODES.N)
     private void performMonthlyReset() {
         for (Envelope envelope : envelopes) {
-            // Recompute remaining = limit – sum(transactions)
+            // Option A: reset(false) syncs limit/remaining to originalLimit and clears manual override;
+            // then calculateRemaining aligns remaining with transactions for the active month.
             envelope.reset(false);
             envelope.calculateRemaining(currentMonth);
         }

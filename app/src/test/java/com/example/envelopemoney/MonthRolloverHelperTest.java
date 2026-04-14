@@ -23,6 +23,8 @@ public class MonthRolloverHelperTest {
         assertEquals("2026-03", result.getActiveMonth());
         assertTrue(result.rolledOver());
         Envelope rolledGas = result.getEnvelopes().get(0);
+        assertEquals(100d, rolledGas.getLimit(), 0.001d);
+        assertEquals(100d, rolledGas.getOriginalLimit(), 0.001d);
         assertEquals(135d, rolledGas.getRemaining(), 0.001d);
         assertEquals(135d, rolledGas.getMonthlyData("2026-03").limit, 0.001d);
     }
@@ -78,5 +80,6 @@ public class MonthRolloverHelperTest {
         assertEquals(first.getEnvelopes().get(0).getMonthlyData("2026-03").limit,
                 second.getEnvelopes().get(0).getMonthlyData("2026-03").limit,
                 0.001d);
+        assertEquals(300d, second.getEnvelopes().get(0).getLimit(), 0.001d);
     }
 }

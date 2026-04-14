@@ -38,7 +38,11 @@
     {
       "id": "recurring-dialog-theme-icon-actions-2026-04",
       "title": "Transaction dialogs: recurring theme chips, check/X actions, API 21 ripple fallbacks"
+    },
+    {
+      "id": "carry-over-limit-invariant-2026-04",
+      "title": "Carry-over: keep Envelope.limit stable; align initializeMonth; fix reset(true); docs/tests"
     }
   ],
-  "last_updated": "2026-04-13"
+  "last_updated": "2026-04-12"
 }
