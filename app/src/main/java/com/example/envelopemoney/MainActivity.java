@@ -747,35 +747,19 @@ public class MainActivity extends AppCompatActivity {
                             incomingTransferTotal += amount;
                         }
 
-                        String summaryKey;
-                        String labelPrefix;
-                        String relatedEnvelopeName;
+                        // Header transfer dropdown: only destinations (amount transferred to each pond), not source-side "From" rows.
                         if (isSourceSide) {
-                            summaryKey = "to:" + transfer.getToEnvelope();
-                            labelPrefix = "To";
-                            relatedEnvelopeName = transfer.getToEnvelope();
-                        } else {
-                            String ownerName = ownerEnvelope != null ? ownerEnvelope.getName() : transfer.getToEnvelope();
-                            summaryKey = "from:" + ownerName;
-                            labelPrefix = "From";
-                            relatedEnvelopeName = ownerName;
-                        }
-
-                        TransferTotalsOption existing = transferTotalsByEnvelope.get(summaryKey);
-                        double running = existing != null ? existing.total : 0d;
-                        if (isSourceSide) {
+                            String summaryKey = "to:" + transfer.getToEnvelope();
+                            String relatedEnvelopeName = transfer.getToEnvelope();
+                            TransferTotalsOption existing = transferTotalsByEnvelope.get(summaryKey);
+                            double running = existing != null ? existing.total : 0d;
                             running += amount;
                             if (destinationSelected) {
                                 running -= amount;
                             }
-                        } else {
-                            running += amount;
-                            if (ownerSelected) {
-                                running -= amount;
-                            }
+                            transferTotalsByEnvelope.put(summaryKey,
+                                    new TransferTotalsOption(summaryKey, "To", relatedEnvelopeName, running));
                         }
-                        transferTotalsByEnvelope.put(summaryKey,
-                                new TransferTotalsOption(summaryKey, labelPrefix, relatedEnvelopeName, running));
                     }
                 } catch (ParseException e) {
                     Log.d("EnvelopeMoney", "Transaction date parse failed", e);
@@ -2272,13 +2256,7 @@ public class MainActivity extends AppCompatActivity {
 
         layoutTransferTotals.setVisibility(View.VISIBLE);
 
-        options.sort((a, b) -> {
-            int prefixCompare = a.labelPrefix.compareToIgnoreCase(b.labelPrefix);
-            if (prefixCompare != 0) {
-                return prefixCompare;
-            }
-            return a.envelopeName.compareToIgnoreCase(b.envelopeName);
-        });
+        options.sort((a, b) -> a.envelopeName.compareToIgnoreCase(b.envelopeName));
 
         if (options.isEmpty()) {
             spinnerTransferTotals.setOnItemSelectedListener(null);

@@ -46,6 +46,10 @@
     {
       "id": "transfer-dest-bills-anchor-2026-04",
       "title": "Exclude source pond from transfer destination list; BillsDayAnchor prior month when single bills day equals today"
+    },
+    {
+      "id": "transfer-totals-to-only-2026-04",
+      "title": "Transaction header transfer spinner: destinations (to) only, not from"
     }
   ],
   "last_updated": "2026-04-14"

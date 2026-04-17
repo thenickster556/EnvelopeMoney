@@ -23,7 +23,7 @@
 - Transfers move money between ponds using linked transactions.
 - Source and destination sides share a transfer ID.
 - Transfer visibility can be toggled in the transactions view.
-- Transfer summaries appear in the transactions header area.
+- With transfers visible, the header **spinner** lists each destination pond and how much was transferred **to** it in the date range (no separate “from” rows).
 
 ## Recurring Transactions
 - Recurring transactions support weekly, bi-weekly, and monthly patterns.

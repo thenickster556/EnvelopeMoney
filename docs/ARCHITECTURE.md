@@ -5,7 +5,7 @@ Mountain Money (package `com.example.envelopemoney`) is a single-activity Androi
 
 ## Core Components
 - `MainActivity`
-  - Owns screen initialization, custom top bar (`app_bar_main` outlined bar: theme-driven title and icon tints; DayNight bar fill/stroke via color resources), pond list, transactions list, month navigation, transfer summaries, dialogs, bills-period filter, and rollover triggering.
+  - Owns screen initialization, custom top bar (`app_bar_main` outlined bar: theme-driven title and icon tints; DayNight bar fill/stroke via color resources), pond list, transactions list, month navigation, transfer totals spinner (destination ponds only), dialogs, bills-period filter, and rollover triggering.
   - Uses **`MaterialAlertDialogBuilder`** for modal dialogs; add/edit transaction dialogs call **`applyIconMaterialDialogActions`** for icon-only confirm/dismiss actions on the dialog and recurring sub-pickers.
 - `MonthRolloverHelper`
   - Sanitizes persisted envelope state, repairs legacy month data, and computes a safe launch month on a deep copy before the activity adopts it. On rollover, **carry increases the available pool** (`remaining`, baselines, `MonthData`) while **`Envelope.limit` stays the user’s base monthly budget** (`originalLimit`).

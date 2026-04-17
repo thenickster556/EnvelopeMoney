@@ -18,7 +18,7 @@
 1. User enables transfer mode in the transaction dialog.
 2. User selects the destination pond from ponds other than the source (the source never appears in **Transfer To**).
 3. App persists linked source/destination transactions.
-4. Transfer rows and totals appear in the transactions view when transfer visibility is enabled.
+4. Transfer rows and totals appear in the transactions view when transfer visibility is enabled. The transfer summary **spinner** shows amounts **to** each destination pond only.
 
 ## Bills days configuration
 1. User taps the **calendar** on the custom top bar.
