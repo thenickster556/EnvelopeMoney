@@ -15,10 +15,11 @@
 
 ## Bills days
 - Users configure recurring **days of each month** (1–31) from the **calendar icon on the custom top bar** (not a full month calendar).
-- A separate **bills-period filter** icon next to the transfers toggle sets the **start date** to the latest configured bills day on or before today (walking to prior months if needed) and sets the **end date** to **today**. Toggling off restores the previously saved date range.
+- A separate **bills-period filter** icon next to the transfers toggle sets the **start date** to the latest configured bills day on or before today (walking to prior months if needed) and sets the **end date** to **today**. If only **one** bills day is configured and **today is that day**, the start date is that day in the **previous** month (so the range is a full period through today, not a same-day span). Toggling off restores the previously saved date range.
 - Changing the visible month clears the bills-period filter.
 
 ## Transfers
+- The **Transfer To** dropdown lists every pond **except** the source pond (a transfer cannot target the same pond).
 - Transfers move money between ponds using linked transactions.
 - Source and destination sides share a transfer ID.
 - Transfer visibility can be toggled in the transactions view.

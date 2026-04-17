@@ -8,6 +8,9 @@ import java.util.TreeSet;
 /**
  * Resolves the latest bills day-of-month on or before "today", walking backward month-by-month
  * when the current month has no bills day ≤ today (e.g. bills on 10 and 25, today Apr 5 → Mar 25).
+ * Special case: if exactly one bills day is configured and it equals today's calendar day, the
+ * anchor is that day in the previous month (not today), so the range is a full period up to today
+ * instead of a zero-width span.
  * Used as the transaction filter start date when the bills-period filter is enabled (end date is today).
  */
 public final class BillsDayAnchor {
@@ -39,6 +42,18 @@ public final class BillsDayAnchor {
         probe.set(Calendar.MINUTE, 0);
         probe.set(Calendar.SECOND, 0);
         probe.set(Calendar.MILLISECOND, 0);
+
+        if (set.size() == 1) {
+            int onlyDay = set.first();
+            int todayDom = probe.get(Calendar.DAY_OF_MONTH);
+            if (onlyDay == todayDom) {
+                Calendar anchor = (Calendar) probe.clone();
+                anchor.add(Calendar.MONTH, -1);
+                int maxInPrev = anchor.getActualMaximum(Calendar.DAY_OF_MONTH);
+                anchor.set(Calendar.DAY_OF_MONTH, Math.min(onlyDay, maxInPrev));
+                return anchor.getTime();
+            }
+        }
 
         for (int monthsBack = 0; monthsBack <= 12; monthsBack++) {
             Calendar monthCal = (Calendar) probe.clone();

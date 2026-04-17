@@ -16,7 +16,7 @@
 
 ## Transfer Flow
 1. User enables transfer mode in the transaction dialog.
-2. User selects the destination pond.
+2. User selects the destination pond from ponds other than the source (the source never appears in **Transfer To**).
 3. App persists linked source/destination transactions.
 4. Transfer rows and totals appear in the transactions view when transfer visibility is enabled.
 
@@ -26,7 +26,7 @@
 
 ## Bills period filter
 1. User taps the **filter** icon beside the transfers toggle (disabled or toast if no bills days configured).
-2. App saves the current start/end display strings, sets **start** to the bills anchor date and **end** to today, and persists filter state.
+2. App saves the current start/end display strings, sets **start** to the bills anchor date and **end** to today, and persists filter state. If there is a single configured bills day and today matches it, **start** is that calendar day in the **prior** month (not today).
 3. User taps again to turn off; previous start/end strings are restored.
 
 ## Month Navigation Flow

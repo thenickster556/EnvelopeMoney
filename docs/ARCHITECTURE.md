@@ -10,7 +10,9 @@ Mountain Money (package `com.example.envelopemoney`) is a single-activity Androi
 - `MonthRolloverHelper`
   - Sanitizes persisted envelope state, repairs legacy month data, and computes a safe launch month on a deep copy before the activity adopts it. On rollover, **carry increases the available pool** (`remaining`, baselines, `MonthData`) while **`Envelope.limit` stays the user’s base monthly budget** (`originalLimit`).
 - `BillsDayAnchor`
-  - Pure helper resolving the latest bills day-of-month on or before “today,” walking backward by month when needed (unit-tested).
+  - Pure helper resolving the latest bills day-of-month on or before “today,” walking backward by month when needed (unit-tested). If exactly one bills day is configured and it equals today’s calendar day, the anchor is that day in the **previous** month so the filter range spans through today.
+- `TransferDestinationList`
+  - Builds the transfer destination pond name list (all ponds except the source) for add/edit transfer UI.
 - `Envelope`
   - Stores pond balances, optional `accountBalance`, month snapshots, transaction membership, transfer definitions, and manual override state.
 - `Transaction`

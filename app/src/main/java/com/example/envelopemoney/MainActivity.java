@@ -1484,12 +1484,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void populateTransferDestinationSpinner(Spinner spinner, String sourceEnvelopeName, @Nullable String selectedDestination) {
-        List<String> destinations = new ArrayList<>();
-        for (Envelope env : envelopes) {
-            if (!Objects.equals(env.getName(), sourceEnvelopeName)) {
-                destinations.add(env.getName());
-            }
-        }
+        List<String> destinations = TransferDestinationList.excludingSource(envelopes, sourceEnvelopeName);
         ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, destinations);
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         spinner.setAdapter(adapter);

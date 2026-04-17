@@ -42,7 +42,11 @@
     {
       "id": "carry-over-limit-invariant-2026-04",
       "title": "Carry-over: keep Envelope.limit stable; align initializeMonth; fix reset(true); docs/tests"
+    },
+    {
+      "id": "transfer-dest-bills-anchor-2026-04",
+      "title": "Exclude source pond from transfer destination list; BillsDayAnchor prior month when single bills day equals today"
     }
   ],
-  "last_updated": "2026-04-12"
+  "last_updated": "2026-04-14"
 }
