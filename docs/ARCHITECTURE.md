@@ -21,6 +21,10 @@ Mountain Money (package `com.example.envelopemoney`) is a single-activity Androi
   - Stores the current persisted month, normalizes month values, and determines whether rollover is required.
 - `PrefManager`
   - Serializes/deserializes envelope state, UI preference state, bills days JSON, and bills-filter state.
+- Receipt capture (`com.example.envelopemoney.receipt`)
+  - `ReceiptCaptureActivity` — CameraX preview, capture mode, shutter; persists JPEG via `MediaStoreReceiptSaver` (`Pictures/Mountain Money`).
+  - `ReceiptOcrPipeline` — preprocess bitmap, `OcrEngine` (default: on-device Latin text recognition; slot for PaddleOCR), `ReceiptFieldParser` heuristics.
+  - Wired from `MainActivity` new-transaction dialog (`ActivityResultContracts`).
 
 ## State Boundaries
 - UI state lives primarily in `MainActivity`.

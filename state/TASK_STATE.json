@@ -50,7 +50,11 @@
     {
       "id": "transfer-totals-to-only-2026-04",
       "title": "Transaction header transfer spinner: destinations (to) only, not from"
+    },
+    {
+      "id": "receipt-ocr-mm-2026-04",
+      "title": "Receipt capture: CameraX, gallery, OCR slot, parser, MediaStore Mountain Money, MainActivity"
     }
   ],
-  "last_updated": "2026-04-14"
+  "last_updated": "2026-04-15"
 }

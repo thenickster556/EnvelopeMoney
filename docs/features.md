@@ -10,6 +10,7 @@
 
 ## Transactions
 - Users can add, edit, and delete transactions.
+- **Receipt capture:** New transaction dialog includes **Camera scan** (CameraX) and **From gallery**. On-device OCR extracts amount, optional date, and merchant name for the comment; **pond is always chosen manually**. Camera saves a JPEG to the device gallery under **Pictures/Mountain Money**. See [receipt-ocr.md](receipt-ocr.md).
 - Transactions belong to ponds and contribute to month totals.
 - Transactions can be filtered by selected ponds and date range.
 

@@ -11,8 +11,9 @@
 ## Add Transaction Flow
 1. User opens the transaction dialog (check icon confirms, close icon cancels).
 2. User selects pond, amount, date, comment, and optional recurring/transfer settings (recurring chips, weekday toggles, monthly calendar row follow Mountain / DayNight theme).
-3. Validation runs without dismissing the dialog on errors.
-4. Transaction is persisted and visible in history.
+3. Optionally: user taps **Camera scan** (capture mode chips on scan screen; image saved to **Pictures/Mountain Money**) or **From gallery**; app runs on-device OCR and prefills amount, date when found, and comment with **merchant name only**; user corrects fields and picks pond before save.
+4. Validation runs without dismissing the dialog on errors.
+5. Transaction is persisted and visible in history (optional `receiptImageUri` stored when applicable).
 
 ## Transfer Flow
 1. User enables transfer mode in the transaction dialog.

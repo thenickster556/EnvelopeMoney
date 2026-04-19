@@ -48,4 +48,19 @@
     <string name="toast_no_bills_anchor">Could not find a bills day on or before today.</string>
     <string name="toast_balances_recalculated">Balances recalculated successfully.</string>
     <string name="save">Save</string>
+
+    <string name="receipt_scan_title">Scan receipt</string>
+    <string name="receipt_capture_button">Capture</string>
+    <string name="receipt_mode_hint">Mode helps pick the total (optional).</string>
+    <string name="receipt_mode_auto">Auto</string>
+    <string name="receipt_mode_receipt">Receipt</string>
+    <string name="receipt_mode_restaurant">Eat out</string>
+    <string name="receipt_mode_gas">Gas</string>
+    <string name="receipt_gallery_save_hint">Saved to Gallery: Pictures/Mountain Money</string>
+    <string name="receipt_scan_camera">Camera scan</string>
+    <string name="receipt_scan_gallery">From gallery</string>
+    <string name="receipt_ocr_reading">Reading receipt…</string>
+    <string name="receipt_ocr_failed">Could not read receipt. Try again or enter manually.</string>
+    <string name="receipt_permission_camera">Camera permission is needed to scan.</string>
+    <string name="receipt_permission_storage">Storage permission is needed to save scans on this Android version.</string>
 </resources>

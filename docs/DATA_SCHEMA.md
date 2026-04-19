@@ -41,7 +41,7 @@ The app persists most business state via SharedPreferences.
 - `envelopeName: String`
 - `amount: double`
 - `date: String`
-- `comment: String`
+- `comment: String` — for receipt capture, OCR may prefill with **merchant name only** (amount stays in `amount`).
 - `month: String`
 - `transferId: String?`
 - `recurring: boolean`
@@ -49,6 +49,7 @@ The app persists most business state via SharedPreferences.
 - `recurringDays: List<Integer>`
 - `recurringSeriesId: String?`
 - `recurringTemplate: boolean`
+- `receiptImageUri: String?` — optional `content://` URI for a JPEG saved under **Pictures/Mountain Money** (camera path) or the picked gallery URI.
 
 ## TransferData Model
 - `id: String`

@@ -2,7 +2,11 @@ package com.example.envelopemoney;
 
 import android.app.DatePickerDialog;
 import android.content.Context;
+import android.content.Intent;
 import android.content.res.Resources;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
@@ -30,11 +34,19 @@ import android.widget.ListView;
 import android.widget.Spinner;
 import android.widget.TextView;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.example.envelopemoney.receipt.PaddleOcrAdapter;
+import com.example.envelopemoney.receipt.ReceiptCaptureActivity;
+import com.example.envelopemoney.receipt.ReceiptCaptureMode;
+import com.example.envelopemoney.receipt.ReceiptDraft;
+import com.example.envelopemoney.receipt.ReceiptOcrPipeline;
+import com.google.android.material.button.MaterialButton;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.drawable.DrawableCompat;
@@ -63,6 +75,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.Executors;
 
 public class MainActivity extends AppCompatActivity {
     private ListView listViewEnvelopes;
@@ -86,6 +99,10 @@ public class MainActivity extends AppCompatActivity {
     private boolean billsPeriodFilterActive = false;
     private TextView tvPondTotalsFooter;
 
+    @Nullable
+    private View newTxnDialogRoot;
+    private ActivityResultLauncher<Intent> receiptCaptureLauncher;
+    private ActivityResultLauncher<String> galleryPickLauncher;
 
     private static class TransferTotalsOption {
         final String optionKey;
@@ -103,6 +120,33 @@ public class MainActivity extends AppCompatActivity {
     @RequiresApi(api = Build.VERSION_CODES.N)
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        receiptCaptureLauncher = registerForActivityResult(
+                new ActivityResultContracts.StartActivityForResult(),
+                result -> {
+                    if (result.getResultCode() != RESULT_OK || result.getData() == null) {
+                        return;
+                    }
+                    Intent data = result.getData();
+                    String uriStr = data.getStringExtra(ReceiptCaptureActivity.EXTRA_SAVED_IMAGE_URI);
+                    String modeName = data.getStringExtra(ReceiptCaptureActivity.EXTRA_CAPTURE_MODE);
+                    ReceiptCaptureMode mode = ReceiptCaptureMode.AUTO;
+                    if (modeName != null) {
+                        try {
+                            mode = ReceiptCaptureMode.valueOf(modeName);
+                        } catch (IllegalArgumentException ignored) {
+                        }
+                    }
+                    if (uriStr != null && newTxnDialogRoot != null) {
+                        runReceiptOcr(Uri.parse(uriStr), mode);
+                    }
+                });
+        galleryPickLauncher = registerForActivityResult(
+                new ActivityResultContracts.GetContent(),
+                uri -> {
+                    if (uri != null && newTxnDialogRoot != null) {
+                        runReceiptOcr(uri, ReceiptCaptureMode.AUTO);
+                    }
+                });
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
@@ -442,6 +486,7 @@ public class MainActivity extends AppCompatActivity {
     private void showNewTransactionDialog() {
         MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(this);
         View dialogView = getLayoutInflater().inflate(R.layout.dialog_new_transaction, null);
+        newTxnDialogRoot = dialogView;
 
         Spinner spinnerEnvelope = dialogView.findViewById(R.id.spinnerEditEnvelope);
         EditText etDate = dialogView.findViewById(R.id.etEditTransactionDate);
@@ -602,12 +647,25 @@ public class MainActivity extends AppCompatActivity {
                 setTransferControlsVisibility(isChecked, tvTransferToLabel, spinnerTransferDestination));
         setTransferControlsVisibility(false, tvTransferToLabel, spinnerTransferDestination);
 
+        MaterialButton btnReceiptCamera = dialogView.findViewById(R.id.btnReceiptCamera);
+        MaterialButton btnReceiptGallery = dialogView.findViewById(R.id.btnReceiptGallery);
+        btnReceiptCamera.setOnClickListener(v -> {
+            Intent intent = new Intent(MainActivity.this, ReceiptCaptureActivity.class);
+            receiptCaptureLauncher.launch(intent);
+        });
+        btnReceiptGallery.setOnClickListener(v -> galleryPickLauncher.launch("image/*"));
+
         builder.setView(dialogView)
                 .setTitle("New Transaction")
                 .setPositiveButton(android.R.string.ok, null)
                 .setNegativeButton(android.R.string.cancel, null);
 
         AlertDialog dialog = builder.create();
+        dialog.setOnDismissListener(d -> {
+            if (newTxnDialogRoot == dialogView) {
+                newTxnDialogRoot = null;
+            }
+        });
         dialog.setOnShowListener(ignored -> {
             applyIconMaterialDialogActions(dialog);
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
@@ -618,6 +676,10 @@ public class MainActivity extends AppCompatActivity {
                 String date = etDate.getText().toString();
 
                 Transaction newTransaction = new Transaction(envelopeName, amount, date, comment);
+                Object uriTag = dialogView.getTag(R.id.tag_receipt_image_uri);
+                if (uriTag instanceof String) {
+                    newTransaction.setReceiptImageUri((String) uriTag);
+                }
                 if (cbIsRecurring.isChecked()) {
                     if (selectedRecurringDays.isEmpty()) {
                         showError("Recurring requires at least one selected day");
@@ -668,6 +730,83 @@ public class MainActivity extends AppCompatActivity {
         });
         dialog.show();
     }
+
+    private void runReceiptOcr(Uri imageUri, ReceiptCaptureMode mode) {
+        if (newTxnDialogRoot == null || imageUri == null) {
+            return;
+        }
+        newTxnDialogRoot.setTag(R.id.tag_receipt_image_uri, imageUri.toString());
+        final TextView status = newTxnDialogRoot.findViewById(R.id.tvReceiptOcrStatus);
+        if (status != null) {
+            status.setVisibility(View.VISIBLE);
+            status.setText(R.string.receipt_ocr_reading);
+        }
+        Executors.newSingleThreadExecutor().execute(() -> {
+            Bitmap bmp;
+            try (java.io.InputStream is = getContentResolver().openInputStream(imageUri)) {
+                bmp = is != null ? BitmapFactory.decodeStream(is) : null;
+            } catch (java.io.IOException e) {
+                Log.e("EnvelopeMoney", "receipt decode", e);
+                bmp = null;
+            }
+            if (bmp == null) {
+                runOnUiThread(() -> {
+                    if (status != null) {
+                        status.setText(R.string.receipt_ocr_failed);
+                    }
+                    Toast.makeText(MainActivity.this, R.string.receipt_ocr_failed, Toast.LENGTH_LONG).show();
+                });
+                return;
+            }
+            final Bitmap bitmap = bmp;
+            ReceiptOcrPipeline pipeline = new ReceiptOcrPipeline(PaddleOcrAdapter.createDefaultEngine());
+            pipeline.runAsync(this, bitmap, mode, new ReceiptOcrPipeline.PipelineCallback() {
+                @Override
+                public void onResult(ReceiptDraft draft) {
+                    bitmap.recycle();
+                    runOnUiThread(() -> applyReceiptDraft(draft, status));
+                }
+
+                @Override
+                public void onError(Throwable t) {
+                    bitmap.recycle();
+                    runOnUiThread(() -> {
+                        if (status != null) {
+                            status.setText(R.string.receipt_ocr_failed);
+                        }
+                        Toast.makeText(MainActivity.this, R.string.receipt_ocr_failed, Toast.LENGTH_LONG).show();
+                    });
+                }
+            });
+        });
+    }
+
+    private void applyReceiptDraft(ReceiptDraft draft, TextView status) {
+        if (newTxnDialogRoot == null || draft == null) {
+            return;
+        }
+        EditText etAmount = newTxnDialogRoot.findViewById(R.id.etEditTransactionAmount);
+        EditText etComment = newTxnDialogRoot.findViewById(R.id.etEditTransactionComment);
+        EditText etDate = newTxnDialogRoot.findViewById(R.id.etEditTransactionDate);
+        if (draft.totalAmount != null && etAmount != null) {
+            etAmount.setText(String.format(Locale.getDefault(), "%.2f", draft.totalAmount));
+        }
+        if (draft.merchantForComment != null && etComment != null) {
+            etComment.setText(draft.merchantForComment);
+        }
+        if (draft.dateYyyyMmDd != null && etDate != null) {
+            etDate.setText(draft.dateYyyyMmDd);
+        }
+        if (status != null) {
+            if (draft.amountConfidence < 0.45f) {
+                status.setVisibility(View.VISIBLE);
+                status.setText("Check amount — low confidence");
+            } else {
+                status.setVisibility(View.GONE);
+            }
+        }
+    }
+
     private void updateTransactionHistory() {
         ensureRecurringTransactionsForCurrentMonth();
         ensureMirrorTransactionsForExistingTransfers();
