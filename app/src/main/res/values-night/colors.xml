@@ -7,5 +7,6 @@
     <color name="spinner_popup_on_surface">#FFE3E3E3</color>
     <color name="recurring_calendar_cell_unselected_fill">#FF2C2C2C</color>
     <color name="recurring_calendar_cell_stroke">#66FFFFFF</color>
+    <color name="recurring_chip_fill_unselected">#FF2C2C2C</color>
     <color name="totals_row_background">#FF1A2F2A</color>
 </resources>

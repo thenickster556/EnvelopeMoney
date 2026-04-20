@@ -26,6 +26,18 @@
             android:layout_height="wrap_content" />
     </LinearLayout>
 
+    <!-- Receipt preview (when transaction has an image) -->
+    <ImageButton
+        android:id="@+id/btnTransactionReceipt"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_vertical|end"
+        android:visibility="gone"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/content_desc_transaction_receipt"
+        android:src="@drawable/ic_receipt_photo"
+        android:tint="?attr/colorControlNormal" />
+
     <!-- Right side: edit button -->
     <ImageButton
         android:id="@+id/btnTransactionOptions"

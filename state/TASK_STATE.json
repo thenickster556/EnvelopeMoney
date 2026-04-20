@@ -54,7 +54,11 @@
     {
       "id": "receipt-ocr-mm-2026-04",
       "title": "Receipt capture: CameraX, gallery, OCR slot, parser, MediaStore Mountain Money, MainActivity"
+    },
+    {
+      "id": "receipt-preview-ux-2026-04",
+      "title": "Receipt preview/remove/list row; edit dialog capture; recurring chip DayNight contrast; ReceiptRowUiTest"
     }
   ],
-  "last_updated": "2026-04-15"
+  "last_updated": "2026-04-19"
 }

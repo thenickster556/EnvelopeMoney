@@ -11,9 +11,18 @@
 ## Add Transaction Flow
 1. User opens the transaction dialog (check icon confirms, close icon cancels).
 2. User selects pond, amount, date, comment, and optional recurring/transfer settings (recurring chips, weekday toggles, monthly calendar row follow Mountain / DayNight theme).
-3. Optionally: user taps **Camera scan** (capture mode chips on scan screen; image saved to **Pictures/Mountain Money**) or **From gallery**; app runs on-device OCR and prefills amount, date when found, and comment with **merchant name only**; user corrects fields and picks pond before save.
+3. Optionally: user taps **Camera scan** (capture mode chips on scan screen; image saved to **Pictures/Mountain Money**) or **From gallery**; app runs on-device OCR and prefills amount, date when found, and comment with **merchant name only**; user may **Preview receipt** or **Remove receipt** before save; new capture/pick replaces the attached image and re-runs OCR.
 4. Validation runs without dismissing the dialog on errors.
-5. Transaction is persisted and visible in history (optional `receiptImageUri` stored when applicable).
+5. Transaction is persisted and visible in history (optional `receiptImageUri` stored when applicable). Rows with a receipt show a **photo** icon; tap opens preview.
+
+## Edit Transaction Flow
+1. User opens **Edit** from the transaction list options.
+2. Same receipt actions as add (**Camera scan**, **From gallery**, **Preview receipt**, **Remove receipt**); URI changes persist on save (or clear when removed).
+3. Other fields and validation behave as before.
+
+## Receipt preview (list)
+1. On the main transaction list, if a row has a stored receipt URI, a **photo** icon appears next to edit.
+2. Tapping the icon opens the receipt image preview dialog (read-only).
 
 ## Transfer Flow
 1. User enables transfer mode in the transaction dialog.

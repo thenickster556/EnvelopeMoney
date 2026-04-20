@@ -9,7 +9,7 @@ This file maps the **repository memory system**: what each document is for and w
 | [DATA_SCHEMA.md](DATA_SCHEMA.md) | **Persistence schema** (SharedPreferences keys and Gson models) — the app has no SQL database; this is the data contract. |
 | [features.md](features.md) | User-facing features and expected behavior. |
 | [user-flows.md](user-flows.md) | How users move through screens and dialogs. |
-| [receipt-ocr.md](receipt-ocr.md) | Receipt capture: CameraX, MediaStore album **Mountain Money**, OCR slot, parser tests. |
+| [receipt-ocr.md](receipt-ocr.md) | Receipt capture: CameraX, MediaStore **Mountain Money**, OCR slot, preview/remove/list thumbnail, `ReceiptRowUi`, parser tests. |
 | [AI_CHANGE_PROTOCOL.md](AI_CHANGE_PROTOCOL.md) | Mandatory AI workflow: load memory ? intent ? verify ? implement ? test ? docs ? commit. |
 | [../state/TASK_STATE.json](../state/TASK_STATE.json) | Active and completed tasks; update when work starts or finishes. |
 | [../prompts/codex_rules.md](../prompts/codex_rules.md) | Prompt discipline and **context-loading block** appended to AI instructions. |

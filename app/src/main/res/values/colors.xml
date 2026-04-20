@@ -13,6 +13,7 @@
     <!-- Themed surfaces (replace holo greens in layouts/drawables) -->
     <color name="totals_row_background">#FFE8F5F3</color>
     <color name="recurring_chip_fill_selected">#FFB2DFDB</color>
+    <color name="recurring_chip_fill_unselected">#FFFFFFFF</color>
     <color name="recurring_chip_stroke">#FF2E7D6E</color>
     <!-- Day-mode surfaces for spinners / calendar cells (overridden in values-night) -->
     <color name="spinner_popup_surface">#FFFFFFFF</color>

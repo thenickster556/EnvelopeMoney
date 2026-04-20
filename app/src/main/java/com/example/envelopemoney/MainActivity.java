@@ -29,6 +29,7 @@ import android.widget.Toast;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.Spinner;
@@ -46,6 +47,7 @@ import com.example.envelopemoney.receipt.ReceiptCaptureActivity;
 import com.example.envelopemoney.receipt.ReceiptCaptureMode;
 import com.example.envelopemoney.receipt.ReceiptDraft;
 import com.example.envelopemoney.receipt.ReceiptOcrPipeline;
+import com.example.envelopemoney.receipt.ReceiptRowUi;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import androidx.core.content.ContextCompat;
@@ -99,8 +101,9 @@ public class MainActivity extends AppCompatActivity {
     private boolean billsPeriodFilterActive = false;
     private TextView tvPondTotalsFooter;
 
+    /** Non-null while add or edit transaction dialog is open and owns receipt capture state. */
     @Nullable
-    private View newTxnDialogRoot;
+    private View receiptDialogHostView;
     private ActivityResultLauncher<Intent> receiptCaptureLauncher;
     private ActivityResultLauncher<String> galleryPickLauncher;
 
@@ -136,14 +139,14 @@ public class MainActivity extends AppCompatActivity {
                         } catch (IllegalArgumentException ignored) {
                         }
                     }
-                    if (uriStr != null && newTxnDialogRoot != null) {
+                    if (uriStr != null && receiptDialogHostView != null) {
                         runReceiptOcr(Uri.parse(uriStr), mode);
                     }
                 });
         galleryPickLauncher = registerForActivityResult(
                 new ActivityResultContracts.GetContent(),
                 uri -> {
-                    if (uri != null && newTxnDialogRoot != null) {
+                    if (uri != null && receiptDialogHostView != null) {
                         runReceiptOcr(uri, ReceiptCaptureMode.AUTO);
                     }
                 });
@@ -486,7 +489,7 @@ public class MainActivity extends AppCompatActivity {
     private void showNewTransactionDialog() {
         MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(this);
         View dialogView = getLayoutInflater().inflate(R.layout.dialog_new_transaction, null);
-        newTxnDialogRoot = dialogView;
+        receiptDialogHostView = dialogView;
 
         Spinner spinnerEnvelope = dialogView.findViewById(R.id.spinnerEditEnvelope);
         EditText etDate = dialogView.findViewById(R.id.etEditTransactionDate);
@@ -647,13 +650,7 @@ public class MainActivity extends AppCompatActivity {
                 setTransferControlsVisibility(isChecked, tvTransferToLabel, spinnerTransferDestination));
         setTransferControlsVisibility(false, tvTransferToLabel, spinnerTransferDestination);
 
-        MaterialButton btnReceiptCamera = dialogView.findViewById(R.id.btnReceiptCamera);
-        MaterialButton btnReceiptGallery = dialogView.findViewById(R.id.btnReceiptGallery);
-        btnReceiptCamera.setOnClickListener(v -> {
-            Intent intent = new Intent(MainActivity.this, ReceiptCaptureActivity.class);
-            receiptCaptureLauncher.launch(intent);
-        });
-        btnReceiptGallery.setOnClickListener(v -> galleryPickLauncher.launch("image/*"));
+        wireReceiptRow(dialogView, null);
 
         builder.setView(dialogView)
                 .setTitle("New Transaction")
@@ -662,8 +659,8 @@ public class MainActivity extends AppCompatActivity {
 
         AlertDialog dialog = builder.create();
         dialog.setOnDismissListener(d -> {
-            if (newTxnDialogRoot == dialogView) {
-                newTxnDialogRoot = null;
+            if (receiptDialogHostView == dialogView) {
+                receiptDialogHostView = null;
             }
         });
         dialog.setOnShowListener(ignored -> {
@@ -732,11 +729,12 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void runReceiptOcr(Uri imageUri, ReceiptCaptureMode mode) {
-        if (newTxnDialogRoot == null || imageUri == null) {
+        if (receiptDialogHostView == null || imageUri == null) {
             return;
         }
-        newTxnDialogRoot.setTag(R.id.tag_receipt_image_uri, imageUri.toString());
-        final TextView status = newTxnDialogRoot.findViewById(R.id.tvReceiptOcrStatus);
+        receiptDialogHostView.setTag(R.id.tag_receipt_image_uri, imageUri.toString());
+        syncReceiptActionUi(receiptDialogHostView);
+        final TextView status = receiptDialogHostView.findViewById(R.id.tvReceiptOcrStatus);
         if (status != null) {
             status.setVisibility(View.VISIBLE);
             status.setText(R.string.receipt_ocr_reading);
@@ -782,12 +780,12 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void applyReceiptDraft(ReceiptDraft draft, TextView status) {
-        if (newTxnDialogRoot == null || draft == null) {
+        if (receiptDialogHostView == null || draft == null) {
             return;
         }
-        EditText etAmount = newTxnDialogRoot.findViewById(R.id.etEditTransactionAmount);
-        EditText etComment = newTxnDialogRoot.findViewById(R.id.etEditTransactionComment);
-        EditText etDate = newTxnDialogRoot.findViewById(R.id.etEditTransactionDate);
+        EditText etAmount = receiptDialogHostView.findViewById(R.id.etEditTransactionAmount);
+        EditText etComment = receiptDialogHostView.findViewById(R.id.etEditTransactionComment);
+        EditText etDate = receiptDialogHostView.findViewById(R.id.etEditTransactionDate);
         if (draft.totalAmount != null && etAmount != null) {
             etAmount.setText(String.format(Locale.getDefault(), "%.2f", draft.totalAmount));
         }
@@ -804,6 +802,119 @@ public class MainActivity extends AppCompatActivity {
             } else {
                 status.setVisibility(View.GONE);
             }
+        }
+        syncReceiptActionUi(receiptDialogHostView);
+    }
+
+    private void syncReceiptActionUi(@Nullable View host) {
+        if (host == null) {
+            return;
+        }
+        Object tag = host.getTag(R.id.tag_receipt_image_uri);
+        boolean has = tag instanceof String && !((String) tag).isEmpty();
+        MaterialButton preview = host.findViewById(R.id.btnReceiptPreview);
+        MaterialButton remove = host.findViewById(R.id.btnReceiptRemove);
+        if (preview != null) {
+            preview.setEnabled(has);
+        }
+        if (remove != null) {
+            remove.setEnabled(has);
+        }
+    }
+
+    private void wireReceiptRow(View dialogView, @Nullable String initialUri) {
+        if (initialUri != null && !initialUri.isEmpty()) {
+            dialogView.setTag(R.id.tag_receipt_image_uri, initialUri);
+        } else {
+            dialogView.setTag(R.id.tag_receipt_image_uri, null);
+        }
+        MaterialButton btnReceiptCamera = dialogView.findViewById(R.id.btnReceiptCamera);
+        MaterialButton btnReceiptGallery = dialogView.findViewById(R.id.btnReceiptGallery);
+        if (btnReceiptCamera != null) {
+            btnReceiptCamera.setOnClickListener(v -> {
+                Intent intent = new Intent(MainActivity.this, ReceiptCaptureActivity.class);
+                receiptCaptureLauncher.launch(intent);
+            });
+        }
+        if (btnReceiptGallery != null) {
+            btnReceiptGallery.setOnClickListener(v -> galleryPickLauncher.launch("image/*"));
+        }
+        MaterialButton btnPreview = dialogView.findViewById(R.id.btnReceiptPreview);
+        if (btnPreview != null) {
+            btnPreview.setOnClickListener(v -> {
+                Object u = dialogView.getTag(R.id.tag_receipt_image_uri);
+                if (u instanceof String && !((String) u).isEmpty()) {
+                    showReceiptImagePreview(Uri.parse((String) u));
+                }
+            });
+        }
+        MaterialButton btnRemove = dialogView.findViewById(R.id.btnReceiptRemove);
+        if (btnRemove != null) {
+            btnRemove.setOnClickListener(v -> {
+                dialogView.setTag(R.id.tag_receipt_image_uri, null);
+                syncReceiptActionUi(dialogView);
+                TextView st = dialogView.findViewById(R.id.tvReceiptOcrStatus);
+                if (st != null) {
+                    st.setVisibility(View.GONE);
+                }
+            });
+        }
+        syncReceiptActionUi(dialogView);
+    }
+
+    private void showReceiptImagePreview(Uri uri) {
+        if (uri == null) {
+            return;
+        }
+        View content = getLayoutInflater().inflate(R.layout.dialog_receipt_preview, null);
+        ImageView iv = content.findViewById(R.id.ivReceiptPreview);
+        TextView err = content.findViewById(R.id.tvReceiptPreviewError);
+        Bitmap bmp;
+        try {
+            bmp = decodeReceiptSampled(uri, 1600);
+        } catch (java.io.IOException e) {
+            Log.e("EnvelopeMoney", "receipt preview", e);
+            bmp = null;
+        }
+        if (bmp != null) {
+            iv.setImageBitmap(bmp);
+            err.setVisibility(View.GONE);
+        } else {
+            iv.setImageDrawable(null);
+            err.setVisibility(View.VISIBLE);
+            err.setText(R.string.receipt_preview_load_failed);
+        }
+        AlertDialog dlg = new MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.receipt_preview_title)
+                .setView(content)
+                .setNegativeButton(android.R.string.cancel, (d, w) -> d.dismiss())
+                .create();
+        dlg.setOnShowListener(l -> applyIconMaterialDialogActions(dlg));
+        dlg.show();
+    }
+
+    private Bitmap decodeReceiptSampled(Uri uri, int maxDim) throws java.io.IOException {
+        BitmapFactory.Options opts = new BitmapFactory.Options();
+        opts.inJustDecodeBounds = true;
+        try (java.io.InputStream is = getContentResolver().openInputStream(uri)) {
+            if (is == null) {
+                return null;
+            }
+            BitmapFactory.decodeStream(is, null, opts);
+        }
+        opts.inSampleSize = 1;
+        int h = opts.outHeight;
+        int w = opts.outWidth;
+        if (h > maxDim || w > maxDim) {
+            int halfH = h / 2;
+            int halfW = w / 2;
+            while ((halfH / opts.inSampleSize) > maxDim || (halfW / opts.inSampleSize) > maxDim) {
+                opts.inSampleSize *= 2;
+            }
+        }
+        opts.inJustDecodeBounds = false;
+        try (java.io.InputStream is2 = getContentResolver().openInputStream(uri)) {
+            return is2 != null ? BitmapFactory.decodeStream(is2, null, opts) : null;
         }
     }
 
@@ -957,6 +1068,7 @@ public class MainActivity extends AppCompatActivity {
 
             TextView tvAmount = convertView.findViewById(R.id.tvTransactionAmount);
             TextView tvDetails = convertView.findViewById(R.id.tvTransactionDetails);
+            ImageButton btnReceipt = convertView.findViewById(R.id.btnTransactionReceipt);
             ImageButton btnOptions = convertView.findViewById(R.id.btnTransactionOptions);
 
             // Populate data
@@ -980,6 +1092,19 @@ public class MainActivity extends AppCompatActivity {
                 details += " | " + recurringFrequencyDisplay(normalizeRecurringFrequency(transaction.getRecurringFrequency()));
             }
             tvDetails.setText(details);
+
+            if (ReceiptRowUi.showReceiptThumbnail(transaction)) {
+                btnReceipt.setVisibility(View.VISIBLE);
+                btnReceipt.setOnClickListener(v -> {
+                    String uriStr = transaction.getReceiptImageUri();
+                    if (uriStr != null && !uriStr.isEmpty()) {
+                        showReceiptImagePreview(Uri.parse(uriStr));
+                    }
+                });
+            } else {
+                btnReceipt.setVisibility(View.GONE);
+                btnReceipt.setOnClickListener(null);
+            }
 
             // Handle Options button click
             btnOptions.setOnClickListener(v -> showTransactionOptionsDialog(transaction));
@@ -1431,12 +1556,20 @@ public class MainActivity extends AppCompatActivity {
         cbIsTransfer.setOnCheckedChangeListener((buttonView, checked) ->
                 setTransferControlsVisibility(checked, tvTransferToLabel, spinnerTransferDestination));
 
+        receiptDialogHostView = dialogView;
+        wireReceiptRow(dialogView, editTransaction.getReceiptImageUri());
+
         builder.setView(dialogView)
                 .setTitle("Edit Transaction")
                 .setPositiveButton(android.R.string.ok, null)
                 .setNegativeButton(android.R.string.cancel, null);
 
         AlertDialog dialog = builder.create();
+        dialog.setOnDismissListener(d -> {
+            if (receiptDialogHostView == dialogView) {
+                receiptDialogHostView = null;
+            }
+        });
         dialog.setOnShowListener(ignored -> {
             applyIconMaterialDialogActions(dialog);
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
@@ -1488,6 +1621,13 @@ public class MainActivity extends AppCompatActivity {
                 editTransaction.setAmount(newAmount);
                 editTransaction.setComment(newComment);
                 editTransaction.setDate(newDate);
+
+                Object receiptUriTag = dialogView.getTag(R.id.tag_receipt_image_uri);
+                if (receiptUriTag instanceof String) {
+                    editTransaction.setReceiptImageUri((String) receiptUriTag);
+                } else {
+                    editTransaction.setReceiptImageUri(null);
+                }
 
                 if (cbIsRecurring.isChecked()) {
                     editTransaction.setRecurring(true);
@@ -1685,14 +1825,14 @@ public class MainActivity extends AppCompatActivity {
     private void applyRecurringWeekdayButtonSelection(Map<Integer, TextView> dayButtons,
                                                        List<Integer> selectedDays) {
         int selectedColor = ContextCompat.getColor(this, R.color.mountain_primary);
-        int normalColor = resolveThemeColor(android.R.attr.textColorSecondary);
+        int unselectedColor = resolveThemeColor(android.R.attr.textColorPrimary);
         for (Map.Entry<Integer, TextView> entry : dayButtons.entrySet()) {
             boolean selected = selectedDays.contains(entry.getKey());
             TextView button = entry.getValue();
             button.setBackgroundResource(selected
                     ? R.drawable.recurring_option_selected_ripple
                     : R.drawable.recurring_option_unselected_ripple);
-            button.setTextColor(selected ? selectedColor : normalColor);
+            button.setTextColor(selected ? selectedColor : unselectedColor);
         }
     }
 
@@ -1711,10 +1851,10 @@ public class MainActivity extends AppCompatActivity {
                 : R.drawable.recurring_option_unselected_ripple);
 
         int selectedColor = ContextCompat.getColor(this, R.color.mountain_primary);
-        int normalColor = resolveThemeColor(android.R.attr.textColorSecondary);
-        weekly.setTextColor("weekly".equals(selectedFrequency) ? selectedColor : normalColor);
-        biWeekly.setTextColor("bi-weekly".equals(selectedFrequency) ? selectedColor : normalColor);
-        monthly.setTextColor("monthly".equals(selectedFrequency) ? selectedColor : normalColor);
+        int unselectedColor = resolveThemeColor(android.R.attr.textColorPrimary);
+        weekly.setTextColor("weekly".equals(selectedFrequency) ? selectedColor : unselectedColor);
+        biWeekly.setTextColor("bi-weekly".equals(selectedFrequency) ? selectedColor : unselectedColor);
+        monthly.setTextColor("monthly".equals(selectedFrequency) ? selectedColor : unselectedColor);
     }
 
     private String normalizeRecurringFrequency(String selectedDisplay) {
