@@ -37,6 +37,10 @@
             android:exported="false"
             android:label="@string/receipt_scan_title"
             android:theme="@style/Theme.EnvelopeMoney.NoActionBar" />
+        <activity
+            android:name=".receipt.ReceiptPreviewActivity"
+            android:exported="false"
+            android:theme="@style/Theme.EnvelopeMoney.ReceiptPreview" />
     </application>
 
 </manifest>

@@ -4,7 +4,7 @@
 
 - **UI:** **Add** and **edit** transaction dialogs — **Camera scan** opens `ReceiptCaptureActivity` (CameraX); **From gallery** uses the Photo Picker / `GetContent`. **Preview receipt** / **Remove receipt** use the same outlined `MaterialButton` styling as the scan row. `MainActivity` keeps a single `receiptDialogHostView` while either dialog is open so activity results route OCR to the active form.
 - **List:** `item_transaction` **photo** `ImageButton` when `ReceiptRowUi.showReceiptThumbnail` is true; opens the same preview as the dialogs.
-- **Preview:** `dialog_receipt_preview.xml` + sampled `BitmapFactory` decode (max dimension cap) to avoid OOM; `MaterialAlertDialogBuilder` + `applyIconMaterialDialogActions` for themed dismiss control.
+- **Preview:** `ReceiptPreviewActivity` — **fullscreen** (`Theme.EnvelopeMoney.ReceiptPreview`), sampled decode via `ReceiptBitmapLoader` (screen-based max dimension, cap 4096). **Pinch-zoom**, **drag** when zoomed, **double-tap** to refit, **Rotate left/right** (90°). `ReceiptZoomImageView` implements gestures; list and add/edit dialogs start this activity with `EXTRA_IMAGE_URI`.
 - **Gallery file:** Camera shots are saved with `MediaStore` under **`Pictures/Mountain Money`** (`MediaStoreReceiptSaver`).
 - **OCR slot:** `OcrEngine` + `PaddleOcrAdapter.createDefaultEngine()` — currently **on-device ML Kit Latin** text recognition (offline after model init). Swap in **PaddleOCR JNI** + models when packaged without changing `ReceiptFieldParser` tests.
 - **Parsing:** `ReceiptFieldParser` (pure Java) + `ReceiptFieldParserTest` golden cases.

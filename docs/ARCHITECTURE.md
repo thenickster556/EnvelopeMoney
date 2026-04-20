@@ -25,7 +25,7 @@ Mountain Money (package `com.example.envelopemoney`) is a single-activity Androi
   - `ReceiptCaptureActivity` — CameraX preview, capture mode, shutter; persists JPEG via `MediaStoreReceiptSaver` (`Pictures/Mountain Money`).
   - `ReceiptOcrPipeline` — preprocess bitmap, `OcrEngine` (default: on-device Latin text recognition; slot for PaddleOCR), `ReceiptFieldParser` heuristics.
   - `ReceiptRowUi` — pure helper for when to show the list-row receipt thumbnail.
-  - Wired from `MainActivity` add/edit transaction dialogs (`ActivityResultContracts`); `receiptDialogHostView` selects the active dialog for OCR results. Image preview uses `dialog_receipt_preview` + sampled decode.
+  - Wired from `MainActivity` add/edit transaction dialogs (`ActivityResultContracts`); `receiptDialogHostView` selects the active dialog for OCR results. Fullscreen image preview: `ReceiptPreviewActivity`, `ReceiptZoomImageView`, `ReceiptBitmapLoader`.
 
 ## State Boundaries
 - UI state lives primarily in `MainActivity`.

@@ -58,7 +58,11 @@
     {
       "id": "receipt-preview-ux-2026-04",
       "title": "Receipt preview/remove/list row; edit dialog capture; recurring chip DayNight contrast; ReceiptRowUiTest"
+    },
+    {
+      "id": "receipt-preview-fullscreen-2026-04",
+      "title": "Fullscreen zoomable rotatable ReceiptPreviewActivity; ReceiptZoomImageView; ReceiptBitmapLoader"
     }
   ],
-  "last_updated": "2026-04-19"
+  "last_updated": "2026-04-20"
 }

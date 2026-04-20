@@ -20,9 +20,9 @@
 2. Same receipt actions as add (**Camera scan**, **From gallery**, **Preview receipt**, **Remove receipt**); URI changes persist on save (or clear when removed).
 3. Other fields and validation behave as before.
 
-## Receipt preview (list)
+## Receipt preview (list and dialogs)
 1. On the main transaction list, if a row has a stored receipt URI, a **photo** icon appears next to edit.
-2. Tapping the icon opens the receipt image preview dialog (read-only).
+2. **Preview receipt** (in add/edit) or the list **photo** icon opens **ReceiptPreviewActivity**: fullscreen image, **pinch to zoom**, **drag** to pan when zoomed, **double-tap** to refit, **Rotate left / Rotate right** for 90° steps, **back/close** to return.
 
 ## Transfer Flow
 1. User enables transfer mode in the transaction dialog.

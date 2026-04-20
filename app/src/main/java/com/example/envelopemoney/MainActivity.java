@@ -29,7 +29,6 @@ import android.widget.Toast;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.ImageButton;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.Spinner;
@@ -44,6 +43,7 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import com.example.envelopemoney.receipt.PaddleOcrAdapter;
 import com.example.envelopemoney.receipt.ReceiptCaptureActivity;
+import com.example.envelopemoney.receipt.ReceiptPreviewActivity;
 import com.example.envelopemoney.receipt.ReceiptCaptureMode;
 import com.example.envelopemoney.receipt.ReceiptDraft;
 import com.example.envelopemoney.receipt.ReceiptOcrPipeline;
@@ -866,56 +866,8 @@ public class MainActivity extends AppCompatActivity {
         if (uri == null) {
             return;
         }
-        View content = getLayoutInflater().inflate(R.layout.dialog_receipt_preview, null);
-        ImageView iv = content.findViewById(R.id.ivReceiptPreview);
-        TextView err = content.findViewById(R.id.tvReceiptPreviewError);
-        Bitmap bmp;
-        try {
-            bmp = decodeReceiptSampled(uri, 1600);
-        } catch (java.io.IOException e) {
-            Log.e("EnvelopeMoney", "receipt preview", e);
-            bmp = null;
-        }
-        if (bmp != null) {
-            iv.setImageBitmap(bmp);
-            err.setVisibility(View.GONE);
-        } else {
-            iv.setImageDrawable(null);
-            err.setVisibility(View.VISIBLE);
-            err.setText(R.string.receipt_preview_load_failed);
-        }
-        AlertDialog dlg = new MaterialAlertDialogBuilder(this)
-                .setTitle(R.string.receipt_preview_title)
-                .setView(content)
-                .setNegativeButton(android.R.string.cancel, (d, w) -> d.dismiss())
-                .create();
-        dlg.setOnShowListener(l -> applyIconMaterialDialogActions(dlg));
-        dlg.show();
-    }
-
-    private Bitmap decodeReceiptSampled(Uri uri, int maxDim) throws java.io.IOException {
-        BitmapFactory.Options opts = new BitmapFactory.Options();
-        opts.inJustDecodeBounds = true;
-        try (java.io.InputStream is = getContentResolver().openInputStream(uri)) {
-            if (is == null) {
-                return null;
-            }
-            BitmapFactory.decodeStream(is, null, opts);
-        }
-        opts.inSampleSize = 1;
-        int h = opts.outHeight;
-        int w = opts.outWidth;
-        if (h > maxDim || w > maxDim) {
-            int halfH = h / 2;
-            int halfW = w / 2;
-            while ((halfH / opts.inSampleSize) > maxDim || (halfW / opts.inSampleSize) > maxDim) {
-                opts.inSampleSize *= 2;
-            }
-        }
-        opts.inJustDecodeBounds = false;
-        try (java.io.InputStream is2 = getContentResolver().openInputStream(uri)) {
-            return is2 != null ? BitmapFactory.decodeStream(is2, null, opts) : null;
-        }
+        startActivity(new Intent(this, ReceiptPreviewActivity.class)
+                .putExtra(ReceiptPreviewActivity.EXTRA_IMAGE_URI, uri.toString()));
     }
 
     private void updateTransactionHistory() {

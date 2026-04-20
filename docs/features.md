@@ -10,7 +10,7 @@
 
 ## Transactions
 - Users can add, edit, and delete transactions.
-- **Receipt capture:** Add and **edit** transaction dialogs include **Camera scan** (CameraX) and **From gallery**. **Preview receipt** and **Remove receipt** (outlined buttons) appear once an image URI is attached; preview opens a scrollable image dialog (sampled decode for large photos). On-device OCR extracts amount, optional date, and merchant name for the comment; **pond is always chosen manually**. Camera saves a JPEG to the device gallery under **Pictures/Mountain Money**. The transaction list shows a **photo** icon on rows with a saved `receiptImageUri`; tap opens the same preview. See [receipt-ocr.md](receipt-ocr.md).
+- **Receipt capture:** Add and **edit** transaction dialogs include **Camera scan** (CameraX) and **From gallery**. **Preview receipt** and **Remove receipt** (outlined buttons) appear once an image URI is attached; **Preview** opens a **fullscreen** viewer (pinch-zoom, pan, double-tap refit, 90° rotation) for fact-checking. On-device OCR extracts amount, optional date, and merchant name for the comment; **pond is always chosen manually**. Camera saves a JPEG to the device gallery under **Pictures/Mountain Money**. The transaction list shows a **photo** icon on rows with a saved `receiptImageUri`; tap opens the same fullscreen preview. See [receipt-ocr.md](receipt-ocr.md).
 - **Recurring chips:** Frequency (Weekly / Bi-weekly / Monthly) and weekday toggles use **DayNight-aware** unselected fills and `textColorPrimary` for unselected labels so labels stay readable in dark dialogs (no white-on-white).
 - Transactions belong to ponds and contribute to month totals.
 - Transactions can be filtered by selected ponds and date range.

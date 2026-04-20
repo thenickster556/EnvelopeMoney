@@ -19,6 +19,10 @@
         <item name="windowNoTitle">true</item>
     </style>
 
+    <style name="Theme.EnvelopeMoney.ReceiptPreview" parent="Theme.EnvelopeMoney.NoActionBar">
+        <item name="android:windowFullscreen">true</item>
+    </style>
+
     <style name="Theme.EnvelopeMoney.AppBarOverlay" parent="ThemeOverlay.AppCompat.Dark.ActionBar" />
 
     <style name="Theme.EnvelopeMoney.PopupOverlay" parent="ThemeOverlay.AppCompat.Light" />
