@@ -8,6 +8,10 @@
   ],
   "completed_tasks": [
     {
+      "id": "ocr-merchant-restaurant-2026-04",
+      "title": "ReceiptFieldParser: merchant line + title case; restaurant final total (amount due / last total)"
+    },
+    {
       "id": "repo-memory-bootstrap",
       "title": "Create repository memory files and AI change protocol"
     },
@@ -64,5 +68,5 @@
       "title": "Fullscreen zoomable rotatable ReceiptPreviewActivity; ReceiptZoomImageView; ReceiptBitmapLoader"
     }
   ],
-  "last_updated": "2026-04-20"
+  "last_updated": "2026-04-21"
 }

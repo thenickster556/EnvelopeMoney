@@ -18,11 +18,24 @@ public final class ReceiptFieldParser {
             "(?:^|[^\\d])(\\$)?\\s*(\\d{1,3}(?:,\\d{3})+|\\d+)\\s*([.,])\\s*(\\d{2})(?:\\s*$|[^\\d])");
     private static final Pattern ISO_DATE = Pattern.compile("(20\\d{2})-(\\d{2})-(\\d{2})");
     private static final Pattern US_DATE = Pattern.compile("(\\d{1,2})[/-](\\d{1,2})[/-](\\d{2,4})");
+    /**
+     * Line looks like a final charge label; scanned from <i>bottom</i> of the receipt for restaurant
+     * so we win “amount due” / last total (after tip) over an earlier pre-tip total.
+     */
+    private static final Pattern TOTAL_LINE_STRONG = Pattern.compile(
+            "(?i)\\b(amount\\s*due|balance\\s*due|total\\s*due|grand\\s*total|pay\\s*this\\s*amount)\\b");
     private static final Pattern TOTAL_LABEL = Pattern.compile(
-            "(?i)\\b(total|amount\\s*due|balance\\s*due|grand\\s*total)\\b");
+            "(?i)\\b(total|amount\\s*due|balance\\s*due|grand\\s*total|total\\s*due|pay\\s*this\\s*amount)\\b");
     private static final Pattern SUBTOTAL_OR_TAX = Pattern.compile(
             "(?i)\\b(sub\\s*total|subtotal|tax|tip|gratuity|suggested)\\b");
     private static final Pattern GAS_GALLON = Pattern.compile("(?i)\\b(gal|gallon|/\\s*gal)\\b");
+    private static final Pattern PHONE = Pattern.compile("\\d{3}[-.\\s]?\\d{3}[-.\\s]?\\d{4}");
+    private static final Pattern HTTP_OR_WWW = Pattern.compile("(?i)https?://|www\\.");
+    private static final Pattern EMAIL = Pattern.compile("@\\S+");
+    private static final Pattern THANK_YOU = Pattern.compile("(?i)thank\\s+you");
+    private static final Pattern GUEST_OR_TABLE = Pattern.compile("(?i)guest\\s*check|table\\s*#?|server\\s*[:#]");
+    private static final Pattern STREET_START = Pattern.compile("^\\d{1,5}\\s+[A-Za-z]");
+    private static final Pattern LINE_ZIP_ONLY = Pattern.compile("(?i)^\\d{5}(-\\d{4})?\\s*$");
 
     private ReceiptFieldParser() {
     }
@@ -99,13 +112,13 @@ public final class ReceiptFieldParser {
         }
         Matcher us = US_DATE.matcher(full);
         if (us.find()) {
-            int m = Integer.parseInt(us.group(1));
+            int mon = Integer.parseInt(us.group(1));
             int d = Integer.parseInt(us.group(2));
             int y = Integer.parseInt(us.group(3));
             if (y < 100) {
                 y += 2000;
             }
-            return String.format(Locale.US, "%04d-%02d-%02d", y, m, d);
+            return String.format(Locale.US, "%04d-%02d-%02d", y, mon, d);
         }
         return null;
     }
@@ -113,6 +126,8 @@ public final class ReceiptFieldParser {
     @Nullable
     private static String extractMerchant(List<String> lines) {
         int limit = Math.min(lines.size(), 10);
+        int bestScore = Integer.MIN_VALUE;
+        int bestIndex = -1;
         for (int i = 0; i < limit; i++) {
             String line = lines.get(i);
             if (line.length() < 3 || line.length() > 80) {
@@ -130,9 +145,115 @@ public final class ReceiptFieldParser {
             if (mostlyNumeric(line)) {
                 continue;
             }
-            return line;
+            if (isJunkMerchantLine(line)) {
+                continue;
+            }
+            int s = scoreMerchantLine(line);
+            if (s > bestScore) {
+                bestScore = s;
+                bestIndex = i;
+            }
         }
-        return null;
+        if (bestIndex < 0) {
+            return null;
+        }
+        return normalizeMerchantDisplay(lines.get(bestIndex));
+    }
+
+    private static boolean isJunkMerchantLine(String line) {
+        String t = line.trim();
+        if (HTTP_OR_WWW.matcher(t).find() || EMAIL.matcher(t).find()) {
+            return true;
+        }
+        if (THANK_YOU.matcher(t).find() || GUEST_OR_TABLE.matcher(t).find()) {
+            return true;
+        }
+        if (PHONE.matcher(t).find()) {
+            return true;
+        }
+        if (LINE_ZIP_ONLY.matcher(t).find()) {
+            return true;
+        }
+        if (STREET_START.matcher(t).find()) {
+            return true;
+        }
+        return false;
+    }
+
+    private static int scoreMerchantLine(String line) {
+        int letters = 0;
+        int digits = 0;
+        for (int i = 0; i < line.length(); i++) {
+            char c = line.charAt(i);
+            if (Character.isLetter(c)) {
+                letters++;
+            } else if (Character.isDigit(c)) {
+                digits++;
+            }
+        }
+        if (letters < 2) {
+            return -1;
+        }
+        int len = line.length();
+        if (len > 60) {
+            return -1;
+        }
+        int s = letters * 2 - digits;
+        if (len >= 4 && len <= 40) {
+            s += 5;
+        }
+        return s;
+    }
+
+    static String normalizeMerchantDisplay(String line) {
+        if (line == null) {
+            return null;
+        }
+        String t = line.trim().replaceAll("\\s+", " ");
+        if (t.isEmpty()) {
+            return t;
+        }
+        if (!looksAllCapsish(t)) {
+            return t;
+        }
+        String[] words = t.split("\\s+");
+        StringBuilder b = new StringBuilder();
+        for (int w = 0; w < words.length; w++) {
+            if (w > 0) {
+                b.append(' ');
+            }
+            b.append(titleCaseToken(words[w]));
+        }
+        return b.toString();
+    }
+
+    private static boolean looksAllCapsish(String t) {
+        int letters = 0;
+        int uppers = 0;
+        for (int i = 0; i < t.length(); i++) {
+            char c = t.charAt(i);
+            if (Character.isLetter(c)) {
+                letters++;
+                if (Character.isUpperCase(c)) {
+                    uppers++;
+                }
+            }
+        }
+        if (letters < 2) {
+            return false;
+        }
+        return (uppers * 1.0f / letters) > 0.7f;
+    }
+
+    private static String titleCaseToken(String w) {
+        if (w.isEmpty()) {
+            return w;
+        }
+        if (!w.chars().anyMatch(Character::isLetter)) {
+            return w;
+        }
+        String low = w.toLowerCase(Locale.US);
+        return Character.toUpperCase(low.charAt(0)) + low.substring(1);
     }
 
     private static boolean mostlyNumeric(String line) {
@@ -146,6 +267,43 @@ public final class ReceiptFieldParser {
     }
 
     private static AmountPick pickTotal(List<String> lines, ReceiptCaptureMode mode) {
+        if (lines.isEmpty()) {
+            return new AmountPick(null, 0.2f);
+        }
+
+        if (mode == ReceiptCaptureMode.RESTAURANT || mode == ReceiptCaptureMode.RECEIPT) {
+            // Strong labels (amount due, etc.): use bottom-most (final charge after tip is usually last)
+            for (int i = lines.size() - 1; i >= 0; i--) {
+                String line = lines.get(i);
+                if (mode == ReceiptCaptureMode.RESTAURANT
+                        && SUBTOTAL_OR_TAX.matcher(line).find()
+                        && !TOTAL_LINE_STRONG.matcher(line).find()
+                        && !TOTAL_LABEL.matcher(line).find()) {
+                    continue;
+                }
+                if (TOTAL_LINE_STRONG.matcher(line).find()) {
+                    Double v = maxMoneyOnLine(line);
+                    if (v != null && v > 0) {
+                        return new AmountPick(v, 0.92f);
+                    }
+                }
+            }
+            // Weaker "total" label: last in document (after tip total often at bottom)
+            for (int i = lines.size() - 1; i >= 0; i--) {
+                String line = lines.get(i);
+                if (mode == ReceiptCaptureMode.RESTAURANT && SUBTOTAL_OR_TAX.matcher(line).find()
+                        && !TOTAL_LABEL.matcher(line).find()) {
+                    continue;
+                }
+                if (TOTAL_LABEL.matcher(line).find()) {
+                    Double v = maxMoneyOnLine(line);
+                    if (v != null && v > 0) {
+                        return new AmountPick(v, 0.88f);
+                    }
+                }
+            }
+        }
+
         List<Double> candidates = new ArrayList<>();
         for (String line : lines) {
             if (mode == ReceiptCaptureMode.GAS && GAS_GALLON.matcher(line).find()) {
@@ -168,31 +326,27 @@ public final class ReceiptFieldParser {
             return new AmountPick(null, 0.2f);
         }
 
-        // Prefer amount on same line as TOTAL
-        for (String line : lines) {
-            if (TOTAL_LABEL.matcher(line).find()) {
-                Matcher m = MONEY.matcher(line);
-                double best = -1;
-                while (m.find()) {
-                    Double v = parseMoneyGroup(m);
-                    if (v != null && v > best) {
-                        best = v;
-                    }
-                }
-                if (best > 0) {
-                    return new AmountPick(best, 0.9f);
-                }
-            }
-        }
-
         if (mode == ReceiptCaptureMode.GAS || mode == ReceiptCaptureMode.AUTO) {
             double max = Collections.max(candidates);
             return new AmountPick(max, 0.55f);
         }
 
-        // Restaurant / receipt: prefer largest plausible final total (not perfect but 80/20)
+        // Restaurant / receipt: prefer largest remaining candidate
         double max = Collections.max(candidates);
         return new AmountPick(max, 0.5f);
+    }
+
+    @Nullable
+    private static Double maxMoneyOnLine(String line) {
+        Matcher m = MONEY.matcher(line);
+        double best = -1;
+        while (m.find()) {
+            Double v = parseMoneyGroup(m);
+            if (v != null && v > best) {
+                best = v;
+            }
+        }
+        return best > 0 ? best : null;
     }
 
     @Nullable

@@ -18,7 +18,7 @@ public class ReceiptFieldParserTest {
                 new OcrLine("TOTAL $12.34", 0.9f)
         ));
         ReceiptDraft d = ReceiptFieldParser.parse(ocr, ReceiptCaptureMode.RECEIPT);
-        assertEquals("ACME GROCERY", d.merchantForComment);
+        assertEquals("Acme Grocery", d.merchantForComment);
         assertNotNull(d.totalAmount);
         assertEquals(12.34, d.totalAmount, 0.001);
     }
@@ -56,5 +56,60 @@ public class ReceiptFieldParserTest {
         ReceiptDraft d = ReceiptFieldParser.parse(ocr, ReceiptCaptureMode.RECEIPT);
         assertEquals("Joe's Diner", d.merchantForComment);
         assertEquals(9.99, d.totalAmount, 0.001);
+    }
+
+    @Test
+    public void merchant_skipsPhoneAndPicksStoreLine() {
+        OcrResult ocr = new OcrResult(Arrays.asList(
+                new OcrLine("800-555-1234", 0.9f),
+                new OcrLine("BEST FOODS MARKET", 0.9f),
+                new OcrLine("TOTAL 5.00", 0.9f)
+        ));
+        ReceiptDraft d = ReceiptFieldParser.parse(ocr, ReceiptCaptureMode.RECEIPT);
+        assertEquals("Best Foods Market", d.merchantForComment);
+    }
+
+    @Test
+    public void merchant_skipsStreetLine() {
+        OcrResult ocr = new OcrResult(Arrays.asList(
+                new OcrLine("123 Main St", 0.9f),
+                new OcrLine("CORNER BISTRO", 0.9f),
+                new OcrLine("TOTAL 10.00", 0.9f)
+        ));
+        ReceiptDraft d = ReceiptFieldParser.parse(ocr, ReceiptCaptureMode.RESTAURANT);
+        assertEquals("Corner Bistro", d.merchantForComment);
+    }
+
+    @Test
+    public void restaurant_prefersAmountDueOverEarlierTotal() {
+        OcrResult ocr = new OcrResult(Arrays.asList(
+                new OcrLine("BISTRO", 0.9f),
+                new OcrLine("Subtotal 40.00", 0.9f),
+                new OcrLine("Tax 2.00", 0.9f),
+                new OcrLine("Tip 8.00", 0.9f),
+                new OcrLine("Total 50.00", 0.9f),
+                new OcrLine("Amount Due 58.00", 0.9f)
+        ));
+        ReceiptDraft d = ReceiptFieldParser.parse(ocr, ReceiptCaptureMode.RESTAURANT);
+        assertEquals("Bistro", d.merchantForComment);
+        assertEquals(58.00, d.totalAmount, 0.001);
+    }
+
+    @Test
+    public void restaurant_usesLastTotalLabeledLineWhenMultiple() {
+        OcrResult ocr = new OcrResult(Arrays.asList(
+                new OcrLine("CAFE", 0.9f),
+                new OcrLine("Total 45.00", 0.9f),
+                new OcrLine("Tip suggested", 0.9f),
+                new OcrLine("Total 52.30", 0.9f)
+        ));
+        ReceiptDraft d = ReceiptFieldParser.parse(ocr, ReceiptCaptureMode.RESTAURANT);
+        assertEquals("Cafe", d.merchantForComment);
+        assertEquals(52.30, d.totalAmount, 0.001);
+    }
+
+    @Test
+    public void normalizeMerchantDisplay_titleCaseAllCaps() {
+        assertEquals("Joe's Diner", ReceiptFieldParser.normalizeMerchantDisplay("JOE'S DINER"));
     }
 }
