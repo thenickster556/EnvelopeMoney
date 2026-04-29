@@ -112,4 +112,27 @@ public class ReceiptFieldParserTest {
     public void normalizeMerchantDisplay_titleCaseAllCaps() {
         assertEquals("Joe's Diner", ReceiptFieldParser.normalizeMerchantDisplay("JOE'S DINER"));
     }
+
+    @Test
+    public void merchant_skipsHttpUrlLine() {
+        OcrResult ocr = new OcrResult(Arrays.asList(
+                new OcrLine("https://example.com/receipt", 0.9f),
+                new OcrLine("FRESH MARKET", 0.9f),
+                new OcrLine("TOTAL $4.00", 0.9f)
+        ));
+        ReceiptDraft d = ReceiptFieldParser.parse(ocr, ReceiptCaptureMode.RECEIPT);
+        assertEquals("Fresh Market", d.merchantForComment);
+    }
+
+    @Test
+    public void receipt_prefersBottomStrongPayThisAmount() {
+        OcrResult ocr = new OcrResult(Arrays.asList(
+                new OcrLine("MART", 0.9f),
+                new OcrLine("Total $5.00", 0.9f),
+                new OcrLine("Pay this amount $7.50", 0.9f)
+        ));
+        ReceiptDraft d = ReceiptFieldParser.parse(ocr, ReceiptCaptureMode.RECEIPT);
+        assertEquals("Mart", d.merchantForComment);
+        assertEquals(7.50, d.totalAmount, 0.001);
+    }
 }

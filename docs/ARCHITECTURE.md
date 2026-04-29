@@ -23,9 +23,9 @@ Mountain Money (package `com.example.envelopemoney`) is a single-activity Androi
   - Serializes/deserializes envelope state, UI preference state, bills days JSON, and bills-filter state.
 - Receipt capture (`com.example.envelopemoney.receipt`)
   - `ReceiptCaptureActivity` — CameraX preview, capture mode, shutter; persists JPEG via `MediaStoreReceiptSaver` (`Pictures/Mountain Money`).
-  - `ReceiptOcrPipeline` — preprocess bitmap, `OcrEngine` (default: on-device Latin text recognition; slot for PaddleOCR), `ReceiptFieldParser` heuristics (top-line merchant pick + title case for ALL CAPS OCR; bottom-up “amount due” / last total for restaurant and receipt modes).
+  - `ReceiptOcrPipeline` — preprocess bitmap, `OcrEngine` (default: on-device Latin text recognition; slot for PaddleOCR), `ReceiptFieldParser` heuristics (merchant junk filters incl. order/receipt/invoice headers + title case for ALL CAPS OCR; bottom-up “amount due” / last labeled total, then bottom-most money fallback for restaurant/receipt modes).
   - `ReceiptRowUi` — pure helper for when to show the list-row receipt thumbnail.
-  - Wired from `MainActivity` add/edit transaction dialogs (`ActivityResultContracts`); `receiptDialogHostView` selects the active dialog for OCR results. Fullscreen image preview: `ReceiptPreviewActivity`, `ReceiptZoomImageView`, `ReceiptBitmapLoader`.
+  - Wired from `MainActivity` add/edit transaction dialogs (`ActivityResultContracts`); `receiptDialogHostView` selects the active dialog for OCR results. Fullscreen image preview: `ReceiptPreviewActivity` (view-only 90° until **Save rotation**; `ReceiptRotatedJpegWriter` decodes, **Matrix**-rotates, overwrites same `content://` URI at JPEG **92**; reload bitmap; `MaterialAlertDialogBuilder` for replace + discard-when-dirty), `ReceiptZoomImageView`, `ReceiptBitmapLoader`.
 
 ## State Boundaries
 - UI state lives primarily in `MainActivity`.

@@ -22,7 +22,7 @@
 
 ## Receipt preview (list and dialogs)
 1. On the main transaction list, if a row has a stored receipt URI, a **photo** icon appears next to edit.
-2. **Preview receipt** (in add/edit) or the list **photo** icon opens **ReceiptPreviewActivity**: fullscreen image, **pinch to zoom**, **drag** to pan when zoomed, **double-tap** to refit, **Rotate left / Rotate right** for 90° steps, **back/close** to return.
+2. **Preview receipt** (in add/edit) or the list **photo** icon opens **ReceiptPreviewActivity**: fullscreen image, **pinch to zoom**, **drag** to pan when zoomed, **double-tap** to refit, **Rotate left / Rotate right** for 90° **view-only** steps. **Save rotation** is **enabled** (not merely visible) when the net angle mod 360° is non-zero; it prompts **Replace / Cancel**, then decodes from the same URI, **Matrix**-rotates pixels, overwrites the JPEG at quality **92**, **reloads** the image, and resets view rotation to **0°**. **Back** or **close** with unsaved rotation: **Keep editing** or **Discard**. Failed writes show a **Material** alert.
 
 ## Transfer Flow
 1. User enables transfer mode in the transaction dialog.

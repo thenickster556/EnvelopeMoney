@@ -14,7 +14,7 @@ import androidx.appcompat.widget.AppCompatImageView;
 
 /**
  * Pinch-zoom, drag when zoomed, double-tap to reset fit. Host activity may call
- * {@link #setRotation(float)} on this view for 90° steps.
+ * {@link #setRotation(float)} on this view for 90° preview steps before persisting pixel rotation.
  */
 public class ReceiptZoomImageView extends AppCompatImageView {
 

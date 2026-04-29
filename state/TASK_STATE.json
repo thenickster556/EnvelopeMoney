@@ -8,6 +8,11 @@
   ],
   "completed_tasks": [
     {
+      "id": "receipt-preview-rotation-overwrite-2026-04",
+      "title": "Receipt preview: persist rotation (JPEG overwrite same Uri, OCR parser verify + tests)",
+      "intent": "Verify ReceiptFieldParser merchant junk/title-case and restaurant/receipt pickTotal; extend goldens; ReceiptPreviewActivity dirty tracking when net rotation mod 360 != 0, Save overwrites Pictures/Mountain Money file via ContentResolver at JPEG 92, Matrix pixel rotate + reload; back/close discard confirm."
+    },
+    {
       "id": "ocr-merchant-restaurant-2026-04",
       "title": "ReceiptFieldParser: merchant line + title case; restaurant final total (amount due / last total)"
     },
@@ -68,5 +73,5 @@
       "title": "Fullscreen zoomable rotatable ReceiptPreviewActivity; ReceiptZoomImageView; ReceiptBitmapLoader"
     }
   ],
-  "last_updated": "2026-04-21"
+  "last_updated": "2026-04-29"
 }

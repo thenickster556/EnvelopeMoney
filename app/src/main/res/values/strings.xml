@@ -68,6 +68,15 @@
     <string name="content_desc_transaction_receipt">View receipt image</string>
     <string name="receipt_preview_rotate_left">Rotate left</string>
     <string name="receipt_preview_rotate_right">Rotate right</string>
+    <string name="receipt_preview_save_rotation">Save rotation</string>
+    <string name="receipt_preview_replace_title">Replace saved receipt image?</string>
+    <string name="receipt_preview_replace_message">This overwrites the JPEG at the saved location (camera shots use Pictures/Mountain Money). The transaction will still point to the same image.</string>
+    <string name="receipt_preview_replace_confirm">Replace</string>
+    <string name="receipt_preview_discard_rotation_title">Discard rotation?</string>
+    <string name="receipt_preview_discard_rotation_message">Your rotation has not been saved. Close anyway?</string>
+    <string name="receipt_preview_keep_editing">Keep editing</string>
+    <string name="receipt_preview_discard">Discard</string>
+    <string name="receipt_preview_save_failed">Could not save the rotated image. Check storage permissions or try again.</string>
     <string name="receipt_preview_gestures_hint">Pinch to zoom · drag to pan · double-tap to refit</string>
     <string name="content_desc_close_receipt_preview">Close receipt preview</string>
     <string name="receipt_permission_camera">Camera permission is needed to scan.</string>
