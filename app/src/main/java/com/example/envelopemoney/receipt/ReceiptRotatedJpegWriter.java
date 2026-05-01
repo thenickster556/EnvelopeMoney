@@ -52,13 +52,17 @@ public final class ReceiptRotatedJpegWriter {
                 toEncode = src;
                 src = null;
             }
-            try (OutputStream out = context.getContentResolver().openOutputStream(uri, "w")) {
-                if (out == null) {
-                    throw new IOException("openOutputStream null");
+            try {
+                try (OutputStream out = context.getContentResolver().openOutputStream(uri, "w")) {
+                    if (out == null) {
+                        throw new IOException("openOutputStream null");
+                    }
+                    if (!toEncode.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)) {
+                        throw new IOException("compress failed");
+                    }
                 }
-                if (!toEncode.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)) {
-                    throw new IOException("compress failed");
-                }
+            } catch (SecurityException e) {
+                throw new IOException("overwrite permission denied", e);
             }
         } finally {
             if (src != null && !src.isRecycled()) {

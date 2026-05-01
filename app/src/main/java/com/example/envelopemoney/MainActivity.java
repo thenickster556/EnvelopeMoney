@@ -43,6 +43,7 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import com.example.envelopemoney.receipt.PaddleOcrAdapter;
 import com.example.envelopemoney.receipt.ReceiptCaptureActivity;
+import com.example.envelopemoney.receipt.ReceiptPickerUriNormalizer;
 import com.example.envelopemoney.receipt.ReceiptPreviewActivity;
 import com.example.envelopemoney.receipt.ReceiptCaptureMode;
 import com.example.envelopemoney.receipt.ReceiptDraft;
@@ -63,6 +64,7 @@ import com.example.envelopemoney.Transaction;
 
 import java.lang.reflect.Field;
 import java.text.ParseException;
+import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -732,18 +734,34 @@ public class MainActivity extends AppCompatActivity {
         if (receiptDialogHostView == null || imageUri == null) {
             return;
         }
-        receiptDialogHostView.setTag(R.id.tag_receipt_image_uri, imageUri.toString());
-        syncReceiptActionUi(receiptDialogHostView);
         final TextView status = receiptDialogHostView.findViewById(R.id.tvReceiptOcrStatus);
         if (status != null) {
             status.setVisibility(View.VISIBLE);
             status.setText(R.string.receipt_ocr_reading);
         }
         Executors.newSingleThreadExecutor().execute(() -> {
+            Uri uri = imageUri;
+            try {
+                uri = ReceiptPickerUriNormalizer.normalize(MainActivity.this, uri);
+            } catch (IOException e) {
+                Log.e("EnvelopeMoney", "receipt persist picker uri", e);
+                runOnUiThread(() -> {
+                    if (status != null) {
+                        status.setText(R.string.receipt_ocr_failed);
+                    }
+                    Toast.makeText(MainActivity.this, R.string.receipt_ocr_failed, Toast.LENGTH_LONG).show();
+                });
+                return;
+            }
+            final Uri finalUri = uri;
+            runOnUiThread(() -> {
+                receiptDialogHostView.setTag(R.id.tag_receipt_image_uri, finalUri.toString());
+                syncReceiptActionUi(receiptDialogHostView);
+            });
             Bitmap bmp;
-            try (java.io.InputStream is = getContentResolver().openInputStream(imageUri)) {
+            try (java.io.InputStream is = getContentResolver().openInputStream(finalUri)) {
                 bmp = is != null ? BitmapFactory.decodeStream(is) : null;
-            } catch (java.io.IOException e) {
+            } catch (java.io.IOException | SecurityException e) {
                 Log.e("EnvelopeMoney", "receipt decode", e);
                 bmp = null;
             }
@@ -866,8 +884,20 @@ public class MainActivity extends AppCompatActivity {
         if (uri == null) {
             return;
         }
-        startActivity(new Intent(this, ReceiptPreviewActivity.class)
-                .putExtra(ReceiptPreviewActivity.EXTRA_IMAGE_URI, uri.toString()));
+        Executors.newSingleThreadExecutor().execute(() -> {
+            Uri resolved = uri;
+            try {
+                resolved = ReceiptPickerUriNormalizer.normalize(MainActivity.this, resolved);
+            } catch (IOException e) {
+                Log.e("EnvelopeMoney", "receipt preview uri", e);
+                runOnUiThread(() -> Toast.makeText(MainActivity.this,
+                        R.string.receipt_preview_load_failed, Toast.LENGTH_LONG).show());
+                return;
+            }
+            final Uri out = resolved;
+            runOnUiThread(() -> startActivity(new Intent(MainActivity.this, ReceiptPreviewActivity.class)
+                    .putExtra(ReceiptPreviewActivity.EXTRA_IMAGE_URI, out.toString())));
+        });
     }
 
     private void updateTransactionHistory() {
