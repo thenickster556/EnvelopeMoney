@@ -5,4 +5,6 @@
     <dimen name="nav_header_vertical_spacing">8dp</dimen>
     <dimen name="nav_header_height">176dp</dimen>
     <dimen name="fab_margin">16dp</dimen>
+    <!-- MaterialAlertDialog body; caps nested scroll height so recurring + transfer stay reachable -->
+    <dimen name="dialog_transaction_scroll_max_height">460dp</dimen>
 </resources>

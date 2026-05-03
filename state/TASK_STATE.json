@@ -8,6 +8,11 @@
   ],
   "completed_tasks": [
     {
+      "id": "transaction-dialog-scroll-icons-2026-04",
+      "title": "Add/edit transaction dialogs: BoundedNestedScrollView + receipt icon toolbar",
+      "intent": "dialog_new_transaction / dialog_transaction: icon toolbar + HorizontalScrollView; BoundedNestedScrollView + dimen max height; MainActivity receipt wiring as View; strings content descriptions; ic_receipt_delete."
+    },
+    {
       "id": "receipt-preview-rotation-overwrite-2026-04",
       "title": "Receipt preview: persist rotation (JPEG overwrite same Uri, OCR parser verify + tests)",
       "intent": "Verify ReceiptFieldParser merchant junk/title-case and restaurant/receipt pickTotal; extend goldens; ReceiptPreviewActivity dirty tracking when net rotation mod 360 != 0, Save overwrites Pictures/Mountain Money file via ContentResolver at JPEG 92, Matrix pixel rotate + reload; back/close discard confirm."
@@ -73,5 +78,5 @@
       "title": "Fullscreen zoomable rotatable ReceiptPreviewActivity; ReceiptZoomImageView; ReceiptBitmapLoader"
     }
   ],
-  "last_updated": "2026-04-29"
+  "last_updated": "2026-04-30"
 }

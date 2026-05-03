@@ -26,4 +26,9 @@
     <style name="Theme.EnvelopeMoney.AppBarOverlay" parent="ThemeOverlay.AppCompat.Dark.ActionBar" />
 
     <style name="Theme.EnvelopeMoney.PopupOverlay" parent="ThemeOverlay.AppCompat.Light" />
+
+    <style name="Widget.MountainMoney.TransactionReceiptIconButton" parent="Widget.MaterialComponents.Button.OutlinedButton.IconOnly">
+        <item name="strokeColor">?attr/colorPrimary</item>
+        <item name="iconTint">?attr/colorControlNormal</item>
+    </style>
 </resources>

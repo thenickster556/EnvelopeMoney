@@ -1,322 +1,345 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:orientation="vertical"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:orientation="vertical"
     android:padding="16dp">
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="@string/select_pond_label"/>
-    <Spinner
-        android:id="@+id/spinnerEditEnvelope"
+    <HorizontalScrollView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:theme="@style/ThemeOverlay.MountainMoney.Spinner" />
+        android:fadeScrollbars="false"
+        android:fillViewport="true"
+        android:scrollbars="horizontal">
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:orientation="horizontal"
-        android:gravity="center">
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnReceiptCamera"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-            android:layout_width="0dp"
+        <LinearLayout
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="@string/receipt_scan_camera" />
+            android:layout_gravity="center_horizontal"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnReceiptGallery"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-            android:layout_width="0dp"
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnReceiptCamera"
+                style="@style/Widget.MountainMoney.TransactionReceiptIconButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                android:contentDescription="@string/content_desc_receipt_camera_scan_icon"
+                android:text=""
+                app:icon="@drawable/ic_menu_camera" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnReceiptGallery"
+                style="@style/Widget.MountainMoney.TransactionReceiptIconButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                android:contentDescription="@string/content_desc_receipt_pick_gallery_icon"
+                android:text=""
+                app:icon="@drawable/ic_menu_gallery" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnReceiptPreview"
+                style="@style/Widget.MountainMoney.TransactionReceiptIconButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                android:contentDescription="@string/content_desc_receipt_preview_icon"
+                android:enabled="false"
+                android:text=""
+                app:icon="@drawable/ic_receipt_photo" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnReceiptRemove"
+                style="@style/Widget.MountainMoney.TransactionReceiptIconButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="@string/content_desc_receipt_remove_icon"
+                android:enabled="false"
+                android:text=""
+                app:icon="@drawable/ic_receipt_delete" />
+        </LinearLayout>
+    </HorizontalScrollView>
+
+    <com.example.envelopemoney.ui.BoundedNestedScrollView
+        android:id="@+id/scrollTransactionDialogBody"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:fadeScrollbars="false"
+        android:scrollbars="vertical">
+
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:layout_weight="1"
-            android:text="@string/receipt_scan_gallery" />
-    </LinearLayout>
+            android:orientation="vertical">
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:orientation="horizontal"
-        android:gravity="center">
+            <TextView
+                android:id="@+id/tvReceiptOcrStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:textSize="12sp"
+                android:visibility="gone" />
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnReceiptPreview"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:enabled="false"
-            android:text="@string/receipt_preview" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/select_pond_label" />
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnReceiptRemove"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:layout_weight="1"
-            android:enabled="false"
-            android:text="@string/receipt_remove" />
-    </LinearLayout>
+            <Spinner
+                android:id="@+id/spinnerEditEnvelope"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:theme="@style/ThemeOverlay.MountainMoney.Spinner" />
 
-    <TextView
-        android:id="@+id/tvReceiptOcrStatus"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:textSize="12sp"
-        android:visibility="gone" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Date" />
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Date"
-        android:layout_marginTop="8dp"/>
-    <EditText
-        android:id="@+id/etEditTransactionDate"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:hint="Select Date"
-        android:focusable="false"
-        android:clickable="true"/>
+            <EditText
+                android:id="@+id/etEditTransactionDate"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:clickable="true"
+                android:focusable="false"
+                android:hint="Select Date" />
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Amount"
-        android:layout_marginTop="8dp"/>
-    <EditText
-        android:id="@+id/etEditTransactionAmount"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:hint="Amount"
-        android:inputType="numberDecimal|numberSigned"/>
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Amount" />
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Comment"
-        android:layout_marginTop="8dp"/>
-    <EditText
-        android:id="@+id/etEditTransactionComment"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:hint="Comment"
-        android:inputType="text"/>
+            <EditText
+                android:id="@+id/etEditTransactionAmount"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="Amount"
+                android:inputType="numberDecimal|numberSigned" />
 
-    <androidx.appcompat.widget.AppCompatCheckBox
-        android:id="@+id/cbIsRecurring"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:text="This is reoccuring"
-        app:buttonTint="?attr/colorPrimary" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Comment" />
 
-    <TextView
-        android:id="@+id/tvRecurringFrequencyLabel"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:text="Recurring Frequency"
-        android:textColor="?android:attr/textColorSecondary" />
+            <EditText
+                android:id="@+id/etEditTransactionComment"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="Comment"
+                android:inputType="text" />
 
-    <LinearLayout
-        android:id="@+id/layoutRecurringFrequencyOptions"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
-        android:orientation="horizontal"
-        android:gravity="center_vertical">
+            <androidx.appcompat.widget.AppCompatCheckBox
+                android:id="@+id/cbIsRecurring"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="This is reoccuring"
+                app:buttonTint="?attr/colorPrimary" />
 
-        <TextView
-            android:id="@+id/btnRecurringWeekly"
-            android:layout_width="0dp"
-            android:layout_height="36dp"
-            android:layout_weight="1"
-            android:gravity="center"
-            android:text="Weekly"
-            android:textStyle="bold"
-            android:textColor="?android:attr/textColorSecondary"
-            android:background="@drawable/recurring_option_unselected_ripple"
-            android:clickable="true"
-            android:focusable="true" />
+            <TextView
+                android:id="@+id/tvRecurringFrequencyLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Recurring Frequency"
+                android:textColor="?android:attr/textColorSecondary" />
 
-        <TextView
-            android:id="@+id/btnRecurringBiWeekly"
-            android:layout_width="0dp"
-            android:layout_height="36dp"
-            android:layout_weight="1"
-            android:layout_marginStart="6dp"
-            android:gravity="center"
-            android:text="Bi-weekly"
-            android:textStyle="bold"
-            android:textColor="?android:attr/textColorSecondary"
-            android:background="@drawable/recurring_option_unselected_ripple"
-            android:clickable="true"
-            android:focusable="true" />
+            <LinearLayout
+                android:id="@+id/layoutRecurringFrequencyOptions"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
 
-        <TextView
-            android:id="@+id/btnRecurringMonthly"
-            android:layout_width="0dp"
-            android:layout_height="36dp"
-            android:layout_weight="1"
-            android:layout_marginStart="6dp"
-            android:gravity="center"
-            android:text="Monthly"
-            android:textStyle="bold"
-            android:textColor="?android:attr/textColorSecondary"
-            android:background="@drawable/recurring_option_unselected_ripple"
-            android:clickable="true"
-            android:focusable="true" />
-    </LinearLayout>
+                <TextView
+                    android:id="@+id/btnRecurringWeekly"
+                    android:layout_width="0dp"
+                    android:layout_height="36dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/recurring_option_unselected_ripple"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:text="Weekly"
+                    android:textColor="?android:attr/textColorSecondary"
+                    android:textStyle="bold" />
 
-    <TextView
-        android:id="@+id/tvRecurringDaysLabel"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:text="Recurring Days"
-        android:textColor="?android:attr/textColorSecondary" />
+                <TextView
+                    android:id="@+id/btnRecurringBiWeekly"
+                    android:layout_width="0dp"
+                    android:layout_height="36dp"
+                    android:layout_marginStart="6dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/recurring_option_unselected_ripple"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:text="Bi-weekly"
+                    android:textColor="?android:attr/textColorSecondary"
+                    android:textStyle="bold" />
 
-    <LinearLayout
-        android:id="@+id/layoutRecurringWeekdayButtons"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
-        android:orientation="horizontal"
-        android:visibility="gone">
+                <TextView
+                    android:id="@+id/btnRecurringMonthly"
+                    android:layout_width="0dp"
+                    android:layout_height="36dp"
+                    android:layout_marginStart="6dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/recurring_option_unselected_ripple"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:text="Monthly"
+                    android:textColor="?android:attr/textColorSecondary"
+                    android:textStyle="bold" />
+            </LinearLayout>
 
-        <TextView
-            android:id="@+id/btnRecurringDayMon"
-            android:layout_width="0dp"
-            android:layout_height="34dp"
-            android:layout_weight="1"
-            android:gravity="center"
-            android:text="M"
-            android:textStyle="bold"
-            android:textColor="?android:attr/textColorSecondary"
-            android:background="@drawable/recurring_option_unselected_ripple"
-            android:clickable="true"
-            android:focusable="true" />
+            <TextView
+                android:id="@+id/tvRecurringDaysLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Recurring Days"
+                android:textColor="?android:attr/textColorSecondary" />
 
-        <TextView
-            android:id="@+id/btnRecurringDayTue"
-            android:layout_width="0dp"
-            android:layout_height="34dp"
-            android:layout_weight="1"
-            android:layout_marginStart="4dp"
-            android:gravity="center"
-            android:text="T"
-            android:textStyle="bold"
-            android:textColor="?android:attr/textColorSecondary"
-            android:background="@drawable/recurring_option_unselected_ripple"
-            android:clickable="true"
-            android:focusable="true" />
+            <LinearLayout
+                android:id="@+id/layoutRecurringWeekdayButtons"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:orientation="horizontal"
+                android:visibility="gone">
 
-        <TextView
-            android:id="@+id/btnRecurringDayWed"
-            android:layout_width="0dp"
-            android:layout_height="34dp"
-            android:layout_weight="1"
-            android:layout_marginStart="4dp"
-            android:gravity="center"
-            android:text="W"
-            android:textStyle="bold"
-            android:textColor="?android:attr/textColorSecondary"
-            android:background="@drawable/recurring_option_unselected_ripple"
-            android:clickable="true"
-            android:focusable="true" />
+                <TextView
+                    android:id="@+id/btnRecurringDayMon"
+                    android:layout_width="0dp"
+                    android:layout_height="34dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/recurring_option_unselected_ripple"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:text="M"
+                    android:textColor="?android:attr/textColorSecondary"
+                    android:textStyle="bold" />
 
-        <TextView
-            android:id="@+id/btnRecurringDayThu"
-            android:layout_width="0dp"
-            android:layout_height="34dp"
-            android:layout_weight="1"
-            android:layout_marginStart="4dp"
-            android:gravity="center"
-            android:text="Th"
-            android:textStyle="bold"
-            android:textColor="?android:attr/textColorSecondary"
-            android:background="@drawable/recurring_option_unselected_ripple"
-            android:clickable="true"
-            android:focusable="true" />
+                <TextView
+                    android:id="@+id/btnRecurringDayTue"
+                    android:layout_width="0dp"
+                    android:layout_height="34dp"
+                    android:layout_marginStart="4dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/recurring_option_unselected_ripple"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:text="T"
+                    android:textColor="?android:attr/textColorSecondary"
+                    android:textStyle="bold" />
 
-        <TextView
-            android:id="@+id/btnRecurringDayFri"
-            android:layout_width="0dp"
-            android:layout_height="34dp"
-            android:layout_weight="1"
-            android:layout_marginStart="4dp"
-            android:gravity="center"
-            android:text="F"
-            android:textStyle="bold"
-            android:textColor="?android:attr/textColorSecondary"
-            android:background="@drawable/recurring_option_unselected_ripple"
-            android:clickable="true"
-            android:focusable="true" />
+                <TextView
+                    android:id="@+id/btnRecurringDayWed"
+                    android:layout_width="0dp"
+                    android:layout_height="34dp"
+                    android:layout_marginStart="4dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/recurring_option_unselected_ripple"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:text="W"
+                    android:textColor="?android:attr/textColorSecondary"
+                    android:textStyle="bold" />
 
-        <TextView
-            android:id="@+id/btnRecurringDaySat"
-            android:layout_width="0dp"
-            android:layout_height="34dp"
-            android:layout_weight="1"
-            android:layout_marginStart="4dp"
-            android:gravity="center"
-            android:text="S"
-            android:textStyle="bold"
-            android:textColor="?android:attr/textColorSecondary"
-            android:background="@drawable/recurring_option_unselected_ripple"
-            android:clickable="true"
-            android:focusable="true" />
-    </LinearLayout>
+                <TextView
+                    android:id="@+id/btnRecurringDayThu"
+                    android:layout_width="0dp"
+                    android:layout_height="34dp"
+                    android:layout_marginStart="4dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/recurring_option_unselected_ripple"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:text="Th"
+                    android:textColor="?android:attr/textColorSecondary"
+                    android:textStyle="bold" />
 
-    <androidx.appcompat.widget.AppCompatTextView
-        android:id="@+id/tvRecurringDaysValue"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:minHeight="40dp"
-        android:padding="10dp"
-        android:background="@drawable/recurring_option_unselected_ripple"
-        android:text="Select days"
-        android:textColor="?android:attr/textColorPrimary"
-        app:drawableEndCompat="@drawable/ic_calendar_bills_setup"
-        app:drawableTint="?attr/colorControlNormal"
-        android:drawablePadding="8dp"
-        android:gravity="center_vertical"
-        android:focusable="false"
-        android:clickable="true"
-        android:importantForAccessibility="yes"
-        android:contentDescription="@string/content_desc_recurring_day_picker" />
+                <TextView
+                    android:id="@+id/btnRecurringDayFri"
+                    android:layout_width="0dp"
+                    android:layout_height="34dp"
+                    android:layout_marginStart="4dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/recurring_option_unselected_ripple"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:text="F"
+                    android:textColor="?android:attr/textColorSecondary"
+                    android:textStyle="bold" />
 
-    <androidx.appcompat.widget.AppCompatCheckBox
-        android:id="@+id/cbIsTransfer"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:text="This is a transfer"
-        app:buttonTint="?attr/colorPrimary" />
+                <TextView
+                    android:id="@+id/btnRecurringDaySat"
+                    android:layout_width="0dp"
+                    android:layout_height="34dp"
+                    android:layout_marginStart="4dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/recurring_option_unselected_ripple"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:text="S"
+                    android:textColor="?android:attr/textColorSecondary"
+                    android:textStyle="bold" />
+            </LinearLayout>
 
-    <TextView
-        android:id="@+id/tvTransferToLabel"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:labelFor="@id/spinnerTransferDestination"
-        android:text="Transfer To" />
+            <androidx.appcompat.widget.AppCompatTextView
+                android:id="@+id/tvRecurringDaysValue"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/recurring_option_unselected_ripple"
+                android:clickable="true"
+                android:contentDescription="@string/content_desc_recurring_day_picker"
+                android:drawablePadding="8dp"
+                android:focusable="false"
+                android:gravity="center_vertical"
+                android:importantForAccessibility="yes"
+                android:minHeight="40dp"
+                android:padding="10dp"
+                android:text="Select days"
+                android:textColor="?android:attr/textColorPrimary"
+                app:drawableEndCompat="@drawable/ic_calendar_bills_setup"
+                app:drawableTint="?attr/colorControlNormal" />
 
-    <Spinner
-        android:id="@+id/spinnerTransferDestination"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:theme="@style/ThemeOverlay.MountainMoney.Spinner" />
+            <androidx.appcompat.widget.AppCompatCheckBox
+                android:id="@+id/cbIsTransfer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="This is a transfer"
+                app:buttonTint="?attr/colorPrimary" />
+
+            <TextView
+                android:id="@+id/tvTransferToLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:labelFor="@id/spinnerTransferDestination"
+                android:text="Transfer To" />
+
+            <Spinner
+                android:id="@+id/spinnerTransferDestination"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:theme="@style/ThemeOverlay.MountainMoney.Spinner" />
+        </LinearLayout>
+    </com.example.envelopemoney.ui.BoundedNestedScrollView>
 </LinearLayout>

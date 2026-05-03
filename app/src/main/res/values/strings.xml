@@ -66,6 +66,10 @@
     <string name="receipt_preview_title">Receipt image</string>
     <string name="receipt_preview_load_failed">Could not open this image.</string>
     <string name="content_desc_transaction_receipt">View receipt image</string>
+    <string name="content_desc_receipt_camera_scan_icon">Scan receipt with camera</string>
+    <string name="content_desc_receipt_pick_gallery_icon">Pick receipt image from gallery</string>
+    <string name="content_desc_receipt_preview_icon">Preview attached receipt</string>
+    <string name="content_desc_receipt_remove_icon">Remove attached receipt</string>
     <string name="receipt_preview_rotate_left">Rotate left</string>
     <string name="receipt_preview_rotate_right">Rotate right</string>
     <string name="receipt_preview_save_rotation">Save rotation</string>

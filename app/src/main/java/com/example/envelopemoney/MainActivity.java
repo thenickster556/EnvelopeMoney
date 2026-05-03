@@ -49,7 +49,6 @@ import com.example.envelopemoney.receipt.ReceiptCaptureMode;
 import com.example.envelopemoney.receipt.ReceiptDraft;
 import com.example.envelopemoney.receipt.ReceiptOcrPipeline;
 import com.example.envelopemoney.receipt.ReceiptRowUi;
-import com.google.android.material.button.MaterialButton;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.drawable.DrawableCompat;
@@ -830,8 +829,8 @@ public class MainActivity extends AppCompatActivity {
         }
         Object tag = host.getTag(R.id.tag_receipt_image_uri);
         boolean has = tag instanceof String && !((String) tag).isEmpty();
-        MaterialButton preview = host.findViewById(R.id.btnReceiptPreview);
-        MaterialButton remove = host.findViewById(R.id.btnReceiptRemove);
+        View preview = host.findViewById(R.id.btnReceiptPreview);
+        View remove = host.findViewById(R.id.btnReceiptRemove);
         if (preview != null) {
             preview.setEnabled(has);
         }
@@ -846,8 +845,8 @@ public class MainActivity extends AppCompatActivity {
         } else {
             dialogView.setTag(R.id.tag_receipt_image_uri, null);
         }
-        MaterialButton btnReceiptCamera = dialogView.findViewById(R.id.btnReceiptCamera);
-        MaterialButton btnReceiptGallery = dialogView.findViewById(R.id.btnReceiptGallery);
+        View btnReceiptCamera = dialogView.findViewById(R.id.btnReceiptCamera);
+        View btnReceiptGallery = dialogView.findViewById(R.id.btnReceiptGallery);
         if (btnReceiptCamera != null) {
             btnReceiptCamera.setOnClickListener(v -> {
                 Intent intent = new Intent(MainActivity.this, ReceiptCaptureActivity.class);
@@ -857,7 +856,7 @@ public class MainActivity extends AppCompatActivity {
         if (btnReceiptGallery != null) {
             btnReceiptGallery.setOnClickListener(v -> galleryPickLauncher.launch("image/*"));
         }
-        MaterialButton btnPreview = dialogView.findViewById(R.id.btnReceiptPreview);
+        View btnPreview = dialogView.findViewById(R.id.btnReceiptPreview);
         if (btnPreview != null) {
             btnPreview.setOnClickListener(v -> {
                 Object u = dialogView.getTag(R.id.tag_receipt_image_uri);
@@ -866,7 +865,7 @@ public class MainActivity extends AppCompatActivity {
                 }
             });
         }
-        MaterialButton btnRemove = dialogView.findViewById(R.id.btnReceiptRemove);
+        View btnRemove = dialogView.findViewById(R.id.btnReceiptRemove);
         if (btnRemove != null) {
             btnRemove.setOnClickListener(v -> {
                 dialogView.setTag(R.id.tag_receipt_image_uri, null);
