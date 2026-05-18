@@ -1,12 +1,30 @@
 {
   "active_tasks": [
     {
+      "id": "transfer-dialog-ux-polish-2026-05",
+      "title": "Polish grouped transfer dialog scrolling, dropdowns, and slider readability",
+      "status": "verification_blocked",
+      "intent": "Replace in-dialog transfer spinners with anchored dropdowns, improve bucket slider readability, defer early validation, auto-scroll the transfer section, and keep the transaction dialog modal-focused while grouped-transfer persistence stays unchanged."
+    },
+    {
       "id": "month-rollover-hardening",
       "title": "Verify month rollover hardening on a Gradle-compatible JDK",
       "status": "verification_blocked"
+    },
+    {
+      "id": "multi-bucket-transfer-groups-2026-05",
+      "title": "Add grouped multi-bucket transfers from one source total",
+      "status": "verification_blocked",
+      "intent": "Replace single-destination transfer UI with grouped transfer buckets; persist transferBucketId and bucketed TransferData; keep one source summary transaction with one mirror row per destination bucket; add helper tests and update repo memory."
     }
   ],
   "completed_tasks": [
+    {
+      "id": "split-purchase-tabbed-dialog-2026-05",
+      "title": "Split purchase + tabbed transaction dialog (Spending/Transfer/Split tabs; split group sync; history expand)",
+      "status": "completed",
+      "intent": "Transaction splitPurchaseGroupId/BucketId; SplitPurchaseSyncHelper + draft validation tests; TabLayout dialogs; MainActivity save/edit/delete; item_transaction expand for split only; docs. Local Gradle verify blocked (Java 25 vs Gradle 6.7.1)."
+    },
     {
       "id": "transaction-dialog-scroll-icons-2026-04",
       "title": "Add/edit transaction dialogs: BoundedNestedScrollView + receipt icon toolbar",
@@ -78,5 +96,5 @@
       "title": "Fullscreen zoomable rotatable ReceiptPreviewActivity; ReceiptZoomImageView; ReceiptBitmapLoader"
     }
   ],
-  "last_updated": "2026-04-30"
+  "last_updated": "2026-05-17"
 }

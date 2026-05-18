@@ -70,6 +70,9 @@
     <string name="content_desc_receipt_pick_gallery_icon">Pick receipt image from gallery</string>
     <string name="content_desc_receipt_preview_icon">Preview attached receipt</string>
     <string name="content_desc_receipt_remove_icon">Remove attached receipt</string>
+    <string name="content_desc_add_transfer_bucket">Add transfer bucket</string>
+    <string name="content_desc_add_split_bucket">Add split slice</string>
+    <string name="content_desc_remove_transfer_bucket">Remove transfer bucket</string>
     <string name="receipt_preview_rotate_left">Rotate left</string>
     <string name="receipt_preview_rotate_right">Rotate right</string>
     <string name="receipt_preview_save_rotation">Save rotation</string>
@@ -85,4 +88,17 @@
     <string name="content_desc_close_receipt_preview">Close receipt preview</string>
     <string name="receipt_permission_camera">Camera permission is needed to scan.</string>
     <string name="receipt_permission_storage">Storage permission is needed to save scans on this Android version.</string>
+
+    <string name="tab_transaction_type_spending">Spending</string>
+    <string name="tab_transaction_type_transfer">Transfer</string>
+    <string name="tab_transaction_type_split_purchase">Split purchase</string>
+    <string name="tab_transaction_time_one_time">One-time</string>
+    <string name="tab_transaction_time_recurring">Recurring</string>
+    <string name="split_purchase_total_hint">Purchase total</string>
+    <string name="split_purchase_summary_title">Split purchase</string>
+    <string name="split_purchase_allocated_default">Allocated: $0.00 / $0.00</string>
+    <string name="split_breakdown_total_line">Split breakdown — total spent $%.2f</string>
+    <string name="dialog_delete_split_purchase_message">Delete this entire split purchase from all ponds?</string>
+    <string name="content_desc_split_expand">Show split breakdown</string>
+    <string name="content_desc_split_collapse">Hide split breakdown</string>
 </resources>

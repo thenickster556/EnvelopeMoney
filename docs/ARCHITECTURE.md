@@ -6,6 +6,7 @@ Mountain Money (package `com.example.envelopemoney`) is a single-activity Androi
 ## Core Components
 - `MainActivity`
   - Owns screen initialization, custom top bar (`app_bar_main` outlined bar: theme-driven title and icon tints; DayNight bar fill/stroke via color resources), pond list, transactions list, month navigation, transfer totals spinner (destination ponds only), dialogs, bills-period filter, and rollover triggering.
+  - Add/edit transaction dialogs use **TabLayout** rows for **Spending / Transfer / Split purchase** (time tabs **One-time / Recurring** only on Spending). `expandedSplitGroupIds` toggles synchronized inline split breakdown rows in the transaction list.
   - Uses **`MaterialAlertDialogBuilder`** for modal dialogs; add/edit transaction layouts use **`BoundedNestedScrollView`** + receipt **icon toolbar** (`wireReceiptRow`, `syncReceiptActionUi`, `receiptDialogHostView`) with **`applyIconMaterialDialogActions`** for icon-only confirm/dismiss on the shell and recurring sub-pickers.
 - `MonthRolloverHelper`
   - Sanitizes persisted envelope state, repairs legacy month data, and computes a safe launch month on a deep copy before the activity adopts it. On rollover, **carry increases the available pool** (`remaining`, baselines, `MonthData`) while **`Envelope.limit` stays the user’s base monthly budget** (`originalLimit`).
@@ -13,10 +14,16 @@ Mountain Money (package `com.example.envelopemoney`) is a single-activity Androi
   - Pure helper resolving the latest bills day-of-month on or before “today,” walking backward by month when needed (unit-tested). If exactly one bills day is configured and it equals today’s calendar day, the anchor is that day in the **previous** month so the filter range spans through today.
 - `TransferDestinationList`
   - Builds the transfer destination pond name list (all ponds except the source) for add/edit transfer UI.
+- `TransferGroupDraft` / `TransferSyncHelper`
+  - Pure grouped-transfer helpers for transfer-bucket validation, bucket-summary math, legacy single-transfer migration, and source/mirror synchronization for one-to-many transfers.
+- `SplitPurchaseGroupDraft` / `SplitPurchaseSyncHelper`
+  - Pure helpers for **split purchases**: multiple positive expense slices in different ponds sharing one `splitPurchaseGroupId`, validation that slice amounts sum to the purchase total, `applyGroup` / `removeGroup` persistence, and list breakdown text.
+- `TransferBucketUiHelper`
+  - Pure UI helper for grouped-transfer controls: fixed-step slider snapping, scale-label generation, and validation-message gating so dialog UX changes stay testable outside `MainActivity`.
 - `Envelope`
   - Stores pond balances, optional `accountBalance`, month snapshots, transaction membership, transfer definitions, and manual override state.
 - `Transaction`
-  - Stores amount, date, comment, transfer linkage, and recurring metadata.
+  - Stores amount, date, comment, grouped transfer linkage (`transferId`, optional `transferBucketId`), **split purchase** linkage (`splitPurchaseGroupId`, `splitPurchaseBucketId` for multi-pond purchases), and recurring metadata.
 - `MonthTracker`
   - Stores the current persisted month, normalizes month values, and determines whether rollover is required.
 - `PrefManager`

@@ -11,6 +11,7 @@
 ## Transactions
 - Users can add, edit, and delete transactions.
 - **Receipt capture:** Add and **edit** transaction dialogs show a top **icon toolbar** (camera, gallery, preview, trash) inside a horizontally scrollable strip on very narrow widths. The form below (pond/envelope, fields, recurring, **Transfer To**) sits in **`BoundedNestedScrollView`** (`@dimen/dialog_transaction_scroll_max_height`) with **visible vertical scrollbars** when content overflows so the bottom is reachable with the keyboard open. **Preview** and **Remove** stay disabled until an image URI is attached; **Preview** opens the same **fullscreen** viewer (pinch-zoom, pan, double-tap refit, 90° **view** rotation until saved). **Save rotation** / replace / discard behavior is unchanged. On-device OCR behavior is unchanged—**pond is always chosen manually**. Camera saves under **Pictures/Mountain Money**. Rows with `receiptImageUri` show a **photo** icon to the same preview. See [receipt-ocr.md](receipt-ocr.md).
+- **Transaction type tabs:** **Spending**, **Transfer**, and **Split purchase** are mutually exclusive modes (replacing the old transfer checkbox). **One-time** / **Recurring** appears only on **Spending** (default **One-time** on add). **Transfer** keeps grouped bucket UX; **Split purchase** uses a purchase total plus two or more pond slices (fixed-step sliders like transfers). Split rows share `splitPurchaseGroupId` / `splitPurchaseBucketId`; deleting any slice removes the whole group (confirm). Edit enforces staying on the split tab for an existing split (no type conversion in v1).
 - **Recurring chips:** Frequency (Weekly / Bi-weekly / Monthly) and weekday toggles use **DayNight-aware** unselected fills and `textColorPrimary` for unselected labels so labels stay readable in dark dialogs (no white-on-white).
 - Transactions belong to ponds and contribute to month totals.
 - Transactions can be filtered by selected ponds and date range.
@@ -21,9 +22,13 @@
 - Changing the visible month clears the bills-period filter.
 
 ## Transfers
-- The **Transfer To** dropdown lists every pond **except** the source pond (a transfer cannot target the same pond).
-- Transfers move money between ponds using linked transactions.
-- Source and destination sides share a transfer ID.
+- Transfers may reserve multiple destination buckets from one source transaction total.
+- Each transfer bucket chooses a destination pond from ponds other than the source.
+- In add/edit transaction dialogs, the source pond selector and transfer destinations use anchored exposed dropdown fields inside the modal instead of `Spinner` popups.
+- The source summary transaction keeps the full user-entered total; the unallocated remainder stays normal spending in the source pond.
+- Source and mirrored bucket rows share a transfer-group ID; each bucket also has its own bucket ID for edit/delete targeting.
+- Transfer buckets use a fixed `$0.50` slider and `+/-` stepper for fast snapping, keep the slider stacked below the amount row on tighter screens, collapse scale landmarks when width is limited, and still allow exact-cent manual entry.
+- Transfer summary text is larger and validation stays quiet until the user interacts or attempts save; toggling transfer mode auto-scrolls the dialog section into view and scrolling dismisses any open dropdown popup.
 - Transfer visibility can be toggled in the transactions view.
 - With transfers visible, the header **spinner** lists each destination pond and how much was transferred **to** it in the date range (no separate “from” rows).
 

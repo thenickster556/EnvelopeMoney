@@ -44,6 +44,9 @@ The app persists most business state via SharedPreferences.
 - `comment: String` — for receipt capture, OCR may prefill with **merchant name only** (amount stays in `amount`).
 - `month: String`
 - `transferId: String?`
+- `transferBucketId: String?` — `null` on the source summary transaction; set on mirrored destination rows so one source total can feed many transfer buckets
+- `splitPurchaseGroupId: String?` — when set, this row is one slice of a **split purchase** (multi-pond expense); all slices share the same group id
+- `splitPurchaseBucketId: String?` — stable id for that slice within the group (for edit/replace)
 - `recurring: boolean`
 - `recurringFrequency: String?`
 - `recurringDays: List<Integer>`
@@ -53,8 +56,21 @@ The app persists most business state via SharedPreferences.
 
 ## TransferData Model
 - `id: String`
+- `bucketId: String?` â€” stable per-bucket id inside a grouped transfer; legacy single-destination transfers may deserialize without it
 - `toEnvelope: String`
 - `amount: double`
+
+## Grouped transfer semantics
+- One source transaction may reserve part of its total into multiple destination transfer buckets.
+- The source summary transaction keeps the full user-entered amount.
+- Each `TransferData` row stores one reserved bucket amount for that transfer group.
+- Each mirrored destination transaction stores both `transferId` and `transferBucketId` so edit/delete can target one grouped transfer while keeping bucket rows distinct.
+
+## Split purchase semantics
+- Each slice is a normal positive `Transaction` in its pond (`amount` is that pond’s portion of the purchase).
+- Slices in one purchase share `splitPurchaseGroupId` and are distinguished by `splitPurchaseBucketId`.
+- A transaction must not combine a non-empty `splitPurchaseGroupId` with a non-empty `transferId` (UI enforces mutual exclusion). Split purchases do not use `Envelope.TransferData` or negative mirror rows.
+- Recurring is not supported for split purchases in v1 (dialog hides time/recurring on non-Spending tabs).
 
 ## Pond totals footer
 - **Account (entered):** sum of `accountBalance` where not null.

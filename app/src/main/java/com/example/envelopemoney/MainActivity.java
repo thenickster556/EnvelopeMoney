@@ -9,17 +9,21 @@ import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.util.Log;
 import android.util.TypedValue;
 import android.graphics.PorterDuff;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
-import android.widget.Button;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.TouchDelegate;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.Window;
+import android.view.WindowManager;
+import android.widget.Button;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.ScrollView;
@@ -49,7 +53,11 @@ import com.example.envelopemoney.receipt.ReceiptCaptureMode;
 import com.example.envelopemoney.receipt.ReceiptDraft;
 import com.example.envelopemoney.receipt.ReceiptOcrPipeline;
 import com.example.envelopemoney.receipt.ReceiptRowUi;
+import com.example.envelopemoney.ui.BoundedNestedScrollView;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.google.android.material.slider.Slider;
+import com.google.android.material.tabs.TabLayout;
+import com.google.android.material.textfield.MaterialAutoCompleteTextView;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.drawable.DrawableCompat;
 
@@ -81,6 +89,14 @@ import java.util.UUID;
 import java.util.concurrent.Executors;
 
 public class MainActivity extends AppCompatActivity {
+    private static final double TRANSFER_STEP_AMOUNT = 0.50d;
+    private static final int TAB_TYPE_SPENDING = 0;
+    private static final int TAB_TYPE_TRANSFER = 1;
+    private static final int TAB_TYPE_SPLIT = 2;
+    private static final int TAB_TIME_ONE_TIME = 0;
+    private static final int TAB_TIME_RECURRING = 1;
+
+    private final Set<String> expandedSplitGroupIds = new HashSet<>();
     private ListView listViewEnvelopes;
     private List<Envelope> envelopes;
     private boolean monthRolloverInProgress = false;
@@ -121,6 +137,537 @@ public class MainActivity extends AppCompatActivity {
             this.total = total;
         }
     }
+
+    private static final class TransferDialogViews {
+        final View section;
+        final BoundedNestedScrollView scrollView;
+        final MaterialAutoCompleteTextView sourceDropdown;
+        final TextView allocatedSummary;
+        final TextView spentHereSummary;
+        final TextView remainingSummary;
+        final TextView validationMessage;
+        final LinearLayout bucketsContainer;
+        final View addBucketButton;
+        final List<TransferBucketRowController> bucketControllers = new ArrayList<>();
+        boolean hasMeaningfulInteraction = false;
+        boolean saveAttempted = false;
+        @Nullable Button positiveButton;
+
+        TransferDialogViews(View section,
+                            BoundedNestedScrollView scrollView,
+                            MaterialAutoCompleteTextView sourceDropdown,
+                            TextView allocatedSummary,
+                            TextView spentHereSummary,
+                            TextView remainingSummary,
+                            TextView validationMessage,
+                            LinearLayout bucketsContainer,
+                            View addBucketButton) {
+            this.section = section;
+            this.scrollView = scrollView;
+            this.sourceDropdown = sourceDropdown;
+            this.allocatedSummary = allocatedSummary;
+            this.spentHereSummary = spentHereSummary;
+            this.remainingSummary = remainingSummary;
+            this.validationMessage = validationMessage;
+            this.bucketsContainer = bucketsContainer;
+            this.addBucketButton = addBucketButton;
+        }
+    }
+
+    private final class TransferBucketRowController {
+        private final View rootView;
+        private final TextView titleView;
+        private final MaterialAutoCompleteTextView destinationDropdown;
+        private final View removeButton;
+        private final View decreaseButton;
+        private final View increaseButton;
+        private final TextView amountView;
+        private final Slider amountSlider;
+        private final EditText manualAmountView;
+        private final List<TextView> scaleLabelViews = new ArrayList<>();
+        private final TransferBucketAllocation allocation;
+        private boolean suppressCallbacks = false;
+        private List<String> availableDestinations = new ArrayList<>();
+
+        TransferBucketRowController(View rootView, TransferBucketAllocation allocation) {
+            this.rootView = rootView;
+            this.allocation = allocation;
+            this.titleView = rootView.findViewById(R.id.tvTransferBucketTitle);
+            this.destinationDropdown = rootView.findViewById(R.id.spinnerTransferBucketDestination);
+            this.removeButton = rootView.findViewById(R.id.btnRemoveTransferBucket);
+            this.decreaseButton = rootView.findViewById(R.id.btnTransferBucketDecrease);
+            this.increaseButton = rootView.findViewById(R.id.btnTransferBucketIncrease);
+            this.amountView = rootView.findViewById(R.id.tvTransferBucketAmount);
+            this.amountSlider = rootView.findViewById(R.id.sliderTransferBucketAmount);
+            this.manualAmountView = rootView.findViewById(R.id.etTransferBucketManualAmount);
+            scaleLabelViews.add(rootView.findViewById(R.id.tvTransferScaleLabelStart));
+            scaleLabelViews.add(rootView.findViewById(R.id.tvTransferScaleLabelQuarter));
+            scaleLabelViews.add(rootView.findViewById(R.id.tvTransferScaleLabelHalf));
+            scaleLabelViews.add(rootView.findViewById(R.id.tvTransferScaleLabelThreeQuarter));
+            scaleLabelViews.add(rootView.findViewById(R.id.tvTransferScaleLabelEnd));
+            configureDialogDropdown(destinationDropdown, () -> {
+                if (activeTransferDialogViews != null) {
+                    prepareDialogDropdownForOpen(activeTransferDialogViews, destinationDropdown, rootView);
+                }
+            });
+            manualAmountView.setOnFocusChangeListener((view, hasFocus) -> {
+                if (hasFocus && activeTransferDialogViews != null) {
+                    scrollTransferDialogToView(activeTransferDialogViews, rootView, false);
+                }
+            });
+            bindCallbacks();
+            setAmountInternal(allocation.getAmount(), false);
+        }
+
+        TransferBucketAllocation getAllocation() {
+            return allocation;
+        }
+
+        View getRootView() {
+            return rootView;
+        }
+
+        void dismissDropdown() {
+            destinationDropdown.dismissDropDown();
+        }
+
+        void setIndex(int index, boolean canRemove) {
+            titleView.setText(String.format(Locale.getDefault(), "Bucket %d", index + 1));
+            removeButton.setVisibility(canRemove ? View.VISIBLE : View.GONE);
+        }
+
+        void bindDestinations(String sourceEnvelopeName, @Nullable String selectedDestination) {
+            availableDestinations = TransferDestinationList.excludingSource(envelopes, sourceEnvelopeName);
+            ArrayAdapter<String> adapter = new ArrayAdapter<>(MainActivity.this,
+                    android.R.layout.simple_list_item_1, availableDestinations);
+            destinationDropdown.setAdapter(adapter);
+            destinationDropdown.setEnabled(!availableDestinations.isEmpty());
+
+            String targetDestination = selectedDestination;
+            if (targetDestination == null || !availableDestinations.contains(targetDestination)) {
+                targetDestination = availableDestinations.isEmpty() ? null : availableDestinations.get(0);
+            }
+            suppressCallbacks = true;
+            if (targetDestination != null) {
+                destinationDropdown.setText(targetDestination, false);
+                allocation.setToEnvelope(targetDestination);
+            } else {
+                destinationDropdown.setText("", false);
+                allocation.setToEnvelope(null);
+            }
+            suppressCallbacks = false;
+        }
+
+        void refreshSliderBounds(double totalAmount) {
+            double maxAmountForBucket = Math.max(0d, totalAmount - allocatedExcluding(this));
+            double sliderMaximum = Math.floor((maxAmountForBucket + 0.0001d) / TRANSFER_STEP_AMOUNT) * TRANSFER_STEP_AMOUNT;
+            boolean sliderEnabled = sliderMaximum >= TRANSFER_STEP_AMOUNT;
+            suppressCallbacks = true;
+            amountSlider.setValueFrom(0f);
+            amountSlider.setStepSize((float) TRANSFER_STEP_AMOUNT);
+            amountSlider.setEnabled(sliderEnabled);
+            amountSlider.setValueTo((float) Math.max(TRANSFER_STEP_AMOUNT, sliderMaximum));
+            amountSlider.setValue(sliderEnabled
+                    ? (float) TransferBucketUiHelper.snapToStep(allocation.getAmount(), TRANSFER_STEP_AMOUNT, sliderMaximum)
+                    : 0f);
+            suppressCallbacks = false;
+            updateScaleLabels(maxAmountForBucket);
+        }
+
+        private void updateScaleLabels(double maxAmountForBucket) {
+            int labelCount = TransferBucketUiHelper.recommendedScaleLabelCount(
+                    rootView.getWidth(),
+                    rootView.getResources().getDisplayMetrics().density);
+            if (labelCount <= 3) {
+                List<String> compactLabels = TransferBucketUiHelper.buildScaleLabels(maxAmountForBucket, 3);
+                scaleLabelViews.get(0).setVisibility(View.VISIBLE);
+                scaleLabelViews.get(0).setText(compactLabels.get(0));
+                scaleLabelViews.get(1).setVisibility(View.GONE);
+                scaleLabelViews.get(2).setVisibility(View.VISIBLE);
+                scaleLabelViews.get(2).setText(compactLabels.get(1));
+                scaleLabelViews.get(3).setVisibility(View.GONE);
+                scaleLabelViews.get(4).setVisibility(View.VISIBLE);
+                scaleLabelViews.get(4).setText(compactLabels.get(2));
+                return;
+            }
+
+            List<String> labels = TransferBucketUiHelper.buildScaleLabels(maxAmountForBucket, scaleLabelViews.size());
+            for (int i = 0; i < scaleLabelViews.size() && i < labels.size(); i++) {
+                scaleLabelViews.get(i).setVisibility(View.VISIBLE);
+                scaleLabelViews.get(i).setText(labels.get(i));
+            }
+        }
+
+        private void bindCallbacks() {
+            destinationDropdown.setOnItemClickListener((parent, view, position, id) -> {
+                if (suppressCallbacks) {
+                    return;
+                }
+                markTransferInteraction(activeTransferDialogViews);
+                allocation.setToEnvelope(availableDestinations.get(position));
+                updateTransferSectionSummary(activeTransferDialogViews);
+            });
+            removeButton.setOnClickListener(v -> {
+                if (activeTransferDialogViews == null) {
+                    return;
+                }
+                markTransferInteraction(activeTransferDialogViews);
+                activeTransferDialogViews.bucketControllers.remove(this);
+                activeTransferDialogViews.bucketsContainer.removeView(rootView);
+                refreshTransferBucketLabels(activeTransferDialogViews);
+                updateTransferSectionSummary(activeTransferDialogViews);
+            });
+            decreaseButton.setOnClickListener(v -> {
+                markTransferInteraction(activeTransferDialogViews);
+                double maxAllowed = Math.max(0d, parseAmountOrZero(activeTransferAmountInput) - allocatedExcluding(this));
+                double next = TransferBucketUiHelper.snapToStep(
+                        allocation.getAmount() - TRANSFER_STEP_AMOUNT,
+                        TRANSFER_STEP_AMOUNT,
+                        maxAllowed);
+                setAmountInternal(next, true);
+                updateTransferSectionSummary(activeTransferDialogViews);
+            });
+            increaseButton.setOnClickListener(v -> {
+                markTransferInteraction(activeTransferDialogViews);
+                double maxAllowed = Math.max(0d, parseAmountOrZero(activeTransferAmountInput) - allocatedExcluding(this));
+                double next = TransferBucketUiHelper.snapToStep(
+                        allocation.getAmount() + TRANSFER_STEP_AMOUNT,
+                        TRANSFER_STEP_AMOUNT,
+                        maxAllowed);
+                setAmountInternal(next, true);
+                updateTransferSectionSummary(activeTransferDialogViews);
+            });
+            amountSlider.addOnSliderTouchListener(new Slider.OnSliderTouchListener() {
+                @Override
+                public void onStartTrackingTouch(Slider slider) {
+                    markTransferInteraction(activeTransferDialogViews);
+                    if (activeTransferDialogViews != null) {
+                        scrollTransferDialogToView(activeTransferDialogViews, rootView, false);
+                    }
+                }
+
+                @Override
+                public void onStopTrackingTouch(Slider slider) {
+                }
+            });
+            amountSlider.addOnChangeListener((slider, value, fromUser) -> {
+                if (suppressCallbacks || !fromUser) {
+                    return;
+                }
+                markTransferInteraction(activeTransferDialogViews);
+                setAmountInternal(value, true);
+                updateTransferSectionSummary(activeTransferDialogViews);
+            });
+            manualAmountView.addTextChangedListener(new TextWatcher() {
+                @Override
+                public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+                }
+
+                @Override
+                public void onTextChanged(CharSequence s, int start, int before, int count) {
+                }
+
+                @Override
+                public void afterTextChanged(Editable s) {
+                    if (suppressCallbacks) {
+                        return;
+                    }
+                    markTransferInteraction(activeTransferDialogViews);
+                    allocation.setAmount(parseAmountOrZero(s == null ? null : s.toString()));
+                    amountView.setText(formatCurrency(allocation.getAmount()));
+                    updateTransferSectionSummary(activeTransferDialogViews);
+                }
+            });
+        }
+
+        private void setAmountInternal(double amount, boolean snapManualField) {
+            allocation.setAmount(Math.max(0d, amount));
+            amountView.setText(formatCurrency(allocation.getAmount()));
+            if (snapManualField) {
+                suppressCallbacks = true;
+                manualAmountView.setText(String.format(Locale.getDefault(), "%.2f", allocation.getAmount()));
+                manualAmountView.setSelection(manualAmountView.getText().length());
+                suppressCallbacks = false;
+            } else {
+                suppressCallbacks = true;
+                if (manualAmountView.getText().length() == 0 && allocation.getAmount() == 0d) {
+                    manualAmountView.setText("");
+                } else {
+                    manualAmountView.setText(String.format(Locale.getDefault(), "%.2f", allocation.getAmount()));
+                    manualAmountView.setSelection(manualAmountView.getText().length());
+                }
+                suppressCallbacks = false;
+            }
+        }
+    }
+
+
+    private static final class SplitDialogViews {
+        final View section;
+        final BoundedNestedScrollView scrollView;
+        final TextView allocatedSummary;
+        final TextView validationMessage;
+        final LinearLayout bucketsContainer;
+        final View addBucketButton;
+        final List<SplitPurchaseBucketRowController> bucketControllers = new ArrayList<>();
+        boolean hasMeaningfulInteraction = false;
+        boolean saveAttempted = false;
+        @Nullable Button positiveButton;
+
+        SplitDialogViews(View section,
+                         BoundedNestedScrollView scrollView,
+                         TextView allocatedSummary,
+                         TextView validationMessage,
+                         LinearLayout bucketsContainer,
+                         View addBucketButton) {
+            this.section = section;
+            this.scrollView = scrollView;
+            this.allocatedSummary = allocatedSummary;
+            this.validationMessage = validationMessage;
+            this.bucketsContainer = bucketsContainer;
+            this.addBucketButton = addBucketButton;
+        }
+    }
+
+    private final class SplitPurchaseBucketRowController {
+        private final View rootView;
+        private final TextView titleView;
+        private final MaterialAutoCompleteTextView pondDropdown;
+        private final View removeButton;
+        private final View decreaseButton;
+        private final View increaseButton;
+        private final TextView amountView;
+        private final Slider amountSlider;
+        private final EditText manualAmountView;
+        private final List<TextView> scaleLabelViews = new ArrayList<>();
+        private final SplitPurchaseSliceAllocation allocation;
+        private boolean suppressCallbacks = false;
+        private List<String> availablePonds = new ArrayList<>();
+
+        SplitPurchaseBucketRowController(View rootView, SplitPurchaseSliceAllocation allocation) {
+            this.rootView = rootView;
+            this.allocation = allocation;
+            this.titleView = rootView.findViewById(R.id.tvTransferBucketTitle);
+            this.pondDropdown = rootView.findViewById(R.id.spinnerTransferBucketDestination);
+            this.removeButton = rootView.findViewById(R.id.btnRemoveTransferBucket);
+            this.decreaseButton = rootView.findViewById(R.id.btnTransferBucketDecrease);
+            this.increaseButton = rootView.findViewById(R.id.btnTransferBucketIncrease);
+            this.amountView = rootView.findViewById(R.id.tvTransferBucketAmount);
+            this.amountSlider = rootView.findViewById(R.id.sliderTransferBucketAmount);
+            this.manualAmountView = rootView.findViewById(R.id.etTransferBucketManualAmount);
+            scaleLabelViews.add(rootView.findViewById(R.id.tvTransferScaleLabelStart));
+            scaleLabelViews.add(rootView.findViewById(R.id.tvTransferScaleLabelQuarter));
+            scaleLabelViews.add(rootView.findViewById(R.id.tvTransferScaleLabelHalf));
+            scaleLabelViews.add(rootView.findViewById(R.id.tvTransferScaleLabelThreeQuarter));
+            scaleLabelViews.add(rootView.findViewById(R.id.tvTransferScaleLabelEnd));
+            configureDialogDropdown(pondDropdown, () -> {
+                if (activeSplitDialogViews != null) {
+                    prepareSplitDialogDropdownForOpen(activeSplitDialogViews, pondDropdown, rootView);
+                }
+            });
+            manualAmountView.setOnFocusChangeListener((view, hasFocus) -> {
+                if (hasFocus && activeSplitDialogViews != null) {
+                    scrollSplitDialogToView(activeSplitDialogViews, rootView, false);
+                }
+            });
+            bindCallbacks();
+            setAmountInternal(allocation.getAmount(), false);
+        }
+
+        SplitPurchaseSliceAllocation getAllocation() {
+            return allocation;
+        }
+
+        View getRootView() {
+            return rootView;
+        }
+
+        MaterialAutoCompleteTextView getPondDropdown() {
+            return pondDropdown;
+        }
+
+        void dismissDropdown() {
+            pondDropdown.dismissDropDown();
+        }
+
+        void setIndex(int index, boolean canRemove) {
+            titleView.setText(String.format(Locale.getDefault(), "Slice %d", index + 1));
+            removeButton.setVisibility(canRemove ? View.VISIBLE : View.GONE);
+        }
+
+        void bindPonds(List<String> allPondNames, @Nullable String selectedPond) {
+            availablePonds = allPondNames == null ? new ArrayList<>() : new ArrayList<>(allPondNames);
+            ArrayAdapter<String> adapter = new ArrayAdapter<>(MainActivity.this,
+                    android.R.layout.simple_list_item_1, availablePonds);
+            pondDropdown.setAdapter(adapter);
+            pondDropdown.setEnabled(!availablePonds.isEmpty());
+
+            String target = selectedPond;
+            if (target == null || !availablePonds.contains(target)) {
+                target = availablePonds.isEmpty() ? null : availablePonds.get(0);
+            }
+            suppressCallbacks = true;
+            if (target != null) {
+                pondDropdown.setText(target, false);
+                allocation.setPondName(target);
+            } else {
+                pondDropdown.setText("", false);
+                allocation.setPondName(null);
+            }
+            suppressCallbacks = false;
+        }
+
+        void refreshSliderBounds(double totalAmount) {
+            double maxAmountForBucket = Math.max(0d, totalAmount - splitAllocatedExcluding(this));
+            double sliderMaximum = Math.floor((maxAmountForBucket + 0.0001d) / TRANSFER_STEP_AMOUNT) * TRANSFER_STEP_AMOUNT;
+            boolean sliderEnabled = sliderMaximum >= TRANSFER_STEP_AMOUNT;
+            suppressCallbacks = true;
+            amountSlider.setValueFrom(0f);
+            amountSlider.setStepSize((float) TRANSFER_STEP_AMOUNT);
+            amountSlider.setEnabled(sliderEnabled);
+            amountSlider.setValueTo((float) Math.max(TRANSFER_STEP_AMOUNT, sliderMaximum));
+            amountSlider.setValue(sliderEnabled
+                    ? (float) TransferBucketUiHelper.snapToStep(allocation.getAmount(), TRANSFER_STEP_AMOUNT, sliderMaximum)
+                    : 0f);
+            suppressCallbacks = false;
+            updateScaleLabels(maxAmountForBucket);
+        }
+
+        private void updateScaleLabels(double maxAmountForBucket) {
+            int labelCount = TransferBucketUiHelper.recommendedScaleLabelCount(
+                    rootView.getWidth(),
+                    rootView.getResources().getDisplayMetrics().density);
+            if (labelCount <= 3) {
+                List<String> compactLabels = TransferBucketUiHelper.buildScaleLabels(maxAmountForBucket, 3);
+                scaleLabelViews.get(0).setVisibility(View.VISIBLE);
+                scaleLabelViews.get(0).setText(compactLabels.get(0));
+                scaleLabelViews.get(1).setVisibility(View.GONE);
+                scaleLabelViews.get(2).setVisibility(View.VISIBLE);
+                scaleLabelViews.get(2).setText(compactLabels.get(1));
+                scaleLabelViews.get(3).setVisibility(View.GONE);
+                scaleLabelViews.get(4).setVisibility(View.VISIBLE);
+                scaleLabelViews.get(4).setText(compactLabels.get(2));
+                return;
+            }
+
+            List<String> labels = TransferBucketUiHelper.buildScaleLabels(maxAmountForBucket, scaleLabelViews.size());
+            for (int i = 0; i < scaleLabelViews.size() && i < labels.size(); i++) {
+                scaleLabelViews.get(i).setVisibility(View.VISIBLE);
+                scaleLabelViews.get(i).setText(labels.get(i));
+            }
+        }
+
+        private void bindCallbacks() {
+            pondDropdown.setOnItemClickListener((parent, view, position, id) -> {
+                if (suppressCallbacks) {
+                    return;
+                }
+                markSplitInteraction(activeSplitDialogViews);
+                allocation.setPondName(availablePonds.get(position));
+                updateSplitSectionSummary(activeSplitDialogViews);
+            });
+            removeButton.setOnClickListener(v -> {
+                if (activeSplitDialogViews == null) {
+                    return;
+                }
+                markSplitInteraction(activeSplitDialogViews);
+                activeSplitDialogViews.bucketControllers.remove(this);
+                activeSplitDialogViews.bucketsContainer.removeView(rootView);
+                refreshSplitBucketLabels(activeSplitDialogViews);
+                updateSplitSectionSummary(activeSplitDialogViews);
+            });
+            decreaseButton.setOnClickListener(v -> {
+                markSplitInteraction(activeSplitDialogViews);
+                double maxAllowed = Math.max(0d, parseAmountOrZero(activeSplitTotalInput) - splitAllocatedExcluding(this));
+                double next = TransferBucketUiHelper.snapToStep(
+                        allocation.getAmount() - TRANSFER_STEP_AMOUNT,
+                        TRANSFER_STEP_AMOUNT,
+                        maxAllowed);
+                setAmountInternal(next, true);
+                updateSplitSectionSummary(activeSplitDialogViews);
+            });
+            increaseButton.setOnClickListener(v -> {
+                markSplitInteraction(activeSplitDialogViews);
+                double maxAllowed = Math.max(0d, parseAmountOrZero(activeSplitTotalInput) - splitAllocatedExcluding(this));
+                double next = TransferBucketUiHelper.snapToStep(
+                        allocation.getAmount() + TRANSFER_STEP_AMOUNT,
+                        TRANSFER_STEP_AMOUNT,
+                        maxAllowed);
+                setAmountInternal(next, true);
+                updateSplitSectionSummary(activeSplitDialogViews);
+            });
+            amountSlider.addOnSliderTouchListener(new Slider.OnSliderTouchListener() {
+                @Override
+                public void onStartTrackingTouch(Slider slider) {
+                    markSplitInteraction(activeSplitDialogViews);
+                    if (activeSplitDialogViews != null) {
+                        scrollSplitDialogToView(activeSplitDialogViews, rootView, false);
+                    }
+                }
+
+                @Override
+                public void onStopTrackingTouch(Slider slider) {
+                }
+            });
+            amountSlider.addOnChangeListener((slider, value, fromUser) -> {
+                if (suppressCallbacks || !fromUser) {
+                    return;
+                }
+                markSplitInteraction(activeSplitDialogViews);
+                setAmountInternal(value, true);
+                updateSplitSectionSummary(activeSplitDialogViews);
+            });
+            manualAmountView.addTextChangedListener(new TextWatcher() {
+                @Override
+                public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+                }
+
+                @Override
+                public void onTextChanged(CharSequence s, int start, int before, int count) {
+                }
+
+                @Override
+                public void afterTextChanged(Editable s) {
+                    if (suppressCallbacks) {
+                        return;
+                    }
+                    markSplitInteraction(activeSplitDialogViews);
+                    allocation.setAmount(parseAmountOrZero(s == null ? null : s.toString()));
+                    amountView.setText(formatCurrency(allocation.getAmount()));
+                    updateSplitSectionSummary(activeSplitDialogViews);
+                }
+            });
+        }
+
+        private void setAmountInternal(double amount, boolean snapManualField) {
+            allocation.setAmount(Math.max(0d, amount));
+            amountView.setText(formatCurrency(allocation.getAmount()));
+            if (snapManualField) {
+                suppressCallbacks = true;
+                manualAmountView.setText(String.format(Locale.getDefault(), "%.2f", allocation.getAmount()));
+                manualAmountView.setSelection(manualAmountView.getText().length());
+                suppressCallbacks = false;
+            } else {
+                suppressCallbacks = true;
+                if (manualAmountView.getText().length() == 0 && allocation.getAmount() == 0d) {
+                    manualAmountView.setText("");
+                } else {
+                    manualAmountView.setText(String.format(Locale.getDefault(), "%.2f", allocation.getAmount()));
+                    manualAmountView.setSelection(manualAmountView.getText().length());
+                }
+                suppressCallbacks = false;
+            }
+        }
+    }
+
+    @Nullable
+    private SplitDialogViews activeSplitDialogViews;
+    @Nullable
+    private EditText activeSplitTotalInput;
+    @Nullable
+    private TransferDialogViews activeTransferDialogViews;
+    @Nullable
+    private EditText activeTransferAmountInput;
     @RequiresApi(api = Build.VERSION_CODES.N)
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -492,13 +1039,19 @@ public class MainActivity extends AppCompatActivity {
         View dialogView = getLayoutInflater().inflate(R.layout.dialog_new_transaction, null);
         receiptDialogHostView = dialogView;
 
-        Spinner spinnerEnvelope = dialogView.findViewById(R.id.spinnerEditEnvelope);
+        MaterialAutoCompleteTextView spinnerEnvelope = dialogView.findViewById(R.id.spinnerEditEnvelope);
         EditText etDate = dialogView.findViewById(R.id.etEditTransactionDate);
         EditText etAmount = dialogView.findViewById(R.id.etEditTransactionAmount);
+        EditText etSplitTotal = dialogView.findViewById(R.id.etSplitPurchaseTotal);
         EditText etComment = dialogView.findViewById(R.id.etEditTransactionComment);
-        CheckBox cbIsTransfer = dialogView.findViewById(R.id.cbIsTransfer);
-        TextView tvTransferToLabel = dialogView.findViewById(R.id.tvTransferToLabel);
-        Spinner spinnerTransferDestination = dialogView.findViewById(R.id.spinnerTransferDestination);
+        TransferDialogViews transferViews = createTransferDialogViews(dialogView);
+        SplitDialogViews splitViews = createSplitDialogViews(dialogView);
+        TabLayout tabTransactionType = dialogView.findViewById(R.id.tabTransactionType);
+        TabLayout tabTransactionTime = dialogView.findViewById(R.id.tabTransactionTime);
+        LinearLayout panelSpending = dialogView.findViewById(R.id.panelSpending);
+        LinearLayout panelTransfer = dialogView.findViewById(R.id.panelTransfer);
+        View panelSplit = dialogView.findViewById(R.id.panelSplitPurchase);
+        LinearLayout layoutRowPond = dialogView.findViewById(R.id.layoutRowPond);
         CheckBox cbIsRecurring = dialogView.findViewById(R.id.cbIsRecurring);
         TextView tvRecurringFrequencyLabel = dialogView.findViewById(R.id.tvRecurringFrequencyLabel);
         LinearLayout layoutRecurringFrequencyOptions = dialogView.findViewById(R.id.layoutRecurringFrequencyOptions);
@@ -515,17 +1068,19 @@ public class MainActivity extends AppCompatActivity {
         TextView btnRecurringDaySat = dialogView.findViewById(R.id.btnRecurringDaySat);
         TextView tvRecurringDaysValue = dialogView.findViewById(R.id.tvRecurringDaysValue);
 
-        ArrayAdapter<String> envelopeAdapter = new ArrayAdapter<>(this,
-                android.R.layout.simple_spinner_item, getEnvelopeNames());
-        envelopeAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        spinnerEnvelope.setAdapter(envelopeAdapter);
+        tabTransactionType.addTab(tabTransactionType.newTab().setText(R.string.tab_transaction_type_spending));
+        tabTransactionType.addTab(tabTransactionType.newTab().setText(R.string.tab_transaction_type_transfer));
+        tabTransactionType.addTab(tabTransactionType.newTab().setText(R.string.tab_transaction_type_split_purchase));
+        tabTransactionTime.addTab(tabTransactionTime.newTab().setText(R.string.tab_transaction_time_one_time));
+        tabTransactionTime.addTab(tabTransactionTime.newTab().setText(R.string.tab_transaction_time_recurring));
+
+        bindDialogDropdownOptions(spinnerEnvelope, getEnvelopeNames());
         String savedSourceEnvelope = PrefManager.getLastAddTransactionEnvelope(this);
         List<String> envelopeNames = getEnvelopeNames();
-        if (savedSourceEnvelope != null) {
-            int savedSourceIndex = envelopeNames.indexOf(savedSourceEnvelope);
-            if (savedSourceIndex >= 0) {
-                spinnerEnvelope.setSelection(savedSourceIndex);
-            }
+        if (savedSourceEnvelope != null && envelopeNames.contains(savedSourceEnvelope)) {
+            spinnerEnvelope.setText(savedSourceEnvelope, false);
+        } else if (!envelopeNames.isEmpty()) {
+            spinnerEnvelope.setText(envelopeNames.get(0), false);
         }
 
         List<Integer> selectedRecurringDays = new ArrayList<>();
@@ -597,21 +1152,6 @@ public class MainActivity extends AppCompatActivity {
             );
         });
 
-        cbIsRecurring.setOnCheckedChangeListener((buttonView, checked) ->
-                setRecurringControlsVisibility(checked,
-                        tvRecurringFrequencyLabel,
-                        layoutRecurringFrequencyOptions,
-                        tvRecurringDaysLabel,
-                        layoutRecurringWeekdayButtons,
-                        tvRecurringDaysValue,
-                        selectedRecurringFrequency[0]));
-        setRecurringControlsVisibility(false,
-                tvRecurringFrequencyLabel,
-                layoutRecurringFrequencyOptions,
-                tvRecurringDaysLabel,
-                layoutRecurringWeekdayButtons,
-                tvRecurringDaysValue,
-                selectedRecurringFrequency[0]);
         Calendar calendar = Calendar.getInstance();
         String today = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(calendar.getTime());
         etDate.setText(today);
@@ -629,27 +1169,81 @@ public class MainActivity extends AppCompatActivity {
             datePickerDialog.show();
         });
 
-        spinnerEnvelope.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+        String initialSource = getSelectedDropdownValue(spinnerEnvelope);
+        String savedDestination = PrefManager.getLastAddTransferDestination(this, initialSource);
+        initializeTransferDialogSection(transferViews, etAmount, spinnerEnvelope, savedDestination, null, false);
+        initializeSplitDialogSection(splitViews, etSplitTotal, null, false);
+        attachTransactionDialogScrollDismiss(transferViews, splitViews);
+
+        cbIsRecurring.setOnCheckedChangeListener((buttonView, checked) -> {
+            if (tabTransactionTime.getSelectedTabPosition() != (checked ? TAB_TIME_RECURRING : TAB_TIME_ONE_TIME)) {
+                Objects.requireNonNull(tabTransactionTime.getTabAt(checked ? TAB_TIME_RECURRING : TAB_TIME_ONE_TIME)).select();
+            }
+            setRecurringControlsVisibility(checked,
+                    tvRecurringFrequencyLabel,
+                    layoutRecurringFrequencyOptions,
+                    tvRecurringDaysLabel,
+                    layoutRecurringWeekdayButtons,
+                    tvRecurringDaysValue,
+                    selectedRecurringFrequency[0]);
+        });
+        tabTransactionTime.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
             @Override
-            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                String source = parent.getItemAtPosition(position).toString();
-                String savedDestination = PrefManager.getLastAddTransferDestination(MainActivity.this, source);
-                populateTransferDestinationSpinner(spinnerTransferDestination, source, savedDestination);
+            public void onTabSelected(TabLayout.Tab tab) {
+                boolean recurring = tab.getPosition() == TAB_TIME_RECURRING;
+                if (cbIsRecurring.isChecked() != recurring) {
+                    cbIsRecurring.setChecked(recurring);
+                } else {
+                    setRecurringControlsVisibility(recurring,
+                            tvRecurringFrequencyLabel,
+                            layoutRecurringFrequencyOptions,
+                            tvRecurringDaysLabel,
+                            layoutRecurringWeekdayButtons,
+                            tvRecurringDaysValue,
+                            selectedRecurringFrequency[0]);
+                }
             }
 
             @Override
-            public void onNothingSelected(AdapterView<?> parent) {
+            public void onTabUnselected(TabLayout.Tab tab) {
+            }
+
+            @Override
+            public void onTabReselected(TabLayout.Tab tab) {
             }
         });
-        if (spinnerEnvelope.getSelectedItem() != null) {
-            String source = spinnerEnvelope.getSelectedItem().toString();
-            String savedDestination = PrefManager.getLastAddTransferDestination(this, source);
-            populateTransferDestinationSpinner(spinnerTransferDestination, source, savedDestination);
-        }
+        tabTransactionType.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
+            @Override
+            public void onTabSelected(TabLayout.Tab tab) {
+                applyTransactionDialogTypeState(tab.getPosition(),
+                        tabTransactionTime,
+                        panelSpending,
+                        panelTransfer,
+                        panelSplit,
+                        layoutRowPond,
+                        etAmount,
+                        etSplitTotal,
+                        cbIsRecurring,
+                        tvRecurringFrequencyLabel,
+                        layoutRecurringFrequencyOptions,
+                        tvRecurringDaysLabel,
+                        layoutRecurringWeekdayButtons,
+                        tvRecurringDaysValue,
+                        selectedRecurringFrequency[0],
+                        transferViews,
+                        splitViews);
+            }
 
-        cbIsTransfer.setOnCheckedChangeListener((buttonView, isChecked) ->
-                setTransferControlsVisibility(isChecked, tvTransferToLabel, spinnerTransferDestination));
-        setTransferControlsVisibility(false, tvTransferToLabel, spinnerTransferDestination);
+            @Override
+            public void onTabUnselected(TabLayout.Tab tab) {
+            }
+
+            @Override
+            public void onTabReselected(TabLayout.Tab tab) {
+            }
+        });
+        Objects.requireNonNull(tabTransactionTime.getTabAt(TAB_TIME_ONE_TIME)).select();
+        Objects.requireNonNull(tabTransactionType.getTabAt(TAB_TYPE_SPENDING)).select();
 
         wireReceiptRow(dialogView, null);
 
@@ -663,20 +1257,95 @@ public class MainActivity extends AppCompatActivity {
             if (receiptDialogHostView == dialogView) {
                 receiptDialogHostView = null;
             }
+            if (activeTransferDialogViews == transferViews) {
+                activeTransferDialogViews = null;
+                activeTransferAmountInput = null;
+            }
+            if (activeSplitDialogViews == splitViews) {
+                activeSplitDialogViews = null;
+                activeSplitTotalInput = null;
+            }
         });
         dialog.setOnShowListener(ignored -> {
             applyIconMaterialDialogActions(dialog);
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            configureTransactionDialogWindow(dialog);
+            Button positive = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+            transferViews.positiveButton = positive;
+            splitViews.positiveButton = positive;
+            updateTransferSectionSummary(transferViews);
+            updateSplitSectionSummary(splitViews);
+            positive.setOnClickListener(v -> {
             try {
-                String envelopeName = spinnerEnvelope.getSelectedItem().toString();
-                double amount = Double.parseDouble(etAmount.getText().toString());
+                int typeTab = tabTransactionType.getSelectedTabPosition();
                 String comment = etComment.getText().toString();
                 String date = etDate.getText().toString();
+                Object uriTag = dialogView.getTag(R.id.tag_receipt_image_uri);
+                String receiptUri = uriTag instanceof String ? (String) uriTag : null;
+
+                if (typeTab == TAB_TYPE_SPLIT) {
+                    double total = parseAmountOrZero(etSplitTotal);
+                    List<SplitPurchaseSliceAllocation> slices = snapshotSplitAllocations(splitViews);
+                    TransferGroupValidationResult validation = SplitPurchaseGroupDraft.validate(total, slices);
+                    if (!validation.isValid()) {
+                        splitViews.saveAttempted = true;
+                        updateSplitSectionSummary(splitViews);
+                        return;
+                    }
+                    Set<String> months = SplitPurchaseSyncHelper.applyGroup(
+                            envelopes, null, date, comment, receiptUri, slices, currentMonth);
+                    for (String m : months) {
+                        synchronizeAllEnvelopesForMonth(m);
+                    }
+                    PrefManager.saveEnvelopes(MainActivity.this, envelopes);
+                    updateDisplay();
+                    dialog.dismiss();
+                    return;
+                }
+
+                if (typeTab == TAB_TYPE_TRANSFER) {
+                    String envelopeName = getSelectedDropdownValue(spinnerEnvelope);
+                    if (envelopeName == null || envelopeName.isEmpty()) {
+                        showError("Select a pond");
+                        return;
+                    }
+                    double amount = Double.parseDouble(etAmount.getText().toString());
+                    Transaction newTransaction = new Transaction(envelopeName, amount, date, comment);
+                    if (receiptUri != null && !receiptUri.isEmpty()) {
+                        newTransaction.setReceiptImageUri(receiptUri);
+                    }
+                    List<TransferBucketAllocation> allocations = snapshotTransferAllocations(transferViews);
+                    TransferGroupValidationResult validation = TransferGroupDraft.validate(amount, envelopeName, allocations);
+                    if (!validation.isValid()) {
+                        transferViews.saveAttempted = true;
+                        updateTransferSectionSummary(transferViews);
+                        return;
+                    }
+                    Envelope env = findEnvelopeByName(envelopeName);
+                    if (env == null) {
+                        showError("Envelope not found");
+                        return;
+                    }
+                    PrefManager.setLastAddTransactionEnvelope(MainActivity.this, envelopeName);
+                    PrefManager.setLastAddTransferDestination(MainActivity.this, envelopeName, allocations.get(0).getToEnvelope());
+                    env.addTransaction(newTransaction, currentMonth);
+                    TransferSyncHelper.applyTransferGroup(envelopes, newTransaction, envelopeName, allocations);
+                    synchronizeAllEnvelopesForMonth(resolveTransactionMonth(newTransaction));
+                    PrefManager.saveEnvelopes(MainActivity.this, envelopes);
+                    updateDisplay();
+                    dialog.dismiss();
+                    return;
+                }
+
+                String envelopeName = getSelectedDropdownValue(spinnerEnvelope);
+                if (envelopeName == null || envelopeName.isEmpty()) {
+                    showError("Select a pond");
+                    return;
+                }
+                double amount = Double.parseDouble(etAmount.getText().toString());
 
                 Transaction newTransaction = new Transaction(envelopeName, amount, date, comment);
-                Object uriTag = dialogView.getTag(R.id.tag_receipt_image_uri);
-                if (uriTag instanceof String) {
-                    newTransaction.setReceiptImageUri((String) uriTag);
+                if (receiptUri != null && !receiptUri.isEmpty()) {
+                    newTransaction.setReceiptImageUri(receiptUri);
                 }
                 if (cbIsRecurring.isChecked()) {
                     if (selectedRecurringDays.isEmpty()) {
@@ -696,28 +1365,8 @@ public class MainActivity extends AppCompatActivity {
                     return;
                 }
 
-                String destination = null;
-                if (cbIsTransfer.isChecked()) {
-                    if (spinnerTransferDestination.getSelectedItem() == null) {
-                        showError("Select where this transfer goes");
-                        return;
-                    }
-                    destination = spinnerTransferDestination.getSelectedItem().toString();
-                    if (destination.equals(envelopeName)) {
-                        showError("Transfer destination must be a different envelope");
-                        return;
-                    }
-                }
-
                 PrefManager.setLastAddTransactionEnvelope(MainActivity.this, envelopeName);
-                if (destination != null) {
-                    PrefManager.setLastAddTransferDestination(MainActivity.this, envelopeName, destination);
-                }
-
                 env.addTransaction(newTransaction, currentMonth);
-                if (destination != null) {
-                    upsertTransferForTransaction(newTransaction, envelopeName, destination, Math.abs(amount));
-                }
                 PrefManager.saveEnvelopes(MainActivity.this, envelopes);
                 updateDisplay();
                 dialog.dismiss();
@@ -801,10 +1450,15 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         EditText etAmount = receiptDialogHostView.findViewById(R.id.etEditTransactionAmount);
+        EditText etSplitTotal = receiptDialogHostView.findViewById(R.id.etSplitPurchaseTotal);
         EditText etComment = receiptDialogHostView.findViewById(R.id.etEditTransactionComment);
         EditText etDate = receiptDialogHostView.findViewById(R.id.etEditTransactionDate);
-        if (draft.totalAmount != null && etAmount != null) {
-            etAmount.setText(String.format(Locale.getDefault(), "%.2f", draft.totalAmount));
+        if (draft.totalAmount != null) {
+            if (etSplitTotal != null && etSplitTotal.getVisibility() == View.VISIBLE) {
+                etSplitTotal.setText(String.format(Locale.getDefault(), "%.2f", draft.totalAmount));
+            } else if (etAmount != null) {
+                etAmount.setText(String.format(Locale.getDefault(), "%.2f", draft.totalAmount));
+            }
         }
         if (draft.merchantForComment != null && etComment != null) {
             etComment.setText(draft.merchantForComment);
@@ -924,6 +1578,7 @@ public class MainActivity extends AppCompatActivity {
 
         List<Transaction> filteredTransactions = new ArrayList<>();
         Map<String, TransferTotalsOption> transferTotalsByEnvelope = new HashMap<>();
+        Map<String, List<TransferBucketAllocation>> transferAllocationsById = new HashMap<>();
         double grossTotal = 0;
         double outgoingTransferTotal = 0;
         double incomingTransferTotal = 0;
@@ -938,27 +1593,32 @@ public class MainActivity extends AppCompatActivity {
                     }
 
                     String transferId = transaction.getTransferId();
-                    Envelope.TransferData transfer = null;
                     Envelope ownerEnvelope = null;
-                    Envelope destinationEnvelope = null;
                     boolean isTransfer = transferId != null && !transferId.isEmpty();
                     boolean isSourceSide = false;
-                    boolean destinationSelected = false;
                     boolean ownerSelected = false;
                     boolean includeTransaction = envelopeSelected;
+                    List<TransferBucketAllocation> allocations = new ArrayList<>();
 
                     if (isTransfer) {
-                        transfer = findTransferById(transferId);
-                        if (transfer != null && transfer.getToEnvelope() != null && !transfer.getToEnvelope().isEmpty()) {
-                            ownerEnvelope = findTransferOwner(transferId);
-                            destinationEnvelope = findEnvelopeByName(transfer.getToEnvelope());
-                            isSourceSide = ownerEnvelope != null
-                                    && Objects.equals(ownerEnvelope.getName(), transaction.getEnvelopeName());
-                            destinationSelected = destinationEnvelope != null && destinationEnvelope.isSelected();
-                            ownerSelected = ownerEnvelope != null && ownerEnvelope.isSelected();
-                            if (!includeTransaction && showTransfers && (ownerSelected || destinationSelected)) {
-                                includeTransaction = true;
+                        allocations = transferAllocationsById.computeIfAbsent(
+                                transferId,
+                                id -> TransferSyncHelper.getAllocations(envelopes, id));
+                        ownerEnvelope = findTransferOwner(transferId);
+                        isSourceSide = ownerEnvelope != null
+                                && Objects.equals(ownerEnvelope.getName(), transaction.getEnvelopeName())
+                                && (transaction.getTransferBucketId() == null || transaction.getTransferBucketId().isEmpty());
+                        ownerSelected = ownerEnvelope != null && ownerEnvelope.isSelected();
+                        boolean anyDestinationSelected = false;
+                        for (TransferBucketAllocation allocation : allocations) {
+                            Envelope destinationEnvelope = findEnvelopeByName(allocation.getToEnvelope());
+                            if (destinationEnvelope != null && destinationEnvelope.isSelected()) {
+                                anyDestinationSelected = true;
+                                break;
                             }
+                        }
+                        if (!includeTransaction && showTransfers && (ownerSelected || anyDestinationSelected)) {
+                            includeTransaction = true;
                         }
                     }
 
@@ -969,27 +1629,26 @@ public class MainActivity extends AppCompatActivity {
                     filteredTransactions.add(transaction);
                     grossTotal += transaction.getAmount();
 
-                    if (transfer != null && transfer.getToEnvelope() != null && !transfer.getToEnvelope().isEmpty()) {
-                        double amount = Math.abs(transaction.getAmount());
-
+                    if (isTransfer && !allocations.isEmpty()) {
                         if (isSourceSide) {
-                            outgoingTransferTotal += amount;
-                        } else {
-                            incomingTransferTotal += amount;
-                        }
-
-                        // Header transfer dropdown: only destinations (amount transferred to each pond), not source-side "From" rows.
-                        if (isSourceSide) {
-                            String summaryKey = "to:" + transfer.getToEnvelope();
-                            String relatedEnvelopeName = transfer.getToEnvelope();
-                            TransferTotalsOption existing = transferTotalsByEnvelope.get(summaryKey);
-                            double running = existing != null ? existing.total : 0d;
-                            running += amount;
-                            if (destinationSelected) {
-                                running -= amount;
+                            double allocatedTotal = TransferGroupDraft.allocatedTotal(allocations);
+                            outgoingTransferTotal += allocatedTotal;
+                            for (TransferBucketAllocation allocation : allocations) {
+                                Envelope destinationEnvelope = findEnvelopeByName(allocation.getToEnvelope());
+                                boolean destinationSelected = destinationEnvelope != null && destinationEnvelope.isSelected();
+                                String summaryKey = "to:" + allocation.getToEnvelope();
+                                String relatedEnvelopeName = allocation.getToEnvelope();
+                                TransferTotalsOption existing = transferTotalsByEnvelope.get(summaryKey);
+                                double running = existing != null ? existing.total : 0d;
+                                running += Math.abs(allocation.getAmount());
+                                if (destinationSelected) {
+                                    running -= Math.abs(allocation.getAmount());
+                                }
+                                transferTotalsByEnvelope.put(summaryKey,
+                                        new TransferTotalsOption(summaryKey, "To", relatedEnvelopeName, running));
                             }
-                            transferTotalsByEnvelope.put(summaryKey,
-                                    new TransferTotalsOption(summaryKey, "To", relatedEnvelopeName, running));
+                        } else {
+                            incomingTransferTotal += Math.abs(transaction.getAmount());
                         }
                     }
                 } catch (ParseException e) {
@@ -1050,6 +1709,8 @@ public class MainActivity extends AppCompatActivity {
             TextView tvAmount = convertView.findViewById(R.id.tvTransactionAmount);
             TextView tvDetails = convertView.findViewById(R.id.tvTransactionDetails);
             ImageButton btnReceipt = convertView.findViewById(R.id.btnTransactionReceipt);
+            ImageButton btnSplitExpand = convertView.findViewById(R.id.btnSplitExpand);
+            TextView tvSplitBreakdown = convertView.findViewById(R.id.tvSplitBreakdown);
             ImageButton btnOptions = convertView.findViewById(R.id.btnTransactionOptions);
 
             // Populate data
@@ -1069,10 +1730,47 @@ public class MainActivity extends AppCompatActivity {
             if (transaction.getComment() != null && !transaction.getComment().isEmpty()) {
                 details += " | " + transaction.getComment();
             }
+            if (transaction.getTransferId() != null && !transaction.getTransferId().isEmpty()
+                    && (transaction.getTransferBucketId() == null || transaction.getTransferBucketId().isEmpty())) {
+                double allocated = TransferSyncHelper.allocatedTotal(envelopes, transaction.getTransferId());
+                double spentHere = transaction.getAmount() - allocated;
+                details += String.format(Locale.getDefault(),
+                        " | Transfer allocated $%.2f | Spent here $%.2f",
+                        allocated,
+                        spentHere);
+            }
             if (transaction.isRecurring() && transaction.getRecurringFrequency() != null && !transaction.getRecurringFrequency().isEmpty()) {
                 details += " | " + recurringFrequencyDisplay(normalizeRecurringFrequency(transaction.getRecurringFrequency()));
             }
             tvDetails.setText(details);
+
+            boolean splitRow = SplitPurchaseSyncHelper.isSplitPurchase(transaction);
+            if (splitRow) {
+                btnSplitExpand.setVisibility(View.VISIBLE);
+                String gid = transaction.getSplitPurchaseGroupId();
+                boolean expanded = expandedSplitGroupIds.contains(gid);
+                tvSplitBreakdown.setVisibility(expanded ? View.VISIBLE : View.GONE);
+                btnSplitExpand.setRotation(expanded ? 180f : 0f);
+                btnSplitExpand.setContentDescription(expanded
+                        ? getString(R.string.content_desc_split_collapse)
+                        : getString(R.string.content_desc_split_expand));
+                List<Transaction> peers = SplitPurchaseSyncHelper.findTransactionsInGroup(envelopes, gid);
+                double groupTotal = SplitPurchaseSyncHelper.groupTotal(peers);
+                String header = getString(R.string.split_breakdown_total_line, groupTotal);
+                tvSplitBreakdown.setText(header + "\n" + SplitPurchaseSyncHelper.formatBreakdownLine(peers));
+                btnSplitExpand.setOnClickListener(v -> {
+                    if (expandedSplitGroupIds.contains(gid)) {
+                        expandedSplitGroupIds.remove(gid);
+                    } else {
+                        expandedSplitGroupIds.add(gid);
+                    }
+                    notifyDataSetChanged();
+                });
+            } else {
+                btnSplitExpand.setVisibility(View.GONE);
+                tvSplitBreakdown.setVisibility(View.GONE);
+                btnSplitExpand.setOnClickListener(null);
+            }
 
             if (ReceiptRowUi.showReceiptThumbnail(transaction)) {
                 btnReceipt.setVisibility(View.VISIBLE);
@@ -1353,19 +2051,29 @@ public class MainActivity extends AppCompatActivity {
         return names;
     }
 
+    @RequiresApi(api = Build.VERSION_CODES.N)
     private void showTransactionDialog(Transaction transactionToEdit) {
-        final Transaction editTransaction = resolveTransferAnchorTransaction(transactionToEdit);
+        final boolean isSplitPurchase = SplitPurchaseSyncHelper.isSplitPurchase(transactionToEdit);
+        final Transaction editTransaction = isSplitPurchase
+                ? SplitPurchaseSyncHelper.resolveForEdit(envelopes, transactionToEdit)
+                : TransferSyncHelper.resolveAnchorTransaction(envelopes, transactionToEdit);
         final boolean wasRecurringBefore = editTransaction.isRecurring();
         MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(this);
         View dialogView = getLayoutInflater().inflate(R.layout.dialog_transaction, null);
 
-        Spinner spinnerEnvelope = dialogView.findViewById(R.id.spinnerEditEnvelope);
+        MaterialAutoCompleteTextView spinnerEnvelope = dialogView.findViewById(R.id.spinnerEditEnvelope);
         EditText etDate = dialogView.findViewById(R.id.etEditTransactionDate);
         EditText etAmount = dialogView.findViewById(R.id.etEditTransactionAmount);
+        EditText etSplitTotal = dialogView.findViewById(R.id.etSplitPurchaseTotal);
         EditText etComment = dialogView.findViewById(R.id.etEditTransactionComment);
-        CheckBox cbIsTransfer = dialogView.findViewById(R.id.cbIsTransfer);
-        TextView tvTransferToLabel = dialogView.findViewById(R.id.tvTransferToLabel);
-        Spinner spinnerTransferDestination = dialogView.findViewById(R.id.spinnerTransferDestination);
+        TransferDialogViews transferViews = createTransferDialogViews(dialogView);
+        SplitDialogViews splitViews = createSplitDialogViews(dialogView);
+        TabLayout tabTransactionType = dialogView.findViewById(R.id.tabTransactionType);
+        TabLayout tabTransactionTime = dialogView.findViewById(R.id.tabTransactionTime);
+        LinearLayout panelSpending = dialogView.findViewById(R.id.panelSpending);
+        LinearLayout panelTransfer = dialogView.findViewById(R.id.panelTransfer);
+        View panelSplit = dialogView.findViewById(R.id.panelSplitPurchase);
+        LinearLayout layoutRowPond = dialogView.findViewById(R.id.layoutRowPond);
         CheckBox cbIsRecurring = dialogView.findViewById(R.id.cbIsRecurring);
         TextView tvRecurringFrequencyLabel = dialogView.findViewById(R.id.tvRecurringFrequencyLabel);
         LinearLayout layoutRecurringFrequencyOptions = dialogView.findViewById(R.id.layoutRecurringFrequencyOptions);
@@ -1382,14 +2090,17 @@ public class MainActivity extends AppCompatActivity {
         TextView btnRecurringDaySat = dialogView.findViewById(R.id.btnRecurringDaySat);
         TextView tvRecurringDaysValue = dialogView.findViewById(R.id.tvRecurringDaysValue);
 
-        ArrayAdapter<String> envelopeAdapter = new ArrayAdapter<>(this,
-                android.R.layout.simple_spinner_item, getEnvelopeNames());
-        envelopeAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        spinnerEnvelope.setAdapter(envelopeAdapter);
+        tabTransactionType.addTab(tabTransactionType.newTab().setText(R.string.tab_transaction_type_spending));
+        tabTransactionType.addTab(tabTransactionType.newTab().setText(R.string.tab_transaction_type_transfer));
+        tabTransactionType.addTab(tabTransactionType.newTab().setText(R.string.tab_transaction_type_split_purchase));
+        tabTransactionTime.addTab(tabTransactionTime.newTab().setText(R.string.tab_transaction_time_one_time));
+        tabTransactionTime.addTab(tabTransactionTime.newTab().setText(R.string.tab_transaction_time_recurring));
+
+        bindDialogDropdownOptions(spinnerEnvelope, getEnvelopeNames());
 
         int envelopeIndex = getEnvelopeNames().indexOf(editTransaction.getEnvelopeName());
         if (envelopeIndex >= 0) {
-            spinnerEnvelope.setSelection(envelopeIndex);
+            spinnerEnvelope.setText(getEnvelopeNames().get(envelopeIndex), false);
         }
 
         List<Integer> selectedRecurringDays = new ArrayList<>(editTransaction.getRecurringDays());
@@ -1464,53 +2175,15 @@ public class MainActivity extends AppCompatActivity {
             );
         });
 
-        cbIsRecurring.setChecked(editTransaction.isRecurring());
-        setRecurringControlsVisibility(editTransaction.isRecurring(),
-                tvRecurringFrequencyLabel,
-                layoutRecurringFrequencyOptions,
-                tvRecurringDaysLabel,
-                layoutRecurringWeekdayButtons,
-                tvRecurringDaysValue,
-                selectedRecurringFrequency[0]);
-        cbIsRecurring.setOnCheckedChangeListener((buttonView, checked) ->
-                setRecurringControlsVisibility(checked,
-                        tvRecurringFrequencyLabel,
-                        layoutRecurringFrequencyOptions,
-                        tvRecurringDaysLabel,
-                        layoutRecurringWeekdayButtons,
-                        tvRecurringDaysValue,
-                        selectedRecurringFrequency[0]));
+        List<TransferBucketAllocation> existingAllocations = editTransaction.getTransferId() == null
+                ? new ArrayList<>()
+                : TransferSyncHelper.getAllocations(envelopes, editTransaction.getTransferId());
 
-        String selectedDestination = null;
-        boolean editingMirrorTransfer = false;
-        if (editTransaction.getTransferId() != null) {
-            Envelope.TransferData transferData = findTransferById(editTransaction.getTransferId());
-            Envelope transferOwner = findTransferOwner(editTransaction.getTransferId());
-            if (transferData != null) {
-                selectedDestination = transferData.getToEnvelope();
-            }
-            editingMirrorTransfer = transferOwner != null
-                    && !Objects.equals(transferOwner.getName(), editTransaction.getEnvelopeName());
-            if (editingMirrorTransfer && transferOwner != null) {
-                selectedDestination = transferOwner.getName();
-            }
-        }
-
-        final boolean finalEditingMirrorTransfer = editingMirrorTransfer;
-        final String initialDestination = selectedDestination;
-        spinnerEnvelope.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                String source = parent.getItemAtPosition(position).toString();
-                populateTransferDestinationSpinner(spinnerTransferDestination, source, initialDestination);
-            }
-
-            @Override
-            public void onNothingSelected(AdapterView<?> parent) {
-            }
-        });
-        if (spinnerEnvelope.getSelectedItem() != null) {
-            populateTransferDestinationSpinner(spinnerTransferDestination, spinnerEnvelope.getSelectedItem().toString(), initialDestination);
+        List<SplitPurchaseSliceAllocation> initialSplitSlices = null;
+        if (isSplitPurchase) {
+            List<Transaction> peers = SplitPurchaseSyncHelper.findTransactionsInGroup(
+                    envelopes, editTransaction.getSplitPurchaseGroupId());
+            initialSplitSlices = SplitPurchaseSyncHelper.toAllocations(peers);
         }
 
         etDate.setText(editTransaction.getDate());
@@ -1528,14 +2201,108 @@ public class MainActivity extends AppCompatActivity {
             datePickerDialog.show();
         });
 
-        etAmount.setText(String.valueOf(editTransaction.getAmount()));
+        if (isSplitPurchase) {
+            List<Transaction> peers = SplitPurchaseSyncHelper.findTransactionsInGroup(
+                    envelopes, editTransaction.getSplitPurchaseGroupId());
+            etSplitTotal.setText(String.format(Locale.getDefault(), "%.2f", SplitPurchaseSyncHelper.groupTotal(peers)));
+            etAmount.setText("0");
+        } else {
+            etAmount.setText(String.valueOf(editTransaction.getAmount()));
+            etSplitTotal.setText("");
+        }
         etComment.setText(editTransaction.getComment());
 
-        boolean isTransfer = editTransaction.getTransferId() != null && !editTransaction.getTransferId().isEmpty();
-        cbIsTransfer.setChecked(isTransfer);
-        setTransferControlsVisibility(isTransfer, tvTransferToLabel, spinnerTransferDestination);
-        cbIsTransfer.setOnCheckedChangeListener((buttonView, checked) ->
-                setTransferControlsVisibility(checked, tvTransferToLabel, spinnerTransferDestination));
+        boolean isTransfer = !isSplitPurchase
+                && editTransaction.getTransferId() != null
+                && !editTransaction.getTransferId().isEmpty();
+
+        initializeTransferDialogSection(transferViews,
+                etAmount,
+                spinnerEnvelope,
+                existingAllocations.isEmpty() ? null : existingAllocations.get(0).getToEnvelope(),
+                existingAllocations,
+                isTransfer);
+        initializeSplitDialogSection(splitViews, etSplitTotal, initialSplitSlices, isSplitPurchase);
+        attachTransactionDialogScrollDismiss(transferViews, splitViews);
+
+        cbIsRecurring.setChecked(editTransaction.isRecurring());
+        cbIsRecurring.setOnCheckedChangeListener((buttonView, checked) -> {
+            if (tabTransactionTime.getSelectedTabPosition() != (checked ? TAB_TIME_RECURRING : TAB_TIME_ONE_TIME)) {
+                Objects.requireNonNull(tabTransactionTime.getTabAt(checked ? TAB_TIME_RECURRING : TAB_TIME_ONE_TIME)).select();
+            }
+            setRecurringControlsVisibility(checked,
+                    tvRecurringFrequencyLabel,
+                    layoutRecurringFrequencyOptions,
+                    tvRecurringDaysLabel,
+                    layoutRecurringWeekdayButtons,
+                    tvRecurringDaysValue,
+                    selectedRecurringFrequency[0]);
+        });
+        tabTransactionTime.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
+            @Override
+            public void onTabSelected(TabLayout.Tab tab) {
+                boolean recurring = tab.getPosition() == TAB_TIME_RECURRING;
+                if (cbIsRecurring.isChecked() != recurring) {
+                    cbIsRecurring.setChecked(recurring);
+                } else {
+                    setRecurringControlsVisibility(recurring,
+                            tvRecurringFrequencyLabel,
+                            layoutRecurringFrequencyOptions,
+                            tvRecurringDaysLabel,
+                            layoutRecurringWeekdayButtons,
+                            tvRecurringDaysValue,
+                            selectedRecurringFrequency[0]);
+                }
+            }
+
+            @Override
+            public void onTabUnselected(TabLayout.Tab tab) {
+            }
+
+            @Override
+            public void onTabReselected(TabLayout.Tab tab) {
+            }
+        });
+        tabTransactionType.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
+            @Override
+            public void onTabSelected(TabLayout.Tab tab) {
+                applyTransactionDialogTypeState(tab.getPosition(),
+                        tabTransactionTime,
+                        panelSpending,
+                        panelTransfer,
+                        panelSplit,
+                        layoutRowPond,
+                        etAmount,
+                        etSplitTotal,
+                        cbIsRecurring,
+                        tvRecurringFrequencyLabel,
+                        layoutRecurringFrequencyOptions,
+                        tvRecurringDaysLabel,
+                        layoutRecurringWeekdayButtons,
+                        tvRecurringDaysValue,
+                        selectedRecurringFrequency[0],
+                        transferViews,
+                        splitViews);
+            }
+
+            @Override
+            public void onTabUnselected(TabLayout.Tab tab) {
+            }
+
+            @Override
+            public void onTabReselected(TabLayout.Tab tab) {
+            }
+        });
+
+        int initialTypeTab = isSplitPurchase ? TAB_TYPE_SPLIT
+                : isTransfer ? TAB_TYPE_TRANSFER
+                : TAB_TYPE_SPENDING;
+        if (editTransaction.isRecurring()) {
+            Objects.requireNonNull(tabTransactionTime.getTabAt(TAB_TIME_RECURRING)).select();
+        } else {
+            Objects.requireNonNull(tabTransactionTime.getTabAt(TAB_TIME_ONE_TIME)).select();
+        }
+        Objects.requireNonNull(tabTransactionType.getTabAt(initialTypeTab)).select();
 
         receiptDialogHostView = dialogView;
         wireReceiptRow(dialogView, editTransaction.getReceiptImageUri());
@@ -1550,96 +2317,148 @@ public class MainActivity extends AppCompatActivity {
             if (receiptDialogHostView == dialogView) {
                 receiptDialogHostView = null;
             }
+            if (activeTransferDialogViews == transferViews) {
+                activeTransferDialogViews = null;
+                activeTransferAmountInput = null;
+            }
+            if (activeSplitDialogViews == splitViews) {
+                activeSplitDialogViews = null;
+                activeSplitTotalInput = null;
+            }
         });
         dialog.setOnShowListener(ignored -> {
             applyIconMaterialDialogActions(dialog);
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            configureTransactionDialogWindow(dialog);
+            Button positive = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+            transferViews.positiveButton = positive;
+            splitViews.positiveButton = positive;
+            updateTransferSectionSummary(transferViews);
+            updateSplitSectionSummary(splitViews);
+            positive.setOnClickListener(v -> {
             try {
-                double newAmount = Double.parseDouble(etAmount.getText().toString());
+                int typeTab = tabTransactionType.getSelectedTabPosition();
+                if (!isSplitPurchase && typeTab == TAB_TYPE_SPLIT) {
+                    showError("Converting an existing transaction to a split purchase is not supported.");
+                    return;
+                }
+                if (isSplitPurchase && typeTab != TAB_TYPE_SPLIT) {
+                    showError("Split purchases cannot be changed to another transaction type.");
+                    return;
+                }
                 String newComment = etComment.getText().toString();
                 String newDate = etDate.getText().toString();
-                String oldEnvelopeName = editTransaction.getEnvelopeName();
-                String newEnvelopeName = spinnerEnvelope.getSelectedItem().toString();
                 String previousMonth = resolveTransactionMonth(editTransaction);
+                Object receiptUriTag = dialogView.getTag(R.id.tag_receipt_image_uri);
+                String receiptUri = receiptUriTag instanceof String ? (String) receiptUriTag : null;
+
+                if (typeTab == TAB_TYPE_SPLIT) {
+                    double total = parseAmountOrZero(etSplitTotal);
+                    List<SplitPurchaseSliceAllocation> slices = snapshotSplitAllocations(splitViews);
+                    TransferGroupValidationResult validation = SplitPurchaseGroupDraft.validate(total, slices);
+                    if (!validation.isValid()) {
+                        splitViews.saveAttempted = true;
+                        updateSplitSectionSummary(splitViews);
+                        return;
+                    }
+                    Set<String> months = SplitPurchaseSyncHelper.applyGroup(
+                            envelopes,
+                            editTransaction.getSplitPurchaseGroupId(),
+                            newDate,
+                            newComment,
+                            receiptUri,
+                            slices,
+                            currentMonth);
+                    for (String m : months) {
+                        synchronizeAllEnvelopesForMonth(m);
+                    }
+                    PrefManager.saveEnvelopes(MainActivity.this, envelopes);
+                    updateDisplay();
+                    dialog.dismiss();
+                    return;
+                }
+
+                String oldEnvelopeName = editTransaction.getEnvelopeName();
+                String newEnvelopeName = getSelectedDropdownValue(spinnerEnvelope);
+                if (newEnvelopeName == null || newEnvelopeName.isEmpty()) {
+                    showError("Select a pond");
+                    return;
+                }
+                double newAmount = Double.parseDouble(etAmount.getText().toString());
 
                 if (cbIsRecurring.isChecked() && selectedRecurringDays.isEmpty()) {
                     showError("Recurring requires at least one selected day");
                     return;
                 }
 
-                String destination = null;
-                if (cbIsTransfer.isChecked()) {
-                    if (spinnerTransferDestination.getSelectedItem() == null) {
-                        showError("Select where this transfer goes");
+                if (typeTab == TAB_TYPE_TRANSFER) {
+                    TransferGroupValidationResult validation = TransferGroupDraft.validate(
+                            newAmount,
+                            newEnvelopeName,
+                            snapshotTransferAllocations(transferViews));
+                    if (!validation.isValid()) {
+                        transferViews.saveAttempted = true;
+                        updateTransferSectionSummary(transferViews);
                         return;
                     }
-                    destination = spinnerTransferDestination.getSelectedItem().toString();
-                    if (destination.equals(newEnvelopeName)) {
-                        showError("Transfer destination must be a different envelope");
-                        return;
+                }
+
+                if (typeTab != TAB_TYPE_SPLIT) {
+                    if (!oldEnvelopeName.equals(newEnvelopeName)) {
+                        Envelope oldEnvelope = findEnvelopeByName(oldEnvelopeName);
+                        Envelope newEnvelope = findEnvelopeByName(newEnvelopeName);
+                        if (oldEnvelope != null) {
+                            oldEnvelope.getTransactions().remove(editTransaction);
+                            synchronizeEnvelopeMonth(oldEnvelope, resolveTransactionMonth(editTransaction));
+                        }
+                        if (newEnvelope != null) {
+                            newEnvelope.getTransactions().add(editTransaction);
+                            synchronizeEnvelopeMonth(newEnvelope, resolveTransactionMonth(editTransaction));
+                        }
+                        editTransaction.setEnvelopeName(newEnvelopeName);
+                    } else {
+                        Envelope envelope = findEnvelopeByName(newEnvelopeName);
+                        if (envelope != null) {
+                            envelope.updateTransaction(editTransaction, newAmount, currentMonth);
+                        }
+                    }
+
+                    editTransaction.setAmount(newAmount);
+                    editTransaction.setComment(newComment);
+                    editTransaction.setDate(newDate);
+
+                    if (receiptUriTag instanceof String) {
+                        editTransaction.setReceiptImageUri((String) receiptUriTag);
+                    } else {
+                        editTransaction.setReceiptImageUri(null);
+                    }
+
+                    if (cbIsRecurring.isChecked()) {
+                        editTransaction.setRecurring(true);
+                        editTransaction.setRecurringFrequency(selectedRecurringFrequency[0]);
+                        editTransaction.setRecurringDays(selectedRecurringDays);
+                        if (editTransaction.getRecurringSeriesId() == null || editTransaction.getRecurringSeriesId().isEmpty()) {
+                            editTransaction.setRecurringSeriesId(UUID.randomUUID().toString());
+                        }
+                        editTransaction.setRecurringTemplate(wasRecurringBefore ? editTransaction.isRecurringTemplate() : true);
+                    } else {
+                        editTransaction.setRecurring(false);
+                        editTransaction.setRecurringFrequency(null);
+                        editTransaction.setRecurringDays(new ArrayList<>());
+                        editTransaction.setRecurringSeriesId(null);
+                        editTransaction.setRecurringTemplate(false);
+                    }
+
+                    if (typeTab == TAB_TYPE_TRANSFER) {
+                        List<TransferBucketAllocation> allocations = snapshotTransferAllocations(transferViews);
+                        PrefManager.setLastAddTransferDestination(MainActivity.this, newEnvelopeName, allocations.get(0).getToEnvelope());
+                        TransferSyncHelper.applyTransferGroup(envelopes, editTransaction, newEnvelopeName, allocations);
+                    } else {
+                        TransferSyncHelper.detachTransferGroup(envelopes, editTransaction);
                     }
                 }
 
-                if (!oldEnvelopeName.equals(newEnvelopeName)) {
-                    Envelope oldEnvelope = findEnvelopeByName(oldEnvelopeName);
-                    Envelope newEnvelope = findEnvelopeByName(newEnvelopeName);
-                    if (oldEnvelope != null) {
-                        oldEnvelope.getTransactions().remove(editTransaction);
-                        synchronizeEnvelopeMonth(oldEnvelope, resolveTransactionMonth(editTransaction));
-                    }
-                    if (newEnvelope != null) {
-                        newEnvelope.getTransactions().add(editTransaction);
-                        synchronizeEnvelopeMonth(newEnvelope, resolveTransactionMonth(editTransaction));
-                    }
-                    editTransaction.setEnvelopeName(newEnvelopeName);
-                } else {
-                    Envelope envelope = findEnvelopeByName(newEnvelopeName);
-                    if (envelope != null) {
-                        envelope.updateTransaction(editTransaction, newAmount, currentMonth);
-                    }
-                }
-
-                editTransaction.setAmount(newAmount);
-                editTransaction.setComment(newComment);
-                editTransaction.setDate(newDate);
-
-                Object receiptUriTag = dialogView.getTag(R.id.tag_receipt_image_uri);
-                if (receiptUriTag instanceof String) {
-                    editTransaction.setReceiptImageUri((String) receiptUriTag);
-                } else {
-                    editTransaction.setReceiptImageUri(null);
-                }
-
-                if (cbIsRecurring.isChecked()) {
-                    editTransaction.setRecurring(true);
-                    editTransaction.setRecurringFrequency(selectedRecurringFrequency[0]);
-                    editTransaction.setRecurringDays(selectedRecurringDays);
-                    if (editTransaction.getRecurringSeriesId() == null || editTransaction.getRecurringSeriesId().isEmpty()) {
-                        editTransaction.setRecurringSeriesId(UUID.randomUUID().toString());
-                    }
-                    editTransaction.setRecurringTemplate(wasRecurringBefore ? editTransaction.isRecurringTemplate() : true);
-                } else {
-                    editTransaction.setRecurring(false);
-                    editTransaction.setRecurringFrequency(null);
-                    editTransaction.setRecurringDays(new ArrayList<>());
-                    editTransaction.setRecurringSeriesId(null);
-                    editTransaction.setRecurringTemplate(false);
-                }
-
-                if (cbIsTransfer.isChecked()) {
-                    String sourceEnvelopeNameForTransfer = finalEditingMirrorTransfer ? destination : newEnvelopeName;
-                    String destinationEnvelopeNameForTransfer = finalEditingMirrorTransfer ? newEnvelopeName : destination;
-                    upsertTransferForTransaction(editTransaction,
-                            sourceEnvelopeNameForTransfer,
-                            destinationEnvelopeNameForTransfer,
-                            Math.abs(newAmount));
-                } else {
-                    detachTransferFromTransaction(editTransaction);
-                }
-
-                Envelope updatedEnvelope = findEnvelopeByName(editTransaction.getEnvelopeName());
-                synchronizeEnvelopeMonth(updatedEnvelope, previousMonth);
-                synchronizeEnvelopeMonth(updatedEnvelope, resolveTransactionMonth(editTransaction));
+                synchronizeAllEnvelopesForMonth(previousMonth);
+                synchronizeAllEnvelopesForMonth(resolveTransactionMonth(editTransaction));
 
                 PrefManager.saveEnvelopes(MainActivity.this, envelopes);
                 updateDisplay();
@@ -1654,14 +2473,33 @@ public class MainActivity extends AppCompatActivity {
     }
     @RequiresApi(api = Build.VERSION_CODES.N)
     private void deleteTransaction(Transaction transaction) {
-        final Transaction targetTransaction = resolveTransferAnchorTransaction(transaction);
+        if (SplitPurchaseSyncHelper.isSplitPurchase(transaction)) {
+            final Transaction ref = SplitPurchaseSyncHelper.resolveForEdit(envelopes, transaction);
+            new MaterialAlertDialogBuilder(MainActivity.this)
+                    .setMessage(R.string.dialog_delete_split_purchase_message)
+                    .setPositiveButton(R.string.action_delete, (d, w) -> {
+                        String groupId = ref.getSplitPurchaseGroupId();
+                        Set<String> months = SplitPurchaseSyncHelper.removeGroup(envelopes, groupId);
+                        for (String m : months) {
+                            synchronizeAllEnvelopesForMonth(m);
+                        }
+                        PrefManager.saveEnvelopes(MainActivity.this, envelopes);
+                        updateDisplay();
+                    })
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .show();
+            return;
+        }
+        final Transaction targetTransaction = TransferSyncHelper.resolveAnchorTransaction(envelopes, transaction);
         new MaterialAlertDialogBuilder(MainActivity.this)
                 .setMessage("Delete this transaction?")
                 .setPositiveButton("Delete", (d, w) -> {
                     Envelope envelope = findEnvelopeByName(targetTransaction.getEnvelopeName());
                     if(envelope != null){
-                        detachTransferFromTransaction(targetTransaction);
+                        String targetMonth = resolveTransactionMonth(targetTransaction);
+                        TransferSyncHelper.detachTransferGroup(envelopes, targetTransaction);
                         envelope.removeTransaction(targetTransaction, currentMonth);
+                        synchronizeAllEnvelopesForMonth(targetMonth);
                         // Save and refresh
                         PrefManager.saveEnvelopes(this, envelopes);
                         updateDisplay();
@@ -1683,31 +2521,21 @@ public class MainActivity extends AppCompatActivity {
 
 
     private Envelope findTransferOwner(String transferId) {
-        for (Envelope envelope : envelopes) {
-            for (Envelope.TransferData transfer : envelope.getTransfers()) {
-                if (Objects.equals(transfer.getId(), transferId)) {
-                    return envelope;
-                }
-            }
-        }
-        return null;
+        return TransferSyncHelper.findTransferOwner(envelopes, transferId);
     }
 
     private Envelope.TransferData findTransferById(String transferId) {
-        for (Envelope envelope : envelopes) {
-            for (Envelope.TransferData transfer : envelope.getTransfers()) {
-                if (Objects.equals(transfer.getId(), transferId)) {
-                    return transfer;
-                }
-            }
+        List<TransferBucketAllocation> allocations = TransferSyncHelper.getAllocations(envelopes, transferId);
+        if (allocations.isEmpty()) {
+            return null;
         }
-        return null;
+        TransferBucketAllocation first = allocations.get(0);
+        return new Envelope.TransferData(transferId, first.getBucketId(), first.getToEnvelope(), first.getAmount());
     }
 
     private void removeTransferById(String transferId) {
-        Envelope owner = findTransferOwner(transferId);
-        if (owner != null) {
-            owner.removeTransfer(transferId);
+        for (Envelope envelope : envelopes) {
+            envelope.removeTransfer(transferId);
         }
     }
 
@@ -1727,24 +2555,578 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void populateTransferDestinationSpinner(Spinner spinner, String sourceEnvelopeName, @Nullable String selectedDestination) {
-        List<String> destinations = TransferDestinationList.excludingSource(envelopes, sourceEnvelopeName);
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, destinations);
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        spinner.setAdapter(adapter);
-        if (selectedDestination != null) {
-            int index = destinations.indexOf(selectedDestination);
-            if (index >= 0) {
-                spinner.setSelection(index);
+    private TransferDialogViews createTransferDialogViews(View dialogView) {
+        return new TransferDialogViews(
+                dialogView.findViewById(R.id.layoutTransferBucketsSection),
+                dialogView.findViewById(R.id.scrollTransactionDialogBody),
+                dialogView.findViewById(R.id.spinnerEditEnvelope),
+                dialogView.findViewById(R.id.tvTransferAllocatedSummary),
+                dialogView.findViewById(R.id.tvTransferSpentHereSummary),
+                dialogView.findViewById(R.id.tvTransferRemainingSummary),
+                dialogView.findViewById(R.id.tvTransferValidationMessage),
+                dialogView.findViewById(R.id.layoutTransferBucketsContainer),
+                dialogView.findViewById(R.id.btnAddTransferBucket)
+        );
+    }
+
+    private SplitDialogViews createSplitDialogViews(View dialogView) {
+        return new SplitDialogViews(
+                dialogView.findViewById(R.id.panelSplitPurchase),
+                dialogView.findViewById(R.id.scrollTransactionDialogBody),
+                dialogView.findViewById(R.id.tvSplitAllocatedSummary),
+                dialogView.findViewById(R.id.tvSplitValidationMessage),
+                dialogView.findViewById(R.id.layoutSplitBucketsContainer),
+                dialogView.findViewById(R.id.btnAddSplitBucket)
+        );
+    }
+
+    private void attachTransactionDialogScrollDismiss(TransferDialogViews transferViews, SplitDialogViews splitViews) {
+        transferViews.scrollView.setOnScrollChangeListener((View.OnScrollChangeListener) (scrollView, scrollX, scrollY, oldScrollX, oldScrollY) -> {
+            dismissTransferDropdowns(transferViews);
+            dismissSplitDropdowns(splitViews);
+        });
+    }
+
+    private void markSplitInteraction(@Nullable SplitDialogViews splitViews) {
+        if (splitViews == null) {
+            return;
+        }
+        splitViews.hasMeaningfulInteraction = true;
+    }
+
+    private double splitAllocatedExcluding(SplitPurchaseBucketRowController excludedController) {
+        if (activeSplitDialogViews == null) {
+            return 0d;
+        }
+        double total = 0d;
+        for (SplitPurchaseBucketRowController controller : activeSplitDialogViews.bucketControllers) {
+            if (controller == excludedController) {
+                continue;
+            }
+            total += Math.max(0d, controller.getAllocation().getAmount());
+        }
+        return total;
+    }
+
+    private void dismissSplitDropdowns(SplitDialogViews splitViews) {
+        dismissSplitDropdownsExcept(splitViews, null);
+    }
+
+    private void dismissSplitDropdownsExcept(SplitDialogViews splitViews,
+                                           @Nullable MaterialAutoCompleteTextView keepOpen) {
+        if (splitViews == null) {
+            return;
+        }
+        for (SplitPurchaseBucketRowController controller : splitViews.bucketControllers) {
+            if (keepOpen == null || controller.getPondDropdown() != keepOpen) {
+                controller.dismissDropdown();
             }
         }
     }
 
-    private void setTransferControlsVisibility(boolean visible, TextView label, Spinner spinner) {
-        int visibility = visible ? View.VISIBLE : View.GONE;
-        label.setVisibility(visibility);
-        spinner.setVisibility(visibility);
+    private void prepareSplitDialogDropdownForOpen(SplitDialogViews splitViews,
+                                                   MaterialAutoCompleteTextView targetDropdown,
+                                                   View anchorView) {
+        dismissSplitDropdownsExcept(splitViews, targetDropdown);
+        scrollSplitDialogToView(splitViews, anchorView, false);
     }
+
+    private void scrollSplitDialogToView(SplitDialogViews splitViews,
+                                         @Nullable View targetView,
+                                         boolean smooth) {
+        if (splitViews == null || targetView == null) {
+            return;
+        }
+        splitViews.scrollView.post(() -> {
+            Rect targetRect = new Rect();
+            targetView.getDrawingRect(targetRect);
+            splitViews.scrollView.offsetDescendantRectToMyCoords(targetView, targetRect);
+            int targetTop = Math.max(0, targetRect.top - dp(12));
+            if (smooth) {
+                splitViews.scrollView.smoothScrollTo(0, targetTop);
+            } else {
+                splitViews.scrollView.scrollTo(0, targetTop);
+            }
+        });
+    }
+
+    private List<SplitPurchaseSliceAllocation> snapshotSplitAllocations(SplitDialogViews splitViews) {
+        List<SplitPurchaseSliceAllocation> snapshot = new ArrayList<>();
+        for (SplitPurchaseBucketRowController controller : splitViews.bucketControllers) {
+            SplitPurchaseSliceAllocation a = controller.getAllocation();
+            snapshot.add(new SplitPurchaseSliceAllocation(a.getBucketId(), a.getPondName(), a.getAmount()));
+        }
+        return snapshot;
+    }
+
+    private void refreshSplitBucketLabels(SplitDialogViews splitViews) {
+        boolean canRemove = splitViews.bucketControllers.size() > 2;
+        for (int i = 0; i < splitViews.bucketControllers.size(); i++) {
+            splitViews.bucketControllers.get(i).setIndex(i, canRemove);
+        }
+    }
+
+    private void addSplitBucketRow(SplitDialogViews splitViews,
+                                   @Nullable SplitPurchaseSliceAllocation initialAllocation) {
+        View rowView = getLayoutInflater().inflate(R.layout.item_transfer_bucket, splitViews.bucketsContainer, false);
+        SplitPurchaseSliceAllocation allocation = initialAllocation == null
+                ? new SplitPurchaseSliceAllocation(null, null, 0d)
+                : new SplitPurchaseSliceAllocation(initialAllocation.getBucketId(), initialAllocation.getPondName(), initialAllocation.getAmount());
+        SplitPurchaseBucketRowController controller = new SplitPurchaseBucketRowController(rowView, allocation);
+        splitViews.bucketControllers.add(controller);
+        splitViews.bucketsContainer.addView(rowView);
+        controller.bindPonds(getEnvelopeNames(), allocation.getPondName());
+        refreshSplitBucketLabels(splitViews);
+    }
+
+    private void clearSplitBucketRows(SplitDialogViews splitViews) {
+        while (!splitViews.bucketControllers.isEmpty()) {
+            SplitPurchaseBucketRowController c = splitViews.bucketControllers.remove(splitViews.bucketControllers.size() - 1);
+            splitViews.bucketsContainer.removeView(c.getRootView());
+        }
+    }
+
+    private void setSplitControlsVisibility(boolean visible, SplitDialogViews splitViews) {
+        dismissSplitDropdowns(splitViews);
+        if (!visible) {
+            clearSplitBucketRows(splitViews);
+            splitViews.hasMeaningfulInteraction = false;
+            splitViews.saveAttempted = false;
+        }
+        splitViews.section.setVisibility(visible ? View.VISIBLE : View.GONE);
+        if (visible && splitViews.bucketControllers.isEmpty()) {
+            addSplitBucketRow(splitViews, null);
+            addSplitBucketRow(splitViews, null);
+        }
+        if (visible) {
+            scrollSplitDialogToView(splitViews, splitViews.section, true);
+        }
+        updateSplitSectionSummary(splitViews);
+    }
+
+    private void updateSplitSectionSummary(@Nullable SplitDialogViews splitViews) {
+        if (splitViews == null || activeSplitTotalInput == null) {
+            return;
+        }
+        double purchaseTotal = parseAmountOrZero(activeSplitTotalInput);
+        for (SplitPurchaseBucketRowController controller : splitViews.bucketControllers) {
+            controller.refreshSliderBounds(purchaseTotal);
+        }
+        List<SplitPurchaseSliceAllocation> snapshot = snapshotSplitAllocations(splitViews);
+        double allocated = SplitPurchaseGroupDraft.allocatedTotal(snapshot);
+        splitViews.allocatedSummary.setText(String.format(Locale.getDefault(),
+                "Allocated: $%.2f / $%.2f", allocated, purchaseTotal));
+
+        boolean sectionVisible = splitViews.section.getVisibility() == View.VISIBLE;
+        TransferGroupValidationResult validation = sectionVisible
+                ? SplitPurchaseGroupDraft.validate(purchaseTotal, snapshot)
+                : TransferGroupValidationResult.valid();
+        boolean showValidation = TransferBucketUiHelper.shouldShowValidationMessage(
+                sectionVisible,
+                splitViews.hasMeaningfulInteraction,
+                splitViews.saveAttempted,
+                validation);
+        if (showValidation) {
+            splitViews.validationMessage.setVisibility(View.VISIBLE);
+            splitViews.validationMessage.setText(validation.getMessage());
+        } else {
+            splitViews.validationMessage.setText("");
+            splitViews.validationMessage.setVisibility(View.GONE);
+        }
+        if (splitViews.positiveButton != null) {
+            splitViews.positiveButton.setEnabled(!sectionVisible || validation.isValid());
+        }
+    }
+
+    private void initializeSplitDialogSection(SplitDialogViews splitViews,
+                                              EditText totalInput,
+                                              @Nullable List<SplitPurchaseSliceAllocation> initialAllocations,
+                                              boolean showSectionInitially) {
+        activeSplitDialogViews = splitViews;
+        activeSplitTotalInput = totalInput;
+        clearSplitBucketRows(splitViews);
+        splitViews.addBucketButton.setOnClickListener(v -> {
+            markSplitInteraction(splitViews);
+            addSplitBucketRow(splitViews, null);
+            updateSplitSectionSummary(splitViews);
+            if (!splitViews.bucketControllers.isEmpty()) {
+                scrollSplitDialogToView(splitViews,
+                        splitViews.bucketControllers.get(splitViews.bucketControllers.size() - 1).getRootView(),
+                        true);
+            }
+        });
+        totalInput.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                if (splitViews.section.getVisibility() == View.VISIBLE) {
+                    markSplitInteraction(splitViews);
+                }
+                updateSplitSectionSummary(splitViews);
+            }
+        });
+
+        if (initialAllocations != null && !initialAllocations.isEmpty()) {
+            for (SplitPurchaseSliceAllocation slice : initialAllocations) {
+                addSplitBucketRow(splitViews, slice);
+            }
+        }
+        if (showSectionInitially) {
+            setSplitControlsVisibility(true, splitViews);
+        } else {
+            splitViews.section.setVisibility(View.GONE);
+            updateSplitSectionSummary(splitViews);
+        }
+    }
+
+    private void applyTransactionDialogTypeState(int typeTab,
+                                               TabLayout tabTime,
+                                               View panelSpending,
+                                               View panelTransfer,
+                                               View panelSplit,
+                                               View layoutRowPond,
+                                               EditText etAmount,
+                                               EditText etSplit,
+                                               CheckBox cbIsRecurring,
+                                               TextView tvRecurringFrequencyLabel,
+                                               LinearLayout layoutRecurringFrequencyOptions,
+                                               TextView tvRecurringDaysLabel,
+                                               LinearLayout layoutRecurringWeekdayButtons,
+                                               TextView tvRecurringDaysValue,
+                                               String recurringFrequency,
+                                               TransferDialogViews transferViews,
+                                               SplitDialogViews splitViews) {
+        boolean spending = typeTab == TAB_TYPE_SPENDING;
+        boolean transfer = typeTab == TAB_TYPE_TRANSFER;
+        boolean split = typeTab == TAB_TYPE_SPLIT;
+
+        tabTime.setVisibility(spending ? View.VISIBLE : View.GONE);
+        panelSpending.setVisibility(spending ? View.VISIBLE : View.GONE);
+        panelTransfer.setVisibility(transfer ? View.VISIBLE : View.GONE);
+        panelSplit.setVisibility(split ? View.VISIBLE : View.GONE);
+        layoutRowPond.setVisibility(split ? View.GONE : View.VISIBLE);
+        etAmount.setVisibility(split ? View.GONE : View.VISIBLE);
+        etSplit.setVisibility(split ? View.VISIBLE : View.GONE);
+
+        if (transfer || split) {
+            cbIsRecurring.setChecked(false);
+        }
+
+        if (transfer) {
+            setTransferControlsVisibility(true, transferViews);
+            setSplitControlsVisibility(false, splitViews);
+        } else if (split) {
+            setTransferControlsVisibility(false, transferViews);
+            setSplitControlsVisibility(true, splitViews);
+        } else {
+            setTransferControlsVisibility(false, transferViews);
+            setSplitControlsVisibility(false, splitViews);
+        }
+        setRecurringControlsVisibility(cbIsRecurring.isChecked(),
+                tvRecurringFrequencyLabel,
+                layoutRecurringFrequencyOptions,
+                tvRecurringDaysLabel,
+                layoutRecurringWeekdayButtons,
+                tvRecurringDaysValue,
+                recurringFrequency);
+        updateTransferSectionSummary(transferViews);
+        updateSplitSectionSummary(splitViews);
+    }
+
+    private void initializeTransferDialogSection(TransferDialogViews transferViews,
+                                                 EditText amountInput,
+                                                 MaterialAutoCompleteTextView sourceSpinner,
+                                                 @Nullable String firstDestination,
+                                                 @Nullable List<TransferBucketAllocation> initialAllocations,
+                                                 boolean enabledInitially) {
+        activeTransferDialogViews = transferViews;
+        activeTransferAmountInput = amountInput;
+        configureDialogDropdown(sourceSpinner, () -> prepareDialogDropdownForOpen(transferViews, sourceSpinner, sourceSpinner));
+        transferViews.addBucketButton.setOnClickListener(v -> {
+            markTransferInteraction(transferViews);
+            String sourceEnvelope = getSelectedDropdownValue(sourceSpinner);
+            addTransferBucketRow(transferViews, sourceEnvelope, null);
+            updateTransferSectionSummary(transferViews);
+            if (!transferViews.bucketControllers.isEmpty()) {
+                scrollTransferDialogToView(transferViews,
+                        transferViews.bucketControllers.get(transferViews.bucketControllers.size() - 1).getRootView(),
+                        true);
+            }
+        });
+        amountInput.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                if (transferViews.section.getVisibility() == View.VISIBLE) {
+                    markTransferInteraction(transferViews);
+                }
+                updateTransferSectionSummary(transferViews);
+            }
+        });
+        sourceSpinner.setOnItemClickListener((parent, view, position, id) -> {
+            String selectedSource = (String) parent.getItemAtPosition(position);
+            if (transferViews.section.getVisibility() == View.VISIBLE) {
+                markTransferInteraction(transferViews);
+            }
+            rebindTransferBucketDestinations(transferViews, selectedSource);
+            updateTransferSectionSummary(transferViews);
+        });
+
+        if (initialAllocations != null && !initialAllocations.isEmpty()) {
+            for (TransferBucketAllocation allocation : initialAllocations) {
+                addTransferBucketRow(transferViews,
+                        getSelectedDropdownValue(sourceSpinner),
+                        allocation);
+            }
+        } else if (enabledInitially) {
+            addTransferBucketRow(transferViews,
+                    getSelectedDropdownValue(sourceSpinner),
+                    new TransferBucketAllocation(null, firstDestination, 0d));
+        }
+        setTransferControlsVisibility(enabledInitially, transferViews);
+        updateTransferSectionSummary(transferViews);
+    }
+
+    private void addTransferBucketRow(TransferDialogViews transferViews,
+                                      @Nullable String sourceEnvelopeName,
+                                      @Nullable TransferBucketAllocation initialAllocation) {
+        View rowView = getLayoutInflater().inflate(R.layout.item_transfer_bucket, transferViews.bucketsContainer, false);
+        TransferBucketAllocation allocation = initialAllocation == null
+                ? new TransferBucketAllocation(null, null, 0d)
+                : initialAllocation;
+        TransferBucketRowController controller = new TransferBucketRowController(rowView, allocation);
+        transferViews.bucketControllers.add(controller);
+        transferViews.bucketsContainer.addView(rowView);
+        controller.bindDestinations(sourceEnvelopeName, allocation.getToEnvelope());
+        refreshTransferBucketLabels(transferViews);
+    }
+
+    private void rebindTransferBucketDestinations(TransferDialogViews transferViews, @Nullable String sourceEnvelopeName) {
+        for (TransferBucketRowController controller : transferViews.bucketControllers) {
+            controller.bindDestinations(sourceEnvelopeName, controller.getAllocation().getToEnvelope());
+        }
+        refreshTransferBucketLabels(transferViews);
+    }
+
+    private void refreshTransferBucketLabels(TransferDialogViews transferViews) {
+        boolean canRemove = transferViews.bucketControllers.size() > 1;
+        for (int i = 0; i < transferViews.bucketControllers.size(); i++) {
+            transferViews.bucketControllers.get(i).setIndex(i, canRemove);
+        }
+    }
+
+    private void setTransferControlsVisibility(boolean visible, TransferDialogViews transferViews) {
+        dismissTransferDropdowns(transferViews);
+        transferViews.section.setVisibility(visible ? View.VISIBLE : View.GONE);
+        if (visible && transferViews.bucketControllers.isEmpty()) {
+            addTransferBucketRow(transferViews, getSelectedDropdownValue(transferViews.sourceDropdown), null);
+        }
+        if (!visible) {
+            transferViews.hasMeaningfulInteraction = false;
+            transferViews.saveAttempted = false;
+        } else {
+            scrollTransferDialogToView(transferViews, transferViews.section, true);
+        }
+        updateTransferSectionSummary(transferViews);
+    }
+
+    private void updateTransferSectionSummary(@Nullable TransferDialogViews transferViews) {
+        if (transferViews == null || activeTransferAmountInput == null) {
+            return;
+        }
+        double totalAmount = parseAmountOrZero(activeTransferAmountInput);
+        for (TransferBucketRowController controller : transferViews.bucketControllers) {
+            controller.refreshSliderBounds(totalAmount);
+        }
+
+        List<TransferBucketAllocation> allocations = new ArrayList<>();
+        for (TransferBucketRowController controller : transferViews.bucketControllers) {
+            allocations.add(controller.getAllocation());
+        }
+        double allocated = TransferGroupDraft.allocatedTotal(allocations);
+        double spentHere = Math.max(0d, totalAmount - allocated);
+        double remaining = Math.max(0d, totalAmount - allocated);
+
+        transferViews.allocatedSummary.setText(String.format(Locale.getDefault(),
+                "Allocated: $%.2f", allocated));
+        transferViews.spentHereSummary.setText(String.format(Locale.getDefault(),
+                "Spent in this pond: $%.2f", spentHere));
+        transferViews.remainingSummary.setText(String.format(Locale.getDefault(),
+                "Left to allocate: $%.2f", remaining));
+
+        String sourceEnvelopeName = getSelectedDropdownValue(transferViews.sourceDropdown);
+
+        boolean visible = transferViews.section.getVisibility() == View.VISIBLE;
+        TransferGroupValidationResult validation = visible
+                ? TransferGroupDraft.validate(totalAmount, sourceEnvelopeName, allocations)
+                : TransferGroupValidationResult.valid();
+        boolean showValidation = TransferBucketUiHelper.shouldShowValidationMessage(
+                visible,
+                transferViews.hasMeaningfulInteraction,
+                transferViews.saveAttempted,
+                validation);
+        if (showValidation) {
+            transferViews.validationMessage.setVisibility(View.VISIBLE);
+            transferViews.validationMessage.setText(validation.getMessage());
+        } else {
+            transferViews.validationMessage.setText("");
+            transferViews.validationMessage.setVisibility(View.GONE);
+        }
+        if (transferViews.positiveButton != null) {
+            transferViews.positiveButton.setEnabled(!visible || validation.isValid());
+        }
+    }
+
+    private void markTransferInteraction(@Nullable TransferDialogViews transferViews) {
+        if (transferViews == null) {
+            return;
+        }
+        transferViews.hasMeaningfulInteraction = true;
+    }
+
+    private void bindDialogDropdownOptions(MaterialAutoCompleteTextView dropdown, List<String> options) {
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, options);
+        dropdown.setAdapter(adapter);
+    }
+
+    private void configureDialogDropdown(MaterialAutoCompleteTextView dropdown, Runnable onOpen) {
+        dropdown.setKeyListener(null);
+        dropdown.setCursorVisible(false);
+        dropdown.setOnClickListener(view -> {
+            onOpen.run();
+            dropdown.showDropDown();
+        });
+    }
+
+    @Nullable
+    private String getSelectedDropdownValue(@Nullable MaterialAutoCompleteTextView dropdown) {
+        if (dropdown == null || dropdown.getText() == null) {
+            return null;
+        }
+        String selected = dropdown.getText().toString().trim();
+        return selected.isEmpty() ? null : selected;
+    }
+
+    private void prepareDialogDropdownForOpen(TransferDialogViews transferViews,
+                                              MaterialAutoCompleteTextView targetDropdown,
+                                              View anchorView) {
+        dismissTransferDropdownsExcept(transferViews, targetDropdown);
+        scrollTransferDialogToView(transferViews, anchorView, false);
+    }
+
+    private void dismissTransferDropdowns(TransferDialogViews transferViews) {
+        dismissTransferDropdownsExcept(transferViews, null);
+    }
+
+    private void dismissTransferDropdownsExcept(TransferDialogViews transferViews,
+                                                @Nullable MaterialAutoCompleteTextView keepOpen) {
+        if (transferViews == null) {
+            return;
+        }
+        if (transferViews.sourceDropdown != keepOpen) {
+            transferViews.sourceDropdown.dismissDropDown();
+        }
+        for (TransferBucketRowController controller : transferViews.bucketControllers) {
+            if (controller.destinationDropdown != keepOpen) {
+                controller.dismissDropdown();
+            }
+        }
+    }
+
+    private void scrollTransferDialogToView(TransferDialogViews transferViews,
+                                            @Nullable View targetView,
+                                            boolean smooth) {
+        if (transferViews == null || targetView == null) {
+            return;
+        }
+        transferViews.scrollView.post(() -> {
+            Rect targetRect = new Rect();
+            targetView.getDrawingRect(targetRect);
+            transferViews.scrollView.offsetDescendantRectToMyCoords(targetView, targetRect);
+            int targetTop = Math.max(0, targetRect.top - dp(12));
+            if (smooth) {
+                transferViews.scrollView.smoothScrollTo(0, targetTop);
+            } else {
+                transferViews.scrollView.scrollTo(0, targetTop);
+            }
+        });
+    }
+
+    private void configureTransactionDialogWindow(AlertDialog dialog) {
+        dialog.setCanceledOnTouchOutside(false);
+        Window window = dialog.getWindow();
+        if (window == null) {
+            return;
+        }
+        window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+        window.setDimAmount(0.82f);
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+    }
+
+    private List<TransferBucketAllocation> snapshotTransferAllocations(TransferDialogViews transferViews) {
+        List<TransferBucketAllocation> snapshot = new ArrayList<>();
+        for (TransferBucketRowController controller : transferViews.bucketControllers) {
+            TransferBucketAllocation allocation = controller.getAllocation();
+            snapshot.add(new TransferBucketAllocation(
+                    allocation.getBucketId(),
+                    allocation.getToEnvelope(),
+                    allocation.getAmount()
+            ));
+        }
+        return snapshot;
+    }
+
+    private double allocatedExcluding(TransferBucketRowController excludedController) {
+        if (activeTransferDialogViews == null) {
+            return 0d;
+        }
+        double total = 0d;
+        for (TransferBucketRowController controller : activeTransferDialogViews.bucketControllers) {
+            if (controller == excludedController) {
+                continue;
+            }
+            total += Math.max(0d, controller.getAllocation().getAmount());
+        }
+        return total;
+    }
+
+    private double parseAmountOrZero(@Nullable EditText input) {
+        return input == null ? 0d : parseAmountOrZero(input.getText().toString());
+    }
+
+    private double parseAmountOrZero(@Nullable String value) {
+        if (value == null) {
+            return 0d;
+        }
+        String trimmed = value.trim();
+        if (trimmed.isEmpty()) {
+            return 0d;
+        }
+        try {
+            return Double.parseDouble(trimmed);
+        } catch (NumberFormatException ignored) {
+            return 0d;
+        }
+    }
+
+    private String formatCurrency(double amount) {
+        return String.format(Locale.getDefault(), "$%.2f", amount);
+    }
+
     private void setRecurringControlsVisibility(boolean visible,
                                                 TextView frequencyLabel,
                                                 View frequencyOptionsView,
@@ -2308,199 +3690,52 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void upsertTransferForTransaction(Transaction transaction, String sourceEnvelopeName, String destinationEnvelopeName, double amount) {
-        String transferId = transaction.getTransferId();
-        if (transferId == null || transferId.isEmpty()) {
-            transferId = UUID.randomUUID().toString();
-            transaction.setTransferId(transferId);
-        }
-
-        Envelope sourceEnvelope = findEnvelopeByName(sourceEnvelopeName);
-        if (sourceEnvelope == null) {
+    private void synchronizeAllEnvelopesForMonth(@Nullable String month) {
+        if (month == null || month.isEmpty()) {
             return;
         }
-
-        Envelope currentOwner = findTransferOwner(transferId);
-        if (currentOwner != null && !Objects.equals(currentOwner.getName(), sourceEnvelopeName)) {
-            currentOwner.removeTransfer(transferId);
-            currentOwner = null;
-        }
-
-        if (currentOwner == null) {
-            sourceEnvelope.addTransfer(transferId, destinationEnvelopeName, amount);
-        } else {
-            currentOwner.updateTransfer(transferId, destinationEnvelopeName, amount);
-        }
-
-        Transaction sourceTransaction = resolveTransferAnchorTransaction(transaction);
-        if (sourceTransaction == null) {
-            sourceTransaction = transaction;
-        }
-
-        String sourceTransactionMonth = resolveTransactionMonth(sourceTransaction);
-        Envelope sourceHolder = findEnvelopeByName(sourceTransaction.getEnvelopeName());
-        if (sourceHolder != null && sourceHolder != sourceEnvelope) {
-            sourceHolder.getTransactions().remove(sourceTransaction);
-            synchronizeEnvelopeMonth(sourceHolder, sourceTransactionMonth);
-            sourceEnvelope.addTransaction(sourceTransaction, sourceTransactionMonth);
-        }
-
-        sourceTransaction.setEnvelopeName(sourceEnvelopeName);
-        sourceTransaction.setDate(transaction.getDate());
-        sourceTransaction.setComment(transaction.getComment());
-        String updatedSourceMonth = resolveTransactionMonth(sourceTransaction);
-        sourceEnvelope.updateTransaction(sourceTransaction, Math.abs(amount), updatedSourceMonth);
-        synchronizeEnvelopeMonth(sourceEnvelope, sourceTransactionMonth);
-        synchronizeEnvelopeMonth(sourceEnvelope, updatedSourceMonth);
-
-        syncMirrorTransferTransaction(sourceTransaction, sourceEnvelopeName, destinationEnvelopeName, amount);
-    }
-
-    private void detachTransferFromTransaction(Transaction transaction) {
-        String transferId = transaction.getTransferId();
-        if (transferId == null || transferId.isEmpty()) {
-            return;
-        }
-
-        removeTransferById(transferId);
-        removeMirrorTransactions(transferId, transaction);
-        transaction.setTransferId(null);
-    }
-
-    private Transaction resolveTransferAnchorTransaction(Transaction transaction) {
-        if (transaction == null) {
-            return null;
-        }
-
-        String transferId = transaction.getTransferId();
-        if (transferId == null || transferId.isEmpty()) {
-            return transaction;
-        }
-
-        Envelope owner = findTransferOwner(transferId);
-        if (owner == null) {
-            return transaction;
-        }
-
-        for (Transaction candidate : owner.getTransactions()) {
-            if (Objects.equals(candidate.getTransferId(), transferId)) {
-                return candidate;
-            }
-        }
-
-        return transaction;
-    }
-
-    private void syncMirrorTransferTransaction(Transaction sourceTransaction,
-                                               String sourceEnvelopeName,
-                                               String destinationEnvelopeName,
-                                               double amount) {
-        String transferId = sourceTransaction.getTransferId();
-        if (transferId == null || transferId.isEmpty()) {
-            return;
-        }
-
-        Envelope destinationEnvelope = findEnvelopeByName(destinationEnvelopeName);
-        if (destinationEnvelope == null) {
-            return;
-        }
-
-        String mirrorTargetMonth = resolveTransactionMonth(sourceTransaction);
-        Transaction mirror = null;
-        Envelope mirrorEnvelope = null;
         for (Envelope envelope : envelopes) {
-            Iterator<Transaction> iterator = envelope.getTransactions().iterator();
-            while (iterator.hasNext()) {
-                Transaction candidate = iterator.next();
-                if (!Objects.equals(candidate.getTransferId(), transferId) || candidate == sourceTransaction) {
-                    continue;
-                }
-
-                if (Objects.equals(candidate.getEnvelopeName(), destinationEnvelopeName)) {
-                    mirror = candidate;
-                    mirrorEnvelope = envelope;
-                } else {
-                    iterator.remove();
-                    synchronizeEnvelopeMonth(envelope, resolveTransactionMonth(candidate));
-                }
-            }
-        }
-
-        String sourceComment = sourceTransaction.getComment();
-        String mirrorComment = (sourceComment == null || sourceComment.isEmpty())
-                ? "Transfer from " + sourceEnvelopeName
-                : "Transfer from " + sourceEnvelopeName + " | " + sourceComment;
-
-        if (mirror == null) {
-            mirror = new Transaction(destinationEnvelopeName, -Math.abs(amount), sourceTransaction.getDate(), mirrorComment);
-            mirror.setTransferId(transferId);
-            destinationEnvelope.addTransaction(mirror, mirrorTargetMonth);
-            synchronizeEnvelopeMonth(destinationEnvelope, mirrorTargetMonth);
-            return;
-        }
-
-        if (mirrorEnvelope != null && mirrorEnvelope != destinationEnvelope) {
-            String previousMirrorMonth = resolveTransactionMonth(mirror);
-            mirrorEnvelope.getTransactions().remove(mirror);
-            synchronizeEnvelopeMonth(mirrorEnvelope, previousMirrorMonth);
-            destinationEnvelope.addTransaction(mirror, previousMirrorMonth);
-        }
-
-        String previousMirrorMonth = resolveTransactionMonth(mirror);
-        mirror.setEnvelopeName(destinationEnvelopeName);
-        mirror.setDate(sourceTransaction.getDate());
-        mirror.setComment(mirrorComment);
-        String updatedMirrorMonth = resolveTransactionMonth(mirror);
-        destinationEnvelope.updateTransaction(mirror, -Math.abs(amount), updatedMirrorMonth);
-        synchronizeEnvelopeMonth(destinationEnvelope, previousMirrorMonth);
-        synchronizeEnvelopeMonth(destinationEnvelope, updatedMirrorMonth);
-    }
-
-    private void removeMirrorTransactions(String transferId, Transaction anchorTransaction) {
-        for (Envelope envelope : envelopes) {
-            Iterator<Transaction> iterator = envelope.getTransactions().iterator();
-            while (iterator.hasNext()) {
-                Transaction candidate = iterator.next();
-                if (!Objects.equals(candidate.getTransferId(), transferId)) {
-                    continue;
-                }
-                if (candidate == anchorTransaction) {
-                    continue;
-                }
-
-                iterator.remove();
-                if (Objects.equals(candidate.getMonth(), currentMonth)) {
-                    envelope.calculateRemaining(currentMonth);
-                }
-            }
+            synchronizeEnvelopeMonth(envelope, month);
         }
     }
+
     private void ensureMirrorTransactionsForExistingTransfers() {
+        // Snapshot transfer groups first because grouped repair rewrites the owner's transfer list.
+        Map<String, Envelope> transferOwnersById = new HashMap<>();
         for (Envelope owner : envelopes) {
             for (Envelope.TransferData transfer : owner.getTransfers()) {
                 if (transfer.getId() == null || transfer.getId().isEmpty()) {
                     continue;
                 }
-
-                Transaction sourceTransaction = null;
-                for (Transaction candidate : owner.getTransactions()) {
-                    if (Objects.equals(candidate.getTransferId(), transfer.getId())) {
-                        sourceTransaction = candidate;
-                        break;
-                    }
-                }
-
-                if (sourceTransaction == null) {
-                    continue;
-                }
-
-                syncMirrorTransferTransaction(
-                        sourceTransaction,
-                        owner.getName(),
-                        transfer.getToEnvelope(),
-                        Math.abs(sourceTransaction.getAmount())
-                );
+                transferOwnersById.putIfAbsent(transfer.getId(), owner);
             }
+        }
+
+        for (Map.Entry<String, Envelope> entry : transferOwnersById.entrySet()) {
+            String transferId = entry.getKey();
+            Envelope owner = entry.getValue();
+            if (owner == null) {
+                continue;
+            }
+
+            Transaction sourceTransaction = null;
+            for (Transaction candidate : owner.getTransactions()) {
+                if (Objects.equals(candidate.getTransferId(), transferId)
+                        && (candidate.getTransferBucketId() == null || candidate.getTransferBucketId().isEmpty())) {
+                    sourceTransaction = candidate;
+                    break;
+                }
+            }
+            if (sourceTransaction == null) {
+                continue;
+            }
+
+            TransferSyncHelper.applyTransferGroup(
+                    envelopes,
+                    sourceTransaction,
+                    owner.getName(),
+                    TransferSyncHelper.getAllocations(envelopes, transferId));
+            synchronizeAllEnvelopesForMonth(resolveTransactionMonth(sourceTransaction));
         }
     }
     private void updateTransferTotalsPanel(List<TransferTotalsOption> options) {

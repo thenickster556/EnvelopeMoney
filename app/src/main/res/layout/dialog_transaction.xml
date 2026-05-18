@@ -89,11 +89,21 @@
                 android:layout_height="wrap_content"
                 android:text="Select Envelope" />
 
-            <Spinner
-                android:id="@+id/spinnerEditEnvelope"
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:theme="@style/ThemeOverlay.MountainMoney.Spinner" />
+                android:layout_marginTop="4dp">
+
+                <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                    android:id="@+id/spinnerEditEnvelope"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:completionThreshold="0"
+                    android:importantForAutofill="no"
+                    android:inputType="none"
+                    android:maxLines="1" />
+            </com.google.android.material.textfield.TextInputLayout>
 
             <TextView
                 android:layout_width="wrap_content"
@@ -325,19 +335,84 @@
                 android:text="This is a transfer"
                 app:buttonTint="?attr/colorPrimary" />
 
-            <TextView
-                android:id="@+id/tvTransferToLabel"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:labelFor="@id/spinnerTransferDestination"
-                android:text="Transfer To" />
-
-            <Spinner
-                android:id="@+id/spinnerTransferDestination"
+            <LinearLayout
+                android:id="@+id/layoutTransferBucketsSection"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:theme="@style/ThemeOverlay.MountainMoney.Spinner" />
+                android:layout_marginTop="8dp"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/tvTransferSummaryLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="TRANSFER SUMMARY"
+                    android:textColor="?android:attr/textColorPrimary"
+                    android:textSize="20sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvTransferAllocatedSummary"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="Allocated: $0.00"
+                    android:textColor="?android:attr/textColorPrimary"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:id="@+id/tvTransferSpentHereSummary"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Spent in this pond: $0.00"
+                    android:textColor="?android:attr/textColorPrimary"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:id="@+id/tvTransferRemainingSummary"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Left to allocate: $0.00"
+                    android:textColor="?android:attr/textColorPrimary"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:id="@+id/tvTransferStepHint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="Fixed step: $0.50"
+                    android:textColor="?android:attr/textColorSecondary"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:id="@+id/tvTransferValidationMessage"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:textColor="@android:color/holo_red_dark"
+                    android:visibility="gone" />
+
+                <LinearLayout
+                    android:id="@+id/layoutTransferBucketsContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:orientation="vertical" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnAddTransferBucket"
+                    style="@style/Widget.MountainMoney.TransactionReceiptIconButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:contentDescription="@string/content_desc_add_transfer_bucket"
+                    android:text="+"
+                    android:textAllCaps="false"
+                    android:textSize="24sp"
+                    app:icon="@null" />
+            </LinearLayout>
         </LinearLayout>
     </com.example.envelopemoney.ui.BoundedNestedScrollView>
 </LinearLayout>

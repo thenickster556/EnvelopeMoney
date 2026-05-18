@@ -20,24 +20,33 @@ public class Envelope {
     public static class TransferData {
         @SerializedName("id")
         private String id;
+        @SerializedName("bucketId")
+        private String bucketId;
         @SerializedName("toEnvelope")
         private String toEnvelope;
         @SerializedName("amount")
         private double amount;
 
         public TransferData(String toEnvelope, double amount) {
-            this(UUID.randomUUID().toString(), toEnvelope, amount);
+            this(UUID.randomUUID().toString(), UUID.randomUUID().toString(), toEnvelope, amount);
         }
 
         public TransferData(String id, String toEnvelope, double amount) {
+            this(id, UUID.randomUUID().toString(), toEnvelope, amount);
+        }
+
+        public TransferData(String id, String bucketId, String toEnvelope, double amount) {
             this.id = id;
+            this.bucketId = bucketId;
             this.toEnvelope = toEnvelope;
             this.amount = amount;
         }
 
         public String getId() { return id; }
+        public String getBucketId() { return bucketId; }
         public String getToEnvelope() { return toEnvelope; }
         public double getAmount() { return amount; }
+        public void setBucketId(String bucketId) { this.bucketId = bucketId; }
         public void setToEnvelope(String toEnvelope) { this.toEnvelope = toEnvelope; }
         public void setAmount(double amount) { this.amount = amount; }
     }
@@ -262,6 +271,10 @@ public class Envelope {
 
     public void addTransfer(String id, String toEnvelope, double amount) {
         getTransfers().add(new TransferData(id, toEnvelope, amount));
+    }
+
+    public void addTransfer(String id, String bucketId, String toEnvelope, double amount) {
+        getTransfers().add(new TransferData(id, bucketId, toEnvelope, amount));
     }
 
     public void updateTransfer(String id, String toEnvelope, double amount) {

@@ -22,6 +22,13 @@ public class Transaction {
     private String month;
     @SerializedName("transferId")
     private String transferId;
+    @SerializedName("transferBucketId")
+    private String transferBucketId;
+    /** When set, this transaction is one slice of a multi-pond split purchase sharing the same group id. */
+    @SerializedName("splitPurchaseGroupId")
+    private String splitPurchaseGroupId;
+    @SerializedName("splitPurchaseBucketId")
+    private String splitPurchaseBucketId;
     @SerializedName("recurring")
     private boolean recurring;
     @SerializedName("recurringFrequency")
@@ -42,6 +49,9 @@ public class Transaction {
         this.date = date != null ? date : "";
         this.comment = comment != null ? comment : "";
         this.transferId = null;
+        this.transferBucketId = null;
+        this.splitPurchaseGroupId = null;
+        this.splitPurchaseBucketId = null;
         this.recurring = false;
         this.recurringFrequency = null;
         this.recurringDays = new ArrayList<>();
@@ -60,6 +70,9 @@ public class Transaction {
     public String getComment() { return comment; }
     public String getMonth() { return month; }
     public String getTransferId() { return transferId; }
+    public String getTransferBucketId() { return transferBucketId; }
+    public String getSplitPurchaseGroupId() { return splitPurchaseGroupId; }
+    public String getSplitPurchaseBucketId() { return splitPurchaseBucketId; }
     public boolean isRecurring() { return recurring; }
     public String getRecurringFrequency() { return recurringFrequency; }
     public List<Integer> getRecurringDays() {
@@ -77,6 +90,9 @@ public class Transaction {
     public void setEnvelopeName(String envelopeName) { this.envelopeName = envelopeName; }
     public void setMonth(String month) { this.month = month; }
     public void setTransferId(String transferId) { this.transferId = transferId; }
+    public void setTransferBucketId(String transferBucketId) { this.transferBucketId = transferBucketId; }
+    public void setSplitPurchaseGroupId(String splitPurchaseGroupId) { this.splitPurchaseGroupId = splitPurchaseGroupId; }
+    public void setSplitPurchaseBucketId(String splitPurchaseBucketId) { this.splitPurchaseBucketId = splitPurchaseBucketId; }
     public void setRecurring(boolean recurring) { this.recurring = recurring; }
     public void setRecurringFrequency(String recurringFrequency) { this.recurringFrequency = recurringFrequency; }
     public void setRecurringDays(List<Integer> recurringDays) {
