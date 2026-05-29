@@ -96,6 +96,12 @@ public class MainActivity extends AppCompatActivity {
     private static final int TAB_TIME_ONE_TIME = 0;
     private static final int TAB_TIME_RECURRING = 1;
 
+    private boolean isTransactionDialogRecurringSelected(TabLayout tabTransactionType,
+                                                         TabLayout tabTransactionTime) {
+        return tabTransactionType.getSelectedTabPosition() == TAB_TYPE_SPENDING
+                && tabTransactionTime.getSelectedTabPosition() == TAB_TIME_RECURRING;
+    }
+
     private final Set<String> expandedSplitGroupIds = new HashSet<>();
     private ListView listViewEnvelopes;
     private List<Envelope> envelopes;
@@ -151,6 +157,7 @@ public class MainActivity extends AppCompatActivity {
         final List<TransferBucketRowController> bucketControllers = new ArrayList<>();
         boolean hasMeaningfulInteraction = false;
         boolean saveAttempted = false;
+        boolean skipDefaultAllocations = false;
         @Nullable Button positiveButton;
 
         TransferDialogViews(View section,
@@ -399,6 +406,10 @@ public class MainActivity extends AppCompatActivity {
                 suppressCallbacks = false;
             }
         }
+
+        void applyDefaultAmount(double amount) {
+            setAmountInternal(amount, false);
+        }
     }
 
 
@@ -412,6 +423,7 @@ public class MainActivity extends AppCompatActivity {
         final List<SplitPurchaseBucketRowController> bucketControllers = new ArrayList<>();
         boolean hasMeaningfulInteraction = false;
         boolean saveAttempted = false;
+        boolean skipDefaultAllocations = false;
         @Nullable Button positiveButton;
 
         SplitDialogViews(View section,
@@ -658,6 +670,10 @@ public class MainActivity extends AppCompatActivity {
                 suppressCallbacks = false;
             }
         }
+
+        void applyDefaultAmount(double amount) {
+            setAmountInternal(amount, false);
+        }
     }
 
     @Nullable
@@ -719,7 +735,7 @@ public class MainActivity extends AppCompatActivity {
         updateBillsPeriodFilterButton(btnBillsPeriodFilter);
 
         ImageButton btnBillsDaysSetup = findViewById(R.id.btnBillsDaysSetup);
-        btnBillsDaysSetup.setOnClickListener(v -> showBillsDaysPickerDialog());
+        btnBillsDaysSetup.setOnClickListener(v -> showBillsPaydaysSettingsDialog());
         expandTouchTarget(btnBillsDaysSetup, 8);
 
         ImageButton btnRecalculateBalances = findViewById(R.id.btnRecalculateBalances);
@@ -764,6 +780,10 @@ public class MainActivity extends AppCompatActivity {
         currentMonth = launchState.getActiveMonth();
         MonthTracker.setCurrentMonth(this, currentMonth);
         if (launchState.requiresPersistence()) {
+            PrefManager.saveEnvelopes(this, envelopes);
+        }
+        applyPaydayReconciliationToAllEligibleEnvelopes();
+        if (isGlobalPaydayReconciliationEnabled()) {
             PrefManager.saveEnvelopes(this, envelopes);
         }
         setupMonthNavigation();
@@ -1013,6 +1033,7 @@ public class MainActivity extends AppCompatActivity {
         for (Envelope env : envelopes) {
             env.getMonthlyData(currentMonth);
         }
+        applyPaydayReconciliationToAllEligibleEnvelopes();
         updateDisplay();
     }
 
@@ -1052,7 +1073,6 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout panelTransfer = dialogView.findViewById(R.id.panelTransfer);
         View panelSplit = dialogView.findViewById(R.id.panelSplitPurchase);
         LinearLayout layoutRowPond = dialogView.findViewById(R.id.layoutRowPond);
-        CheckBox cbIsRecurring = dialogView.findViewById(R.id.cbIsRecurring);
         TextView tvRecurringFrequencyLabel = dialogView.findViewById(R.id.tvRecurringFrequencyLabel);
         LinearLayout layoutRecurringFrequencyOptions = dialogView.findViewById(R.id.layoutRecurringFrequencyOptions);
         TextView btnRecurringWeekly = dialogView.findViewById(R.id.btnRecurringWeekly);
@@ -1104,7 +1124,7 @@ public class MainActivity extends AppCompatActivity {
             applyRecurringFrequencyButtonSelection(btnRecurringWeekly, btnRecurringBiWeekly, btnRecurringMonthly, selectedRecurringFrequency[0]);
             applyRecurringWeekdayButtonSelection(recurringDayButtons, selectedRecurringDays);
             updateRecurringDaysSummaryView(tvRecurringDaysValue, selectedRecurringFrequency[0], selectedRecurringDays);
-            setRecurringControlsVisibility(cbIsRecurring.isChecked(),
+            setRecurringControlsVisibility(isTransactionDialogRecurringSelected(tabTransactionType, tabTransactionTime),
                     tvRecurringFrequencyLabel,
                     layoutRecurringFrequencyOptions,
                     tvRecurringDaysLabel,
@@ -1118,7 +1138,7 @@ public class MainActivity extends AppCompatActivity {
             applyRecurringFrequencyButtonSelection(btnRecurringWeekly, btnRecurringBiWeekly, btnRecurringMonthly, selectedRecurringFrequency[0]);
             applyRecurringWeekdayButtonSelection(recurringDayButtons, selectedRecurringDays);
             updateRecurringDaysSummaryView(tvRecurringDaysValue, selectedRecurringFrequency[0], selectedRecurringDays);
-            setRecurringControlsVisibility(cbIsRecurring.isChecked(),
+            setRecurringControlsVisibility(isTransactionDialogRecurringSelected(tabTransactionType, tabTransactionTime),
                     tvRecurringFrequencyLabel,
                     layoutRecurringFrequencyOptions,
                     tvRecurringDaysLabel,
@@ -1132,7 +1152,7 @@ public class MainActivity extends AppCompatActivity {
             applyRecurringFrequencyButtonSelection(btnRecurringWeekly, btnRecurringBiWeekly, btnRecurringMonthly, selectedRecurringFrequency[0]);
             applyRecurringWeekdayButtonSelection(recurringDayButtons, selectedRecurringDays);
             updateRecurringDaysSummaryView(tvRecurringDaysValue, selectedRecurringFrequency[0], selectedRecurringDays);
-            setRecurringControlsVisibility(cbIsRecurring.isChecked(),
+            setRecurringControlsVisibility(isTransactionDialogRecurringSelected(tabTransactionType, tabTransactionTime),
                     tvRecurringFrequencyLabel,
                     layoutRecurringFrequencyOptions,
                     tvRecurringDaysLabel,
@@ -1175,33 +1195,16 @@ public class MainActivity extends AppCompatActivity {
         initializeSplitDialogSection(splitViews, etSplitTotal, null, false);
         attachTransactionDialogScrollDismiss(transferViews, splitViews);
 
-        cbIsRecurring.setOnCheckedChangeListener((buttonView, checked) -> {
-            if (tabTransactionTime.getSelectedTabPosition() != (checked ? TAB_TIME_RECURRING : TAB_TIME_ONE_TIME)) {
-                Objects.requireNonNull(tabTransactionTime.getTabAt(checked ? TAB_TIME_RECURRING : TAB_TIME_ONE_TIME)).select();
-            }
-            setRecurringControlsVisibility(checked,
-                    tvRecurringFrequencyLabel,
-                    layoutRecurringFrequencyOptions,
-                    tvRecurringDaysLabel,
-                    layoutRecurringWeekdayButtons,
-                    tvRecurringDaysValue,
-                    selectedRecurringFrequency[0]);
-        });
         tabTransactionTime.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
             @Override
             public void onTabSelected(TabLayout.Tab tab) {
-                boolean recurring = tab.getPosition() == TAB_TIME_RECURRING;
-                if (cbIsRecurring.isChecked() != recurring) {
-                    cbIsRecurring.setChecked(recurring);
-                } else {
-                    setRecurringControlsVisibility(recurring,
-                            tvRecurringFrequencyLabel,
-                            layoutRecurringFrequencyOptions,
-                            tvRecurringDaysLabel,
-                            layoutRecurringWeekdayButtons,
-                            tvRecurringDaysValue,
-                            selectedRecurringFrequency[0]);
-                }
+                setRecurringControlsVisibility(isTransactionDialogRecurringSelected(tabTransactionType, tabTransactionTime),
+                        tvRecurringFrequencyLabel,
+                        layoutRecurringFrequencyOptions,
+                        tvRecurringDaysLabel,
+                        layoutRecurringWeekdayButtons,
+                        tvRecurringDaysValue,
+                        selectedRecurringFrequency[0]);
             }
 
             @Override
@@ -1223,7 +1226,6 @@ public class MainActivity extends AppCompatActivity {
                         layoutRowPond,
                         etAmount,
                         etSplitTotal,
-                        cbIsRecurring,
                         tvRecurringFrequencyLabel,
                         layoutRecurringFrequencyOptions,
                         tvRecurringDaysLabel,
@@ -1244,6 +1246,13 @@ public class MainActivity extends AppCompatActivity {
         });
         Objects.requireNonNull(tabTransactionTime.getTabAt(TAB_TIME_ONE_TIME)).select();
         Objects.requireNonNull(tabTransactionType.getTabAt(TAB_TYPE_SPENDING)).select();
+        setRecurringControlsVisibility(isTransactionDialogRecurringSelected(tabTransactionType, tabTransactionTime),
+                tvRecurringFrequencyLabel,
+                layoutRecurringFrequencyOptions,
+                tvRecurringDaysLabel,
+                layoutRecurringWeekdayButtons,
+                tvRecurringDaysValue,
+                selectedRecurringFrequency[0]);
 
         wireReceiptRow(dialogView, null);
 
@@ -1347,7 +1356,7 @@ public class MainActivity extends AppCompatActivity {
                 if (receiptUri != null && !receiptUri.isEmpty()) {
                     newTransaction.setReceiptImageUri(receiptUri);
                 }
-                if (cbIsRecurring.isChecked()) {
+                if (isTransactionDialogRecurringSelected(tabTransactionType, tabTransactionTime)) {
                     if (selectedRecurringDays.isEmpty()) {
                         showError("Recurring requires at least one selected day");
                         return;
@@ -1834,8 +1843,15 @@ public class MainActivity extends AppCompatActivity {
                     "Limit: $%.2f | Remaining: $%.2f",
                     envelope.getLimit(),
                     envelope.getRemaining());
-            if (envelope.getAccountBalance() != null) {
-                amounts += String.format(Locale.getDefault(), " | Account: $%.2f", envelope.getAccountBalance());
+            PondBankReconciliationHelper.Result reconcile = computePondReconciliation(envelope);
+            if (reconcile.isActive()) {
+                amounts += "\n" + getString(R.string.pond_row_reconcile,
+                        reconcile.getInBank(),
+                        reconcile.getStillToDepositForMonth(),
+                        reconcile.getMonthTarget());
+            } else if (envelope.getAccountBalance() != null) {
+                amounts += String.format(Locale.getDefault(), " | Account: $%.2f",
+                        envelope.getAccountBalance());
             }
             tvAmounts.setText(amounts);
 
@@ -1926,6 +1942,7 @@ public class MainActivity extends AppCompatActivity {
             // then calculateRemaining aligns remaining with transactions for the active month.
             envelope.reset(false);
             envelope.calculateRemaining(currentMonth);
+            applyPaydayReconciliationIfActive(envelope);
         }
         PrefManager.saveEnvelopes(this, envelopes);
         updateDisplay();
@@ -1967,11 +1984,15 @@ public class MainActivity extends AppCompatActivity {
         TextView etReminderLabel = dialogView.findViewById(R.id.etEnvelopeRemainderLabel);
         EditText etAccount = dialogView.findViewById(R.id.etEnvelopeAccount);
         TextView tvAccountLabel = dialogView.findViewById(R.id.tvEnvelopeAccountLabel);
+        TextView tvBankReconcilePreview = dialogView.findViewById(R.id.tvBankReconcilePreview);
         if (envelopeToEdit == null) {
             etReminderLabel.setVisibility(View.GONE);
             etRemainder.setVisibility(View.GONE);
             tvAccountLabel.setVisibility(View.GONE);
             etAccount.setVisibility(View.GONE);
+            if (tvBankReconcilePreview != null) {
+                tvBankReconcilePreview.setVisibility(View.GONE);
+            }
         }
         if (envelopeToEdit != null) {
             etName.setText(envelopeToEdit.getName());
@@ -1981,6 +2002,27 @@ public class MainActivity extends AppCompatActivity {
             if (acct != null) {
                 etAccount.setText(String.valueOf(acct));
             }
+            Runnable refreshPreview = () -> {
+                double limit = parseAmountOrZero(etLimit);
+                refreshBankReconcilePreview(tvBankReconcilePreview, limit, etAccount.getText().toString());
+            };
+            refreshPreview.run();
+            TextWatcher previewWatcher = new TextWatcher() {
+                @Override
+                public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+                }
+
+                @Override
+                public void onTextChanged(CharSequence s, int start, int before, int count) {
+                    refreshPreview.run();
+                }
+
+                @Override
+                public void afterTextChanged(Editable s) {
+                }
+            };
+            etLimit.addTextChangedListener(previewWatcher);
+            etAccount.addTextChangedListener(previewWatcher);
         }
 
         builder.setView(dialogView)
@@ -2020,10 +2062,6 @@ public class MainActivity extends AppCompatActivity {
                         if(limit != envelopeToEdit.getLimit()) {
                             envelopeToEdit.adjustLimit(limit, currentMonth);
                         }
-                        if (remainder != remaining) {
-                            // Set the manual override values:
-                            envelopeToEdit.setManualOverrideRemaining(remainder); // store the limit at override time
-                        }
                         if (!oldName.equals(name)) {
                             renameTransferReferences(oldName, name);
                         }
@@ -2031,7 +2069,16 @@ public class MainActivity extends AppCompatActivity {
                         if (acctStr.isEmpty()) {
                             envelopeToEdit.setAccountBalance(null);
                         } else {
-                            envelopeToEdit.setAccountBalance(Double.parseDouble(acctStr));
+                            envelopeToEdit.setAccountBalance(
+                                    MoneyMath.roundToCents(Double.parseDouble(acctStr)));
+                        }
+                        List<Integer> paydays = PrefManager.getPaydays(MainActivity.this);
+                        boolean reconcile = PondBankReconciliationHelper.isReconciliationModeActive(
+                                envelopeToEdit.getAccountBalance(), paydays);
+                        if (reconcile) {
+                            applyPaydayReconciliationIfActive(envelopeToEdit);
+                        } else if (remainder != remaining) {
+                            envelopeToEdit.setManualOverrideRemaining(remainder);
                         }
                     }
 
@@ -2074,7 +2121,6 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout panelTransfer = dialogView.findViewById(R.id.panelTransfer);
         View panelSplit = dialogView.findViewById(R.id.panelSplitPurchase);
         LinearLayout layoutRowPond = dialogView.findViewById(R.id.layoutRowPond);
-        CheckBox cbIsRecurring = dialogView.findViewById(R.id.cbIsRecurring);
         TextView tvRecurringFrequencyLabel = dialogView.findViewById(R.id.tvRecurringFrequencyLabel);
         LinearLayout layoutRecurringFrequencyOptions = dialogView.findViewById(R.id.layoutRecurringFrequencyOptions);
         TextView btnRecurringWeekly = dialogView.findViewById(R.id.btnRecurringWeekly);
@@ -2127,7 +2173,7 @@ public class MainActivity extends AppCompatActivity {
             applyRecurringFrequencyButtonSelection(btnRecurringWeekly, btnRecurringBiWeekly, btnRecurringMonthly, selectedRecurringFrequency[0]);
             applyRecurringWeekdayButtonSelection(recurringDayButtons, selectedRecurringDays);
             updateRecurringDaysSummaryView(tvRecurringDaysValue, selectedRecurringFrequency[0], selectedRecurringDays);
-            setRecurringControlsVisibility(cbIsRecurring.isChecked(),
+            setRecurringControlsVisibility(isTransactionDialogRecurringSelected(tabTransactionType, tabTransactionTime),
                     tvRecurringFrequencyLabel,
                     layoutRecurringFrequencyOptions,
                     tvRecurringDaysLabel,
@@ -2141,7 +2187,7 @@ public class MainActivity extends AppCompatActivity {
             applyRecurringFrequencyButtonSelection(btnRecurringWeekly, btnRecurringBiWeekly, btnRecurringMonthly, selectedRecurringFrequency[0]);
             applyRecurringWeekdayButtonSelection(recurringDayButtons, selectedRecurringDays);
             updateRecurringDaysSummaryView(tvRecurringDaysValue, selectedRecurringFrequency[0], selectedRecurringDays);
-            setRecurringControlsVisibility(cbIsRecurring.isChecked(),
+            setRecurringControlsVisibility(isTransactionDialogRecurringSelected(tabTransactionType, tabTransactionTime),
                     tvRecurringFrequencyLabel,
                     layoutRecurringFrequencyOptions,
                     tvRecurringDaysLabel,
@@ -2155,7 +2201,7 @@ public class MainActivity extends AppCompatActivity {
             applyRecurringFrequencyButtonSelection(btnRecurringWeekly, btnRecurringBiWeekly, btnRecurringMonthly, selectedRecurringFrequency[0]);
             applyRecurringWeekdayButtonSelection(recurringDayButtons, selectedRecurringDays);
             updateRecurringDaysSummaryView(tvRecurringDaysValue, selectedRecurringFrequency[0], selectedRecurringDays);
-            setRecurringControlsVisibility(cbIsRecurring.isChecked(),
+            setRecurringControlsVisibility(isTransactionDialogRecurringSelected(tabTransactionType, tabTransactionTime),
                     tvRecurringFrequencyLabel,
                     layoutRecurringFrequencyOptions,
                     tvRecurringDaysLabel,
@@ -2225,34 +2271,16 @@ public class MainActivity extends AppCompatActivity {
         initializeSplitDialogSection(splitViews, etSplitTotal, initialSplitSlices, isSplitPurchase);
         attachTransactionDialogScrollDismiss(transferViews, splitViews);
 
-        cbIsRecurring.setChecked(editTransaction.isRecurring());
-        cbIsRecurring.setOnCheckedChangeListener((buttonView, checked) -> {
-            if (tabTransactionTime.getSelectedTabPosition() != (checked ? TAB_TIME_RECURRING : TAB_TIME_ONE_TIME)) {
-                Objects.requireNonNull(tabTransactionTime.getTabAt(checked ? TAB_TIME_RECURRING : TAB_TIME_ONE_TIME)).select();
-            }
-            setRecurringControlsVisibility(checked,
-                    tvRecurringFrequencyLabel,
-                    layoutRecurringFrequencyOptions,
-                    tvRecurringDaysLabel,
-                    layoutRecurringWeekdayButtons,
-                    tvRecurringDaysValue,
-                    selectedRecurringFrequency[0]);
-        });
         tabTransactionTime.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
             @Override
             public void onTabSelected(TabLayout.Tab tab) {
-                boolean recurring = tab.getPosition() == TAB_TIME_RECURRING;
-                if (cbIsRecurring.isChecked() != recurring) {
-                    cbIsRecurring.setChecked(recurring);
-                } else {
-                    setRecurringControlsVisibility(recurring,
-                            tvRecurringFrequencyLabel,
-                            layoutRecurringFrequencyOptions,
-                            tvRecurringDaysLabel,
-                            layoutRecurringWeekdayButtons,
-                            tvRecurringDaysValue,
-                            selectedRecurringFrequency[0]);
-                }
+                setRecurringControlsVisibility(isTransactionDialogRecurringSelected(tabTransactionType, tabTransactionTime),
+                        tvRecurringFrequencyLabel,
+                        layoutRecurringFrequencyOptions,
+                        tvRecurringDaysLabel,
+                        layoutRecurringWeekdayButtons,
+                        tvRecurringDaysValue,
+                        selectedRecurringFrequency[0]);
             }
 
             @Override
@@ -2274,7 +2302,6 @@ public class MainActivity extends AppCompatActivity {
                         layoutRowPond,
                         etAmount,
                         etSplitTotal,
-                        cbIsRecurring,
                         tvRecurringFrequencyLabel,
                         layoutRecurringFrequencyOptions,
                         tvRecurringDaysLabel,
@@ -2303,6 +2330,13 @@ public class MainActivity extends AppCompatActivity {
             Objects.requireNonNull(tabTransactionTime.getTabAt(TAB_TIME_ONE_TIME)).select();
         }
         Objects.requireNonNull(tabTransactionType.getTabAt(initialTypeTab)).select();
+        setRecurringControlsVisibility(isTransactionDialogRecurringSelected(tabTransactionType, tabTransactionTime),
+                tvRecurringFrequencyLabel,
+                layoutRecurringFrequencyOptions,
+                tvRecurringDaysLabel,
+                layoutRecurringWeekdayButtons,
+                tvRecurringDaysValue,
+                selectedRecurringFrequency[0]);
 
         receiptDialogHostView = dialogView;
         wireReceiptRow(dialogView, editTransaction.getReceiptImageUri());
@@ -2385,7 +2419,7 @@ public class MainActivity extends AppCompatActivity {
                 }
                 double newAmount = Double.parseDouble(etAmount.getText().toString());
 
-                if (cbIsRecurring.isChecked() && selectedRecurringDays.isEmpty()) {
+                if (isTransactionDialogRecurringSelected(tabTransactionType, tabTransactionTime) && selectedRecurringDays.isEmpty()) {
                     showError("Recurring requires at least one selected day");
                     return;
                 }
@@ -2432,7 +2466,7 @@ public class MainActivity extends AppCompatActivity {
                         editTransaction.setReceiptImageUri(null);
                     }
 
-                    if (cbIsRecurring.isChecked()) {
+                    if (isTransactionDialogRecurringSelected(tabTransactionType, tabTransactionTime)) {
                         editTransaction.setRecurring(true);
                         editTransaction.setRecurringFrequency(selectedRecurringFrequency[0]);
                         editTransaction.setRecurringDays(selectedRecurringDays);
@@ -2689,7 +2723,6 @@ public class MainActivity extends AppCompatActivity {
     private void setSplitControlsVisibility(boolean visible, SplitDialogViews splitViews) {
         dismissSplitDropdowns(splitViews);
         if (!visible) {
-            clearSplitBucketRows(splitViews);
             splitViews.hasMeaningfulInteraction = false;
             splitViews.saveAttempted = false;
         }
@@ -2699,9 +2732,78 @@ public class MainActivity extends AppCompatActivity {
             addSplitBucketRow(splitViews, null);
         }
         if (visible) {
+            double purchaseTotal = parseAmountOrZero(activeSplitTotalInput);
+            applySplitDefaultAllocations(splitViews, purchaseTotal, false);
             scrollSplitDialogToView(splitViews, splitViews.section, true);
         }
         updateSplitSectionSummary(splitViews);
+    }
+
+    private boolean isBucketAllocationUnset(TransferDialogViews transferViews) {
+        return TransferGroupDraft.allocatedTotal(snapshotTransferAllocations(transferViews)) <= 0d;
+    }
+
+    private boolean isSplitAllocationUnset(SplitDialogViews splitViews) {
+        return SplitPurchaseGroupDraft.allocatedTotal(snapshotSplitAllocations(splitViews)) <= 0d;
+    }
+
+    private void applyTransferDefaultAllocations(TransferDialogViews transferViews,
+                                                 double sourceTotal,
+                                                 boolean forceRedistribute) {
+        if (transferViews.skipDefaultAllocations || transferViews.bucketControllers.isEmpty()) {
+            return;
+        }
+        double safeTotal = MoneyMath.roundToCents(Math.max(0d, sourceTotal));
+        if (safeTotal <= 0d) {
+            return;
+        }
+        int bucketCount = transferViews.bucketControllers.size();
+        if (!forceRedistribute) {
+            if (!isBucketAllocationUnset(transferViews)) {
+                return;
+            }
+            if (bucketCount == 1) {
+                transferViews.bucketControllers.get(0).applyDefaultAmount(safeTotal);
+                return;
+            }
+            return;
+        }
+        int[] percents = MoneyMath.splitIntegerPercentsFirstCeiling(bucketCount);
+        double[] amounts = MoneyMath.splitTotalByPercents(safeTotal, percents);
+        for (int i = 0; i < bucketCount && i < amounts.length; i++) {
+            transferViews.bucketControllers.get(i).applyDefaultAmount(amounts[i]);
+        }
+    }
+
+    private void applySplitDefaultAllocations(SplitDialogViews splitViews,
+                                              double purchaseTotal,
+                                              boolean forceRedistribute) {
+        if (splitViews.skipDefaultAllocations || splitViews.bucketControllers.isEmpty()) {
+            return;
+        }
+        double safeTotal = MoneyMath.roundToCents(Math.max(0d, purchaseTotal));
+        if (safeTotal <= 0d) {
+            return;
+        }
+        int bucketCount = splitViews.bucketControllers.size();
+        if (!forceRedistribute && !isSplitAllocationUnset(splitViews)) {
+            return;
+        }
+        int[] percents = MoneyMath.splitIntegerPercentsFirstCeiling(bucketCount);
+        double[] amounts = MoneyMath.splitTotalByPercents(safeTotal, percents);
+        for (int i = 0; i < bucketCount && i < amounts.length; i++) {
+            splitViews.bucketControllers.get(i).applyDefaultAmount(amounts[i]);
+        }
+    }
+
+    private void maybeSyncSplitTotalFromAmount(EditText etAmount, EditText etSplit) {
+        if (etSplit.getText() != null && etSplit.getText().length() > 0) {
+            return;
+        }
+        if (etAmount.getText() == null || etAmount.getText().length() == 0) {
+            return;
+        }
+        etSplit.setText(etAmount.getText());
     }
 
     private void updateSplitSectionSummary(@Nullable SplitDialogViews splitViews) {
@@ -2748,6 +2850,7 @@ public class MainActivity extends AppCompatActivity {
         splitViews.addBucketButton.setOnClickListener(v -> {
             markSplitInteraction(splitViews);
             addSplitBucketRow(splitViews, null);
+            applySplitDefaultAllocations(splitViews, parseAmountOrZero(totalInput), true);
             updateSplitSectionSummary(splitViews);
             if (!splitViews.bucketControllers.isEmpty()) {
                 scrollSplitDialogToView(splitViews,
@@ -2766,14 +2869,16 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void afterTextChanged(Editable s) {
-                if (splitViews.section.getVisibility() == View.VISIBLE) {
-                    markSplitInteraction(splitViews);
+                if (splitViews.section.getVisibility() == View.VISIBLE
+                        && !splitViews.hasMeaningfulInteraction) {
+                    applySplitDefaultAllocations(splitViews, parseAmountOrZero(s), false);
                 }
                 updateSplitSectionSummary(splitViews);
             }
         });
 
         if (initialAllocations != null && !initialAllocations.isEmpty()) {
+            splitViews.skipDefaultAllocations = true;
             for (SplitPurchaseSliceAllocation slice : initialAllocations) {
                 addSplitBucketRow(splitViews, slice);
             }
@@ -2794,7 +2899,6 @@ public class MainActivity extends AppCompatActivity {
                                                View layoutRowPond,
                                                EditText etAmount,
                                                EditText etSplit,
-                                               CheckBox cbIsRecurring,
                                                TextView tvRecurringFrequencyLabel,
                                                LinearLayout layoutRecurringFrequencyOptions,
                                                TextView tvRecurringDaysLabel,
@@ -2816,20 +2920,25 @@ public class MainActivity extends AppCompatActivity {
         etSplit.setVisibility(split ? View.VISIBLE : View.GONE);
 
         if (transfer || split) {
-            cbIsRecurring.setChecked(false);
+            TabLayout.Tab oneTime = tabTime.getTabAt(TAB_TIME_ONE_TIME);
+            if (oneTime != null && tabTime.getSelectedTabPosition() != TAB_TIME_ONE_TIME) {
+                oneTime.select();
+            }
         }
 
         if (transfer) {
             setTransferControlsVisibility(true, transferViews);
             setSplitControlsVisibility(false, splitViews);
         } else if (split) {
+            maybeSyncSplitTotalFromAmount(etAmount, etSplit);
             setTransferControlsVisibility(false, transferViews);
             setSplitControlsVisibility(true, splitViews);
         } else {
             setTransferControlsVisibility(false, transferViews);
             setSplitControlsVisibility(false, splitViews);
         }
-        setRecurringControlsVisibility(cbIsRecurring.isChecked(),
+        boolean recurringChrome = spending && tabTime.getSelectedTabPosition() == TAB_TIME_RECURRING;
+        setRecurringControlsVisibility(recurringChrome,
                 tvRecurringFrequencyLabel,
                 layoutRecurringFrequencyOptions,
                 tvRecurringDaysLabel,
@@ -2853,6 +2962,7 @@ public class MainActivity extends AppCompatActivity {
             markTransferInteraction(transferViews);
             String sourceEnvelope = getSelectedDropdownValue(sourceSpinner);
             addTransferBucketRow(transferViews, sourceEnvelope, null);
+            applyTransferDefaultAllocations(transferViews, parseAmountOrZero(amountInput), true);
             updateTransferSectionSummary(transferViews);
             if (!transferViews.bucketControllers.isEmpty()) {
                 scrollTransferDialogToView(transferViews,
@@ -2871,8 +2981,9 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void afterTextChanged(Editable s) {
-                if (transferViews.section.getVisibility() == View.VISIBLE) {
-                    markTransferInteraction(transferViews);
+                if (transferViews.section.getVisibility() == View.VISIBLE
+                        && !transferViews.hasMeaningfulInteraction) {
+                    applyTransferDefaultAllocations(transferViews, parseAmountOrZero(s), false);
                 }
                 updateTransferSectionSummary(transferViews);
             }
@@ -2887,6 +2998,7 @@ public class MainActivity extends AppCompatActivity {
         });
 
         if (initialAllocations != null && !initialAllocations.isEmpty()) {
+            transferViews.skipDefaultAllocations = true;
             for (TransferBucketAllocation allocation : initialAllocations) {
                 addTransferBucketRow(transferViews,
                         getSelectedDropdownValue(sourceSpinner),
@@ -2939,6 +3051,7 @@ public class MainActivity extends AppCompatActivity {
             transferViews.hasMeaningfulInteraction = false;
             transferViews.saveAttempted = false;
         } else {
+            applyTransferDefaultAllocations(transferViews, parseAmountOrZero(activeTransferAmountInput), false);
             scrollTransferDialogToView(transferViews, transferViews.section, true);
         }
         updateTransferSectionSummary(transferViews);
@@ -3919,34 +4032,90 @@ public class MainActivity extends AppCompatActivity {
         updateTransactionHistory();
     }
 
-    private void updatePondTotalsFooter() {
-        if (tvPondTotalsFooter == null) {
-            return;
-        }
-        double sumRem = 0d;
-        for (Envelope e : envelopes) {
-            sumRem += e.getRemaining();
-        }
-        double sumAcct = 0d;
-        int acctCount = 0;
-        for (Envelope e : envelopes) {
-            if (e.getAccountBalance() != null) {
-                sumAcct += e.getAccountBalance();
-                acctCount++;
-            }
-        }
-        if (acctCount == 0) {
-            tvPondTotalsFooter.setText(String.format(Locale.getDefault(), getString(R.string.pond_footer_partial), sumRem));
-            return;
-        }
-        double diff = sumAcct - sumRem;
-        tvPondTotalsFooter.setText(String.format(Locale.getDefault(), getString(R.string.pond_footer_full), sumAcct, sumRem, diff));
+    private boolean isGlobalPaydayReconciliationEnabled() {
+        return !PrefManager.getPaydays(this).isEmpty();
     }
 
-    private void showBillsDaysPickerDialog() {
-        HashSet<Integer> selected = new HashSet<>(PrefManager.getBillsDays(this));
+    private Calendar calendarForCurrentMonth() {
+        Calendar cal = Calendar.getInstance();
+        if (currentMonth != null && !currentMonth.isEmpty()) {
+            try {
+                SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM", Locale.getDefault());
+                Date d = sdf.parse(currentMonth);
+                if (d != null) {
+                    cal.setTime(d);
+                }
+            } catch (ParseException ignored) {
+            }
+        }
+        cal.set(Calendar.DAY_OF_MONTH, 1);
+        cal.set(Calendar.HOUR_OF_DAY, 0);
+        cal.set(Calendar.MINUTE, 0);
+        cal.set(Calendar.SECOND, 0);
+        cal.set(Calendar.MILLISECOND, 0);
+        return cal;
+    }
+
+    private void applyPaydayReconciliationIfActive(Envelope envelope) {
+        List<Integer> paydays = PrefManager.getPaydays(this);
+        if (!PondBankReconciliationHelper.isReconciliationModeActive(envelope.getAccountBalance(), paydays)) {
+            return;
+        }
+        PondBankReconciliationHelper.Result result = PondBankReconciliationHelper.compute(
+                envelope.getLimit(),
+                envelope.getAccountBalance(),
+                paydays,
+                calendarForCurrentMonth(),
+                Calendar.getInstance());
+        envelope.clearManualRemainingOverride();
+        envelope.setRemaining(MoneyMath.roundToCents(result.getStillToDepositForMonth()));
+    }
+
+    private void applyPaydayReconciliationToAllEligibleEnvelopes() {
+        if (!isGlobalPaydayReconciliationEnabled()) {
+            return;
+        }
+        for (Envelope envelope : envelopes) {
+            applyPaydayReconciliationIfActive(envelope);
+        }
+    }
+
+    @Nullable
+    private PondBankReconciliationHelper.Result computePondReconciliation(Envelope envelope) {
+        List<Integer> paydays = PrefManager.getPaydays(this);
+        return PondBankReconciliationHelper.compute(
+                envelope.getLimit(),
+                envelope.getAccountBalance(),
+                paydays,
+                calendarForCurrentMonth(),
+                Calendar.getInstance());
+    }
+
+    private void refreshBankReconcilePreview(TextView preview, double limit, String accountText) {
+        if (preview == null) {
+            return;
+        }
+        List<Integer> paydays = PrefManager.getPaydays(this);
+        String trimmed = accountText == null ? "" : accountText.trim();
+        if (paydays.isEmpty() || trimmed.isEmpty()) {
+            preview.setVisibility(View.GONE);
+            return;
+        }
+        try {
+            double account = MoneyMath.roundToCents(Double.parseDouble(trimmed));
+            PondBankReconciliationHelper.Result r = PondBankReconciliationHelper.compute(
+                    limit, account, paydays, calendarForCurrentMonth(), Calendar.getInstance());
+            preview.setVisibility(View.VISIBLE);
+            preview.setText(getString(R.string.pond_edit_reconcile_preview,
+                    r.getInBank(), r.getStillToDepositForMonth(), r.getMonthTarget()));
+        } catch (NumberFormatException ignored) {
+            preview.setVisibility(View.GONE);
+        }
+    }
+
+    private void fillDayOfMonthGrid(TableLayout table, HashSet<Integer> selected) {
+        table.removeAllViews();
         int pad = (int) (8 * getResources().getDisplayMetrics().density);
-        TableLayout table = new TableLayout(this);
         table.setPadding(pad, pad, pad, pad);
         int day = 1;
         while (day <= 31) {
@@ -3971,19 +4140,115 @@ public class MainActivity extends AppCompatActivity {
             }
             table.addView(row);
         }
-        ScrollView scroll = new ScrollView(this);
-        scroll.addView(table);
-        new MaterialAlertDialogBuilder(this)
-                .setTitle(R.string.dialog_bills_days_title)
-                .setMessage(R.string.dialog_bills_days_message)
-                .setView(scroll)
-                .setPositiveButton(R.string.save, (di, w) -> {
-                    ArrayList<Integer> list = new ArrayList<>(selected);
-                    Collections.sort(list);
-                    PrefManager.saveBillsDays(this, list);
-                })
-                .setNegativeButton(android.R.string.cancel, null)
-                .show();
+    }
+
+    private void updatePondTotalsFooter() {
+        if (tvPondTotalsFooter == null) {
+            return;
+        }
+        double sumRem = 0d;
+        for (Envelope e : envelopes) {
+            sumRem += e.getRemaining();
+        }
+        List<Integer> paydays = PrefManager.getPaydays(this);
+        boolean reconcileFooter = !paydays.isEmpty();
+        double sumInBank = 0d;
+        double sumStillToDeposit = 0d;
+        double sumTarget = 0d;
+        int acctCount = 0;
+        for (Envelope e : envelopes) {
+            if (e.getAccountBalance() == null) {
+                continue;
+            }
+            acctCount++;
+            PondBankReconciliationHelper.Result r = computePondReconciliation(e);
+            if (r.isActive()) {
+                sumInBank += r.getInBank();
+                sumStillToDeposit += r.getStillToDepositForMonth();
+                sumTarget += r.getMonthTarget();
+            }
+        }
+        if (acctCount == 0) {
+            tvPondTotalsFooter.setText(String.format(Locale.getDefault(), getString(R.string.pond_footer_partial), sumRem));
+            return;
+        }
+        if (reconcileFooter) {
+            tvPondTotalsFooter.setText(getString(R.string.pond_footer_reconcile,
+                    MoneyMath.roundToCents(sumInBank),
+                    MoneyMath.roundToCents(sumStillToDeposit),
+                    MoneyMath.roundToCents(sumTarget)));
+            return;
+        }
+        double sumAcct = 0d;
+        for (Envelope e : envelopes) {
+            if (e.getAccountBalance() != null) {
+                sumAcct += e.getAccountBalance();
+            }
+        }
+        double diff = sumAcct - sumRem;
+        tvPondTotalsFooter.setText(String.format(Locale.getDefault(), getString(R.string.pond_footer_full), sumAcct, sumRem, diff));
+    }
+
+    private void showBillsPaydaysSettingsDialog() {
+        View dialogView = getLayoutInflater().inflate(R.layout.dialog_bills_paydays_settings, null);
+        TabLayout tabBillsPaydays = dialogView.findViewById(R.id.tabBillsPaydays);
+        TextView tvMessage = dialogView.findViewById(R.id.tvBillsPaydaysTabMessage);
+        View scrollBills = dialogView.findViewById(R.id.scrollBillsDaysGrid);
+        View scrollPaydays = dialogView.findViewById(R.id.scrollPaydaysGrid);
+        TableLayout tableBills = dialogView.findViewById(R.id.tableBillsDays);
+        TableLayout tablePaydays = dialogView.findViewById(R.id.tablePaydays);
+
+        final HashSet<Integer> billsSelected = new HashSet<>(PrefManager.getBillsDays(this));
+        final HashSet<Integer> paydaysSelected = new HashSet<>(PrefManager.getPaydays(this));
+
+        fillDayOfMonthGrid(tableBills, billsSelected);
+        fillDayOfMonthGrid(tablePaydays, paydaysSelected);
+
+        tabBillsPaydays.addTab(tabBillsPaydays.newTab().setText(R.string.tab_bills_days));
+        tabBillsPaydays.addTab(tabBillsPaydays.newTab().setText(R.string.tab_paydays));
+        tabBillsPaydays.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
+            @Override
+            public void onTabSelected(TabLayout.Tab tab) {
+                boolean paydaysTab = tab.getPosition() == 1;
+                scrollBills.setVisibility(paydaysTab ? View.GONE : View.VISIBLE);
+                scrollPaydays.setVisibility(paydaysTab ? View.VISIBLE : View.GONE);
+                tvMessage.setText(paydaysTab
+                        ? R.string.dialog_paydays_message
+                        : R.string.dialog_bills_days_message);
+            }
+
+            @Override
+            public void onTabUnselected(TabLayout.Tab tab) {
+            }
+
+            @Override
+            public void onTabReselected(TabLayout.Tab tab) {
+            }
+        });
+        Objects.requireNonNull(tabBillsPaydays.getTabAt(0)).select();
+
+        MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(this);
+        builder.setTitle(R.string.dialog_bills_paydays_title)
+                .setView(dialogView)
+                .setPositiveButton(R.string.save, null)
+                .setNegativeButton(android.R.string.cancel, null);
+        AlertDialog dialog = builder.create();
+        dialog.setOnShowListener(d -> {
+            applyIconMaterialDialogActions(dialog);
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+                ArrayList<Integer> billsList = new ArrayList<>(billsSelected);
+                ArrayList<Integer> paydaysList = new ArrayList<>(paydaysSelected);
+                Collections.sort(billsList);
+                Collections.sort(paydaysList);
+                PrefManager.saveBillsDays(MainActivity.this, billsList);
+                PrefManager.savePaydays(MainActivity.this, paydaysList);
+                applyPaydayReconciliationToAllEligibleEnvelopes();
+                PrefManager.saveEnvelopes(MainActivity.this, envelopes);
+                updateDisplay();
+                dialog.dismiss();
+            });
+        });
+        dialog.show();
     }
 
     private void billsDayRefreshCell(TextView cell, boolean on) {

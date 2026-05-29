@@ -10,18 +10,20 @@
 
 ## Add Transaction Flow
 1. User opens the transaction dialog (check icon confirms, close icon cancels).
-2. User picks **Spending**, **Transfer**, or **Split purchase** on the type tabs; on **Spending**, **One-time** or **Recurring** time tabs appear (add defaults to **Spending** + **One-time**).
-3. On **Spending**: user selects pond, amount, date, comment, and optional recurring (chips, weekday toggles, monthly calendar row follow Mountain / DayNight theme). On **Transfer** or **Split purchase**, recurring is off and time tabs are hidden.
-4. Optionally: user taps the **camera** or **gallery** icon (top toolbar; row scrolls horizontally if needed); capture mode chips on scan screen; image saved to **Pictures/Mountain Money**; app runs on-device OCR and prefills amount (into amount or **purchase total** on Split), date when found, and comment with **merchant name only**; user may **preview** or **remove** (icon actions) before save; new capture/pick replaces the attached image and re-runs OCR. The dialog body scrolls vertically when tall so transfer or split controls stay reachable.
-5. If **Transfer** is selected, the dialog auto-scrolls to the transfer summary/buckets; the pond and destination selectors open as anchored dropdowns inside the modal, and scrolling dismisses those dropdowns cleanly.
-6. If **Split purchase** is selected, the user enters a **purchase total** and two or more pond slices that sum to that total; scrolling dismisses slice dropdowns.
-7. Transfer bucket amounts can be adjusted by fixed `$0.50` slider/stepper controls or exact-cent manual entry; validation stays quiet until the user interacts or attempts save.
-8. Validation runs without dismissing the dialog on errors.
-9. Transaction is persisted and visible in history (optional `receiptImageUri` stored when applicable). Rows with a receipt show a **photo** icon; tap opens preview. **Split purchase** rows show a compact slice line by default; an expand control toggles the full allocation breakdown for that group (all sibling rows stay in sync).
+2. User selects pond, date, amount, and comment (fields appear first in the scrollable body).
+3. User picks **Spending**, **Transfer**, or **Split purchase** on the **type** tabs below the comment; on **Spending**, **One-time** or **Recurring** appears on the **time** row directly under that (add defaults to **Spending** + **One-time**).
+4. If **Spending** + **Recurring**, frequency chips, weekday toggles, and the monthly day row appear under the tabs (Mountain / DayNight theme). On **Transfer** or **Split purchase**, recurring is off and time tabs are hidden.
+5. Optionally: user taps the **camera** or **gallery** icon (top toolbar; row scrolls horizontally if needed); capture mode chips on scan screen; image saved to **Pictures/Mountain Money**; app runs on-device OCR and prefills amount (into amount or **purchase total** on Split), date when found, and comment with **merchant name only**; user may **preview** or **remove** (icon actions) before save; new capture/pick replaces the attached image and re-runs OCR. The dialog body scrolls vertically when tall so transfer or split controls stay reachable.
+6. User may switch **Spending**, **Transfer**, and **Split purchase** tabs to compare modes; transfer buckets and split slices stay in memory (sections hide/show only) until save or cancel.
+7. If **Transfer** is selected, the dialog auto-scrolls to the transfer summary/buckets; the first bucket defaults to **100%** of the source amount when still unallocated. **Add transfer bucket** re-splits the source total evenly (integer percents with the first bucket taking the ceiling share, e.g. $100 across three buckets → $34 / $33 / $33). Pond and destination selectors open as anchored dropdowns inside the modal; scrolling dismisses those dropdowns cleanly.
+8. If **Split purchase** is selected, an empty **purchase total** may be prefilled from the spending **amount**; two default slices receive an even split of the purchase total when unset, and **Add slice** redistributes like transfer buckets. Scrolling dismisses slice dropdowns.
+9. Transfer and split bucket amounts can be adjusted by fixed `$0.50` slider/stepper controls or exact-cent manual entry; validation stays quiet until the user interacts or attempts save.
+10. Validation runs without dismissing the dialog on errors.
+11. Transaction is persisted and visible in history (optional `receiptImageUri` stored when applicable). Rows with a receipt show a **photo** icon; tap opens preview. **Split purchase** rows show a compact slice line by default; an expand control toggles the full allocation breakdown for that group (all sibling rows stay in sync).
 
 ## Edit Transaction Flow
 1. User opens **Edit** from the transaction list options.
-2. The dialog opens on the tab that matches the stored transaction (**Spending**, **Transfer**, or **Split purchase**); type conversion between plain/transfer and split is not supported in v1 (errors on save if mismatched).
+2. The dialog opens on the tab that matches the stored transaction (**Spending**, **Transfer**, or **Split purchase**); type and time tabs sit below the comment field like add. Type conversion between plain/transfer and split is not supported in v1 (errors on save if mismatched).
 3. Same receipt icon actions as add (**camera**, **gallery**, **preview**, **remove**); URI changes persist on save (or clear when removed).
 4. Transfer mode uses the same anchored dropdowns, auto-scroll, fixed-step slider landmarks, exact-cent manual entry, and delayed validation behavior as the add flow.
 5. Split edit loads all slices for the group; save replaces the group atomically.
@@ -34,19 +36,20 @@
 ## Transfer Flow
 1. User selects the **Transfer** tab in the add or edit transaction dialog.
 2. The dialog auto-scrolls the transfer section into view and keeps the modal visually focused while the background stays dimmed.
-3. App shows a transfer summary plus one or more transfer buckets. Each bucket chooses a destination pond from ponds other than the source and sets an amount through a fixed-step slider, `+/-` buttons, or exact manual entry.
+3. App shows a transfer summary plus one or more transfer buckets. The first bucket starts at the full source total when unset; adding buckets re-splits the total evenly (first bucket gets the ceiling share of integer percents). Each bucket chooses a destination pond from ponds other than the source and sets an amount through a fixed-step slider, `+/-` buttons, or exact manual entry.
 4. On tighter screens, the amount row stays separate from the slider and the landmark row compacts so controls do not crowd or clip; scrolling the dialog dismisses any open transfer dropdown popup.
 5. The source total stays intact; each bucket reserves part of that total for transfer, and any unallocated remainder stays normal spending in the source pond.
 6. App persists one source summary transaction, one `TransferData` row per bucket, and one mirrored destination transaction per bucket.
 7. Transfer rows and totals appear in the transactions view when transfer visibility is enabled. The transfer summary **spinner** shows amounts **to** each destination pond only.
 
-## Bills days configuration
+## Bills days and paydays configuration
 1. User taps the **calendar** on the custom top bar.
-2. User toggles days 1–31 and saves; list is stored in `envelope_prefs`.
+2. **Bills days** tab: toggle days 1–31 and save to `bills_days_json` (unchanged filter behavior).
+3. **Paydays** tab: toggle paydays 1–31 and save to `paydays_json`. Saving applies bank reconciliation to ponds that have Account set (check icon confirms).
 
 ## Bills period filter
 1. User taps the **filter** icon beside the transfers toggle (disabled or toast if no bills days configured).
-2. App saves the current start/end display strings, sets **start** to the bills anchor date and **end** to today, and persists filter state. If there is a single configured bills day and today matches it, **start** is that calendar day in the **prior** month (not today).
+2. App saves the current start/end display strings, sets **start** to the bills anchor date and **end** to today, and persists filter state. With a **single** configured bills day, **start** is always that day in the **prior** month (e.g. bills on the 12th, today May 13 → April 12).
 3. User taps again to turn off; previous start/end strings are restored.
 
 ## Month Navigation Flow

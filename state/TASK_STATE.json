@@ -20,6 +20,42 @@
   ],
   "completed_tasks": [
     {
+      "id": "transaction-tab-draft-preservation-2026-05",
+      "title": "Preserve transaction dialog drafts across type tabs + transfer/split defaults",
+      "status": "completed",
+      "intent": "Split rows no longer cleared on tab hide; transfer 100% + add-bucket redistribute; split even defaults; MoneyMathTest; docs/README. Gradle verify blocked (Java 25)."
+    },
+    {
+      "id": "payday-bank-reconciliation-2026-05",
+      "title": "Payday bank reconciliation + tabbed bills/paydays settings",
+      "status": "completed",
+      "intent": "MoneyMath + PondBankReconciliationHelper + paydays_json; tabbed settings; footer/edit 3-value lines; auto-sync remaining. Gradle verify blocked (Java 25 only)."
+    },
+    {
+      "id": "bills-day-anchor-previous-month-2026-05",
+      "title": "BillsDayAnchor: single bills day always uses previous month",
+      "status": "completed",
+      "intent": "Filter start = prior month bills day (e.g. May 13 + day 12 → Apr 12); BillsDayAnchorTest + docs."
+    },
+    {
+      "id": "transaction-type-tabs-below-comment-2026-05",
+      "title": "Transaction dialog: Spending/Transfer/Split type tabs below comment",
+      "status": "completed",
+      "intent": "dialog_new_transaction + dialog_transaction: move tabTransactionType (+ tabTransactionTime) after etEditTransactionComment for end-of-form mode choice UX; docs/README."
+    },
+    {
+      "id": "recurring-chrome-hidden-until-tab-2026-05",
+      "title": "Transaction dialog: hide recurring frequency/day chrome until Spending + Recurring",
+      "status": "completed",
+      "intent": "TabLayout pre-select skips onTabSelected; sync visibility after programmatic tab select; time-tab listener uses isTransactionDialogRecurringSelected; XML defaults gone for recurring block."
+    },
+    {
+      "id": "remove-recurring-checkbox-2026-05",
+      "title": "Transaction dialog: drop This is recurring checkbox; One-time/Recurring tabs only",
+      "status": "completed",
+      "intent": "Layouts + MainActivity: recurring driven only by TabLayout plus isTransactionDialogRecurringSelected(); dialog_transaction.xml synced to dialog_new_transaction.xml."
+    },
+    {
       "id": "split-purchase-tabbed-dialog-2026-05",
       "title": "Split purchase + tabbed transaction dialog (Spending/Transfer/Split tabs; split group sync; history expand)",
       "status": "completed",
@@ -96,5 +132,5 @@
       "title": "Fullscreen zoomable rotatable ReceiptPreviewActivity; ReceiptZoomImageView; ReceiptBitmapLoader"
     }
   ],
-  "last_updated": "2026-05-17"
+  "last_updated": "2026-05-19"
 }

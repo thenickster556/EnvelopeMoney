@@ -27,6 +27,13 @@
     <string name="dialog_delete_pond_message">Delete this pond?</string>
     <string name="dialog_bills_days_title">Bills days</string>
     <string name="dialog_bills_days_message">Choose which days of each month you handle bills (not tied to a single calendar month).</string>
+    <string name="dialog_bills_paydays_title">Bills &amp; paydays</string>
+    <string name="tab_bills_days">Bills days</string>
+    <string name="tab_paydays">Paydays</string>
+    <string name="dialog_paydays_message">Choose paydays in each month. Used with Account (bank) to track how much is still to deposit.</string>
+    <string name="pond_footer_reconcile">In bank: $%.2f | Still to deposit: $%.2f | Target: $%.2f</string>
+    <string name="pond_edit_reconcile_preview">In bank: $%.2f | Still to deposit: $%.2f | Target: $%.2f</string>
+    <string name="pond_row_reconcile">In bank: $%.2f | Still to deposit: $%.2f | Target: $%.2f</string>
     <string name="dialog_recalculate_title">Recalculate balances?</string>
     <string name="dialog_recalculate_message">This will recompute each pond’s remaining balance from your existing transactions. Continue?</string>
     <string name="dialog_recalculate_positive">Recalculate</string>

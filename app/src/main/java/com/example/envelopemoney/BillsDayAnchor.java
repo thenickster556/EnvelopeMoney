@@ -6,12 +6,14 @@ import java.util.List;
 import java.util.TreeSet;
 
 /**
- * Resolves the latest bills day-of-month on or before "today", walking backward month-by-month
- * when the current month has no bills day ≤ today (e.g. bills on 10 and 25, today Apr 5 → Mar 25).
- * Special case: if exactly one bills day is configured and it equals today's calendar day, the
- * anchor is that day in the previous month (not today), so the range is a full period up to today
- * instead of a zero-width span.
- * Used as the transaction filter start date when the bills-period filter is enabled (end date is today).
+ * Resolves the transaction-filter start date for the bills-period filter (end date is today).
+ * <p>
+ * If exactly one bills day is configured, the anchor is always that day-of-month in the
+ * <strong>previous</strong> calendar month (clamped to month length), so the range covers the
+ * open billing period through today — e.g. bills on the 12th and today May 13 → April 12, not May 12.
+ * <p>
+ * If multiple bills days are configured, the anchor is the latest bills day on or before today,
+ * walking backward month-by-month when needed (e.g. bills on 10 and 25, today Apr 5 → Mar 25).
  */
 public final class BillsDayAnchor {
 
@@ -44,15 +46,7 @@ public final class BillsDayAnchor {
         probe.set(Calendar.MILLISECOND, 0);
 
         if (set.size() == 1) {
-            int onlyDay = set.first();
-            int todayDom = probe.get(Calendar.DAY_OF_MONTH);
-            if (onlyDay == todayDom) {
-                Calendar anchor = (Calendar) probe.clone();
-                anchor.add(Calendar.MONTH, -1);
-                int maxInPrev = anchor.getActualMaximum(Calendar.DAY_OF_MONTH);
-                anchor.set(Calendar.DAY_OF_MONTH, Math.min(onlyDay, maxInPrev));
-                return anchor.getTime();
-            }
+            return anchorOnDayInPreviousMonth(probe, set.first());
         }
 
         for (int monthsBack = 0; monthsBack <= 12; monthsBack++) {
@@ -76,5 +70,13 @@ public final class BillsDayAnchor {
             }
         }
         return null;
+    }
+
+    private static Date anchorOnDayInPreviousMonth(Calendar todayAtMidnight, int dayOfMonth) {
+        Calendar anchor = (Calendar) todayAtMidnight.clone();
+        anchor.add(Calendar.MONTH, -1);
+        int maxInPrev = anchor.getActualMaximum(Calendar.DAY_OF_MONTH);
+        anchor.set(Calendar.DAY_OF_MONTH, Math.min(dayOfMonth, maxInPrev));
+        return anchor.getTime();
     }
 }

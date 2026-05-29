@@ -84,10 +84,16 @@
                 android:textSize="12sp"
                 android:visibility="gone" />
 
+            <LinearLayout
+                android:id="@+id/layoutRowPond"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Select Envelope" />
+                android:text="@string/select_pond_label" />
 
             <com.google.android.material.textfield.TextInputLayout
                 style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
@@ -105,11 +111,13 @@
                     android:maxLines="1" />
             </com.google.android.material.textfield.TextInputLayout>
 
+            </LinearLayout>
+
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="Select Date" />
+                android:text="Date" />
 
             <EditText
                 android:id="@+id/etEditTransactionDate"
@@ -125,11 +133,26 @@
                 android:layout_marginTop="8dp"
                 android:text="Amount" />
 
-            <EditText
-                android:id="@+id/etEditTransactionAmount"
+            <FrameLayout
+                android:id="@+id/frameAmountSlot"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:inputType="numberDecimal|numberSigned" />
+                android:layout_height="wrap_content">
+
+                <EditText
+                    android:id="@+id/etEditTransactionAmount"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="Amount"
+                    android:inputType="numberDecimal|numberSigned" />
+
+                <EditText
+                    android:id="@+id/etSplitPurchaseTotal"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="@string/split_purchase_total_hint"
+                    android:inputType="numberDecimal|numberSigned"
+                    android:visibility="gone" />
+            </FrameLayout>
 
             <TextView
                 android:layout_width="wrap_content"
@@ -141,15 +164,29 @@
                 android:id="@+id/etEditTransactionComment"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:hint="Comment"
                 android:inputType="text" />
 
-            <androidx.appcompat.widget.AppCompatCheckBox
-                android:id="@+id/cbIsRecurring"
+            <com.google.android.material.tabs.TabLayout
+                android:id="@+id/tabTransactionType"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="This is reoccuring"
-                app:buttonTint="?attr/colorPrimary" />
+                android:layout_marginTop="12dp"
+                app:tabGravity="fill"
+                app:tabMode="fixed" />
+
+            <com.google.android.material.tabs.TabLayout
+                android:id="@+id/tabTransactionTime"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:tabGravity="fill"
+                app:tabMode="fixed" />
+
+            <LinearLayout
+                android:id="@+id/panelSpending"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
 
             <TextView
                 android:id="@+id/tvRecurringFrequencyLabel"
@@ -157,7 +194,8 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:text="Recurring Frequency"
-                android:textColor="?android:attr/textColorSecondary" />
+                android:textColor="?android:attr/textColorSecondary"
+                android:visibility="gone" />
 
             <LinearLayout
                 android:id="@+id/layoutRecurringFrequencyOptions"
@@ -165,7 +203,8 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
                 android:gravity="center_vertical"
-                android:orientation="horizontal">
+                android:orientation="horizontal"
+                android:visibility="gone">
 
                 <TextView
                     android:id="@+id/btnRecurringWeekly"
@@ -215,7 +254,8 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:text="Recurring Days"
-                android:textColor="?android:attr/textColorSecondary" />
+                android:textColor="?android:attr/textColorSecondary"
+                android:visibility="gone" />
 
             <LinearLayout
                 android:id="@+id/layoutRecurringWeekdayButtons"
@@ -324,16 +364,18 @@
                 android:padding="10dp"
                 android:text="Select days"
                 android:textColor="?android:attr/textColorPrimary"
+                android:visibility="gone"
                 app:drawableEndCompat="@drawable/ic_calendar_bills_setup"
                 app:drawableTint="?attr/colorControlNormal" />
 
-            <androidx.appcompat.widget.AppCompatCheckBox
-                android:id="@+id/cbIsTransfer"
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/panelTransfer"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="This is a transfer"
-                app:buttonTint="?attr/colorPrimary" />
+                android:orientation="vertical"
+                android:visibility="gone">
 
             <LinearLayout
                 android:id="@+id/layoutTransferBucketsSection"
@@ -413,6 +455,61 @@
                     android:textSize="24sp"
                     app:icon="@null" />
             </LinearLayout>
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/panelSplitPurchase"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/split_purchase_summary_title"
+                    android:textColor="?android:attr/textColorPrimary"
+                    android:textSize="18sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvSplitAllocatedSummary"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="@string/split_purchase_allocated_default"
+                    android:textColor="?android:attr/textColorPrimary"
+                    android:textSize="16sp" />
+
+                <TextView
+                    android:id="@+id/tvSplitValidationMessage"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:textColor="@android:color/holo_red_dark"
+                    android:visibility="gone" />
+
+                <LinearLayout
+                    android:id="@+id/layoutSplitBucketsContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:orientation="vertical" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnAddSplitBucket"
+                    style="@style/Widget.MountainMoney.TransactionReceiptIconButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:contentDescription="@string/content_desc_add_split_bucket"
+                    android:text="+"
+                    android:textAllCaps="false"
+                    android:textSize="24sp"
+                    app:icon="@null" />
+            </LinearLayout>
+
         </LinearLayout>
     </com.example.envelopemoney.ui.BoundedNestedScrollView>
 </LinearLayout>

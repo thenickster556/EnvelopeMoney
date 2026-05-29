@@ -75,11 +75,27 @@ public class BillsDayAnchorTest {
     }
 
     @Test
-    public void singleBillsDay_laterInMonth_stillUsesCurrentMonthOccurrence() {
+    public void singleBillsDay_dayAfterBillsDom_usesPreviousMonthNotCurrent() {
+        List<Integer> days = Collections.singletonList(12);
+        Calendar today = cal(2026, Calendar.MAY, 13);
+        Date anchor = BillsDayAnchor.computeAnchorDate(today, days);
+        assertEquals("2026-04-12", fmt(anchor));
+    }
+
+    @Test
+    public void singleBillsDay_dayBeforeBillsDomInMonth_usesPreviousMonth() {
+        List<Integer> days = Collections.singletonList(12);
+        Calendar today = cal(2026, Calendar.MAY, 5);
+        Date anchor = BillsDayAnchor.computeAnchorDate(today, days);
+        assertEquals("2026-04-12", fmt(anchor));
+    }
+
+    @Test
+    public void singleBillsDay_laterInMonth_stillUsesPreviousMonth() {
         List<Integer> days = Collections.singletonList(17);
         Calendar today = cal(2026, Calendar.APRIL, 20);
         Date anchor = BillsDayAnchor.computeAnchorDate(today, days);
-        assertEquals("2026-04-17", fmt(anchor));
+        assertEquals("2026-03-17", fmt(anchor));
     }
 
     @Test

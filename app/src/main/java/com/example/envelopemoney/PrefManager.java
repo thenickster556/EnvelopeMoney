@@ -19,6 +19,7 @@ public class PrefManager {
     private static final String LAST_ADD_TRANSFER_DESTINATION_PREFIX = "last_add_transfer_destination_";
     private static final String LAST_TRANSFER_TOTALS_OPTION_KEY = "last_transfer_totals_option";
     private static final String BILLS_DAYS_JSON_KEY = "bills_days_json";
+    private static final String PAYDAYS_JSON_KEY = "paydays_json";
     private static final String BILLS_FILTER_ACTIVE_KEY = "bills_filter_active";
     private static final String BILLS_FILTER_SAVED_START_KEY = "bills_filter_saved_start_display";
     private static final String BILLS_FILTER_SAVED_END_KEY = "bills_filter_saved_end_display";
@@ -112,18 +113,34 @@ public class PrefManager {
     }
 
     public static void saveBillsDays(Context context, List<Integer> days) {
+        saveDayList(context, BILLS_DAYS_JSON_KEY, days);
+    }
+
+    public static List<Integer> getBillsDays(Context context) {
+        return getDayList(context, BILLS_DAYS_JSON_KEY);
+    }
+
+    public static void savePaydays(Context context, List<Integer> days) {
+        saveDayList(context, PAYDAYS_JSON_KEY, days);
+    }
+
+    public static List<Integer> getPaydays(Context context) {
+        return getDayList(context, PAYDAYS_JSON_KEY);
+    }
+
+    private static void saveDayList(Context context, String key, List<Integer> days) {
         SharedPreferences.Editor editor = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit();
         if (days == null || days.isEmpty()) {
-            editor.remove(BILLS_DAYS_JSON_KEY);
+            editor.remove(key);
         } else {
-            editor.putString(BILLS_DAYS_JSON_KEY, new Gson().toJson(days));
+            editor.putString(key, new Gson().toJson(days));
         }
         editor.apply();
     }
 
-    public static List<Integer> getBillsDays(Context context) {
+    private static List<Integer> getDayList(Context context, String key) {
         SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-        String json = prefs.getString(BILLS_DAYS_JSON_KEY, null);
+        String json = prefs.getString(key, null);
         if (json == null || json.isEmpty()) {
             return new ArrayList<>();
         }

@@ -84,21 +84,6 @@
                 android:textSize="12sp"
                 android:visibility="gone" />
 
-            <com.google.android.material.tabs.TabLayout
-                android:id="@+id/tabTransactionType"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                app:tabGravity="fill"
-                app:tabMode="fixed" />
-
-            <com.google.android.material.tabs.TabLayout
-                android:id="@+id/tabTransactionTime"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                app:tabGravity="fill"
-                app:tabMode="fixed" />
-
             <LinearLayout
                 android:id="@+id/layoutRowPond"
                 android:layout_width="match_parent"
@@ -182,19 +167,26 @@
                 android:hint="Comment"
                 android:inputType="text" />
 
+            <com.google.android.material.tabs.TabLayout
+                android:id="@+id/tabTransactionType"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                app:tabGravity="fill"
+                app:tabMode="fixed" />
+
+            <com.google.android.material.tabs.TabLayout
+                android:id="@+id/tabTransactionTime"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:tabGravity="fill"
+                app:tabMode="fixed" />
+
             <LinearLayout
                 android:id="@+id/panelSpending"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical">
-
-            <androidx.appcompat.widget.AppCompatCheckBox
-                android:id="@+id/cbIsRecurring"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="This is reoccuring"
-                app:buttonTint="?attr/colorPrimary" />
 
             <TextView
                 android:id="@+id/tvRecurringFrequencyLabel"
@@ -202,7 +194,8 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:text="Recurring Frequency"
-                android:textColor="?android:attr/textColorSecondary" />
+                android:textColor="?android:attr/textColorSecondary"
+                android:visibility="gone" />
 
             <LinearLayout
                 android:id="@+id/layoutRecurringFrequencyOptions"
@@ -210,7 +203,8 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
                 android:gravity="center_vertical"
-                android:orientation="horizontal">
+                android:orientation="horizontal"
+                android:visibility="gone">
 
                 <TextView
                     android:id="@+id/btnRecurringWeekly"
@@ -260,7 +254,8 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:text="Recurring Days"
-                android:textColor="?android:attr/textColorSecondary" />
+                android:textColor="?android:attr/textColorSecondary"
+                android:visibility="gone" />
 
             <LinearLayout
                 android:id="@+id/layoutRecurringWeekdayButtons"
@@ -369,6 +364,7 @@
                 android:padding="10dp"
                 android:text="Select days"
                 android:textColor="?android:attr/textColorPrimary"
+                android:visibility="gone"
                 app:drawableEndCompat="@drawable/ic_calendar_bills_setup"
                 app:drawableTint="?attr/colorControlNormal" />
 

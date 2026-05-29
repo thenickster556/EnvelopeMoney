@@ -157,6 +157,11 @@ public class Envelope {
         this.remaining         = newRemaining;
     }
 
+    /** Clears manual remainder override (e.g. when bank reconciliation auto-sync takes over). */
+    public void clearManualRemainingOverride() {
+        this.manualRemaining = null;
+    }
+
     // Adjust limit and remaining based on new limit
     public void adjustLimit(double newLimit, String currentMonth) {
         double oldLimit = this.limit;

@@ -15,6 +15,7 @@ The app persists most business state via SharedPreferences.
   - `last_add_transfer_destination_<sourceEnvelope>`
   - `last_transfer_totals_option`
   - `bills_days_json`: Gson-serialized list of integers (day-of-month 1–31); empty means none configured
+  - `paydays_json`: Gson-serialized list of integers (day-of-month 1–31); global pay schedule for bank reconciliation
   - `bills_filter_active`: whether the bills-period filter is on (UI start = anchor, end = today)
   - `bills_filter_saved_start_display` / `bills_filter_saved_end_display`: `MMM d, yyyy` strings for the user's range **before** enabling the filter, restored when disabling
 
@@ -31,6 +32,9 @@ The app persists most business state via SharedPreferences.
 - `baselineLimit: double`
 - `baselineRemaining: double`
 - `accountBalance: Double?` — optional real-world bank slice for this pond (not the budget remainder)
+
+### Bank reconciliation mode (optional)
+When `paydays_json` is non-empty **and** a pond has `accountBalance` set, `remaining` may be overwritten by `PondBankReconciliationHelper` using `MoneyMath.roundToCents(max(0, limit - accountBalance))`. This is **not** the default: ponds without paydays configured, or without Account entered, keep transaction-driven `remaining` via `calculateRemaining`. Manual remainder override is cleared when reconciliation applies to that pond.
 
 ## MonthData Model
 - `limit: double` — **effective budget ceiling for that calendar month** in snapshots (may equal base + unused from the prior month when carry-over applies); distinct from envelope `limit` above.
@@ -73,6 +77,5 @@ The app persists most business state via SharedPreferences.
 - Recurring is not supported for split purchases in v1 (dialog hides time/recurring on non-Spending tabs).
 
 ## Pond totals footer
-- **Account (entered):** sum of `accountBalance` where not null.
-- **Remaining:** sum of each envelope’s `remaining` (budget).
-- **Difference:** Account sum minus Remaining sum when at least one account value exists; otherwise only Remaining is shown.
+- **Reconciliation mode** (paydays configured + at least one Account): one line, three values — **In bank** (sum of accounts), **Still to deposit** (sum of `max(0, limit - account)` per pond), **Target** (sum of limits for those ponds). All amounts cent-rounded.
+- **Legacy** (otherwise): **Account (entered)** sum, **Remaining** sum, **Difference** when any Account exists; or Remaining only when none.
