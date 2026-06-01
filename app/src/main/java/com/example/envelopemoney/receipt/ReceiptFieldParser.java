@@ -23,11 +23,19 @@ public final class ReceiptFieldParser {
      * so we win “amount due” / last total (after tip) over an earlier pre-tip total.
      */
     private static final Pattern TOTAL_LINE_STRONG = Pattern.compile(
-            "(?i)\\b(amount\\s*due|balance\\s*due|total\\s*due|grand\\s*total|pay\\s*this\\s*amount)\\b");
+            "(?i)\\b(amount\\s*due|balance\\s*due|total\\s*due|grand\\s*total|pay\\s*this\\s*amount"
+                    + "|total\\s*paid|amount\\s*paid|payment\\s*total|you\\s*paid|paid\\s*total)\\b");
     private static final Pattern TOTAL_LABEL = Pattern.compile(
-            "(?i)\\b(total|amount\\s*due|balance\\s*due|grand\\s*total|total\\s*due|pay\\s*this\\s*amount)\\b");
+            "(?i)\\b(total|amount\\s*due|balance\\s*due|grand\\s*total|total\\s*due|pay\\s*this\\s*amount"
+                    + "|total\\s*paid|amount\\s*paid|payment\\s*total|you\\s*paid|paid\\s*total)\\b");
     private static final Pattern SUBTOTAL_OR_TAX = Pattern.compile(
             "(?i)\\b(sub\\s*total|subtotal|tax|tip|gratuity|suggested)\\b");
+    private static final Pattern TIP_LINE = Pattern.compile("(?i)\\b(tip|gratuity)\\b");
+    private static final Pattern SUGGESTED_TIP_LINE = Pattern.compile(
+            "(?i)\\b(suggested|recommend|guide)\\b.*\\b(tip|gratuity)\\b|\\b(tip|gratuity)\\b.*\\d+\\s*%");
+    private static final Pattern SUBTOTAL_LINE = Pattern.compile("(?i)\\b(sub\\s*total|subtotal)\\b");
+    private static final Pattern TAX_LINE = Pattern.compile("(?i)\\btax\\b");
+    private static final Pattern TAX_ID_LINE = Pattern.compile("(?i)\\btax\\s*id\\b");
     private static final Pattern GAS_GALLON = Pattern.compile("(?i)\\b(gal|gallon|/\\s*gal)\\b");
     private static final Pattern PHONE = Pattern.compile("\\d{3}[-.\\s]?\\d{3}[-.\\s]?\\d{4}");
     private static final Pattern HTTP_OR_WWW = Pattern.compile("(?i)https?://|www\\.");
@@ -272,35 +280,19 @@ public final class ReceiptFieldParser {
         }
 
         if (mode == ReceiptCaptureMode.RESTAURANT || mode == ReceiptCaptureMode.RECEIPT) {
-            // Strong labels (amount due, etc.): use bottom-most (final charge after tip is usually last)
-            for (int i = lines.size() - 1; i >= 0; i--) {
-                String line = lines.get(i);
-                if (mode == ReceiptCaptureMode.RESTAURANT
-                        && SUBTOTAL_OR_TAX.matcher(line).find()
-                        && !TOTAL_LINE_STRONG.matcher(line).find()
-                        && !TOTAL_LABEL.matcher(line).find()) {
-                    continue;
+            AmountPick labeled = pickLabeledTotalFromBottom(lines, mode);
+            AmountPick withTip = pickTotalIncludingTip(lines, mode);
+            if (labeled.amount != null && withTip.amount != null) {
+                if (withTip.amount > labeled.amount + 0.009d) {
+                    return withTip;
                 }
-                if (TOTAL_LINE_STRONG.matcher(line).find()) {
-                    Double v = maxMoneyOnLine(line);
-                    if (v != null && v > 0) {
-                        return new AmountPick(v, 0.92f);
-                    }
-                }
+                return labeled;
             }
-            // Weaker "total" label: last in document (after tip total often at bottom)
-            for (int i = lines.size() - 1; i >= 0; i--) {
-                String line = lines.get(i);
-                if (mode == ReceiptCaptureMode.RESTAURANT && SUBTOTAL_OR_TAX.matcher(line).find()
-                        && !TOTAL_LABEL.matcher(line).find()) {
-                    continue;
-                }
-                if (TOTAL_LABEL.matcher(line).find()) {
-                    Double v = maxMoneyOnLine(line);
-                    if (v != null && v > 0) {
-                        return new AmountPick(v, 0.88f);
-                    }
-                }
+            if (withTip.amount != null) {
+                return withTip;
+            }
+            if (labeled.amount != null) {
+                return labeled;
             }
         }
 
@@ -334,6 +326,141 @@ public final class ReceiptFieldParser {
         // Restaurant / receipt: prefer largest remaining candidate
         double max = Collections.max(candidates);
         return new AmountPick(max, 0.5f);
+    }
+
+  /** Strong / weak total labels scanned from the bottom (final charge is usually last). */
+    private static AmountPick pickLabeledTotalFromBottom(List<String> lines, ReceiptCaptureMode mode) {
+        for (int i = lines.size() - 1; i >= 0; i--) {
+            String line = lines.get(i);
+            if (mode == ReceiptCaptureMode.RESTAURANT
+                    && isSkippableRestaurantLineForTotalLabel(line)
+                    && !TOTAL_LINE_STRONG.matcher(line).find()
+                    && !TOTAL_LABEL.matcher(line).find()) {
+                continue;
+            }
+            if (TOTAL_LINE_STRONG.matcher(line).find()) {
+                Double v = maxMoneyOnLine(line);
+                if (v != null && v > 0) {
+                    return new AmountPick(v, 0.92f);
+                }
+            }
+        }
+        for (int i = lines.size() - 1; i >= 0; i--) {
+            String line = lines.get(i);
+            if (mode == ReceiptCaptureMode.RESTAURANT
+                    && isSkippableRestaurantLineForTotalLabel(line)
+                    && !TOTAL_LABEL.matcher(line).find()) {
+                continue;
+            }
+            if (TOTAL_LABEL.matcher(line).find()) {
+                Double v = maxMoneyOnLine(line);
+                if (v != null && v > 0) {
+                    return new AmountPick(v, 0.88f);
+                }
+            }
+        }
+        return new AmountPick(null, 0.2f);
+    }
+
+    /**
+     * When OCR finds an explicit tip/gratuity amount, prefer the amount actually spent
+     * (pre-tip total + tip, or subtotal + tax + tip) over an earlier pre-tip "Total" line.
+     */
+    @Nullable
+    private static AmountPick pickTotalIncludingTip(List<String> lines, ReceiptCaptureMode mode) {
+        if (mode != ReceiptCaptureMode.RESTAURANT && mode != ReceiptCaptureMode.RECEIPT) {
+            return new AmountPick(null, 0.2f);
+        }
+
+        Double subtotal = null;
+        Double tax = null;
+        Double tip = null;
+        int tipLineIndex = -1;
+        Double lastTotalLabeled = null;
+        int lastTotalLineIndex = -1;
+        Double amountDue = null;
+
+        for (int i = 0; i < lines.size(); i++) {
+            String line = lines.get(i);
+            if (isSuggestedTipLine(line)) {
+                continue;
+            }
+            Double money = maxMoneyOnLine(line);
+            if (money == null || money <= 0) {
+                continue;
+            }
+
+            if (TOTAL_LINE_STRONG.matcher(line).find()) {
+                amountDue = money;
+            }
+            if (SUBTOTAL_LINE.matcher(line).find()) {
+                subtotal = money;
+            }
+            if (TAX_LINE.matcher(line).find() && !TAX_ID_LINE.matcher(line).find() && !TIP_LINE.matcher(line).find()) {
+                tax = money;
+            }
+            if (isExplicitTipLine(line)) {
+                tip = money;
+                tipLineIndex = i;
+            }
+            if (TOTAL_LABEL.matcher(line).find() && !isExplicitTipLine(line)) {
+                lastTotalLabeled = money;
+                lastTotalLineIndex = i;
+            }
+        }
+
+        if (amountDue != null) {
+            return new AmountPick(amountDue, 0.93f);
+        }
+
+        if (lastTotalLabeled != null && tip != null && tipLineIndex > lastTotalLineIndex) {
+            double combined = roundMoney(lastTotalLabeled + tip);
+            return new AmountPick(combined, 0.91f);
+        }
+
+        if (subtotal != null && tip != null) {
+            double taxAmount = tax != null ? tax : 0d;
+            double foodAndTax = roundMoney(subtotal + taxAmount);
+            double withTip = roundMoney(foodAndTax + tip);
+            if (lastTotalLabeled != null && amountsClose(lastTotalLabeled, foodAndTax)) {
+                return new AmountPick(withTip, 0.9f);
+            }
+            if (lastTotalLabeled == null || withTip >= lastTotalLabeled) {
+                return new AmountPick(withTip, 0.89f);
+            }
+        }
+
+        if (lastTotalLabeled != null && tip != null) {
+            double combined = roundMoney(lastTotalLabeled + tip);
+            if (combined > lastTotalLabeled + 0.009d) {
+                return new AmountPick(combined, 0.87f);
+            }
+        }
+
+        return new AmountPick(null, 0.2f);
+    }
+
+    private static boolean isSkippableRestaurantLineForTotalLabel(String line) {
+        return SUBTOTAL_OR_TAX.matcher(line).find();
+    }
+
+    private static boolean isSuggestedTipLine(String line) {
+        return SUGGESTED_TIP_LINE.matcher(line).find();
+    }
+
+    /** Tip/gratuity line with an amount (not a final "total" line). */
+    private static boolean isExplicitTipLine(String line) {
+        return TIP_LINE.matcher(line).find()
+                && !TOTAL_LABEL.matcher(line).find()
+                && !isSuggestedTipLine(line);
+    }
+
+    private static boolean amountsClose(double a, double b) {
+        return Math.abs(a - b) < 0.02d;
+    }
+
+    private static double roundMoney(double value) {
+        return Math.round(value * 100d) / 100d;
     }
 
     @Nullable

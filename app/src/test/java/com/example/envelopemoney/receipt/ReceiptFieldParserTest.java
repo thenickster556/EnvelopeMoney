@@ -135,4 +135,55 @@ public class ReceiptFieldParserTest {
         assertEquals("Mart", d.merchantForComment);
         assertEquals(7.50, d.totalAmount, 0.001);
     }
+
+    @Test
+    public void restaurant_composesTotalPlusTipWhenTipAfterPreTipTotal() {
+        OcrResult ocr = new OcrResult(Arrays.asList(
+                new OcrLine("BISTRO", 0.9f),
+                new OcrLine("Subtotal 40.00", 0.9f),
+                new OcrLine("Tax 2.00", 0.9f),
+                new OcrLine("Total 42.00", 0.9f),
+                new OcrLine("Tip 8.00", 0.9f)
+        ));
+        ReceiptDraft d = ReceiptFieldParser.parse(ocr, ReceiptCaptureMode.RESTAURANT);
+        assertEquals(50.00, d.totalAmount, 0.001);
+    }
+
+    @Test
+    public void restaurant_composesSubtotalTaxAndTipWhenNoFinalTotal() {
+        OcrResult ocr = new OcrResult(Arrays.asList(
+                new OcrLine("CAFE", 0.9f),
+                new OcrLine("Subtotal 20.00", 0.9f),
+                new OcrLine("Tax 1.50", 0.9f),
+                new OcrLine("Gratuity 3.00", 0.9f)
+        ));
+        ReceiptDraft d = ReceiptFieldParser.parse(ocr, ReceiptCaptureMode.RESTAURANT);
+        assertEquals(24.50, d.totalAmount, 0.001);
+    }
+
+    @Test
+    public void restaurant_ignoresSuggestedTipPercentLine() {
+        OcrResult ocr = new OcrResult(Arrays.asList(
+                new OcrLine("DINER", 0.9f),
+                new OcrLine("Subtotal 10.00", 0.9f),
+                new OcrLine("Tax 0.80", 0.9f),
+                new OcrLine("Total 10.80", 0.9f),
+                new OcrLine("Suggested tip 20%", 0.9f),
+                new OcrLine("Tip 2.00", 0.9f)
+        ));
+        ReceiptDraft d = ReceiptFieldParser.parse(ocr, ReceiptCaptureMode.RESTAURANT);
+        assertEquals(12.80, d.totalAmount, 0.001);
+    }
+
+    @Test
+    public void receipt_prefersTotalPaidOverEarlierTotal() {
+        OcrResult ocr = new OcrResult(Arrays.asList(
+                new OcrLine("GRILL", 0.9f),
+                new OcrLine("Total 30.00", 0.9f),
+                new OcrLine("Tip 6.00", 0.9f),
+                new OcrLine("Total paid 36.00", 0.9f)
+        ));
+        ReceiptDraft d = ReceiptFieldParser.parse(ocr, ReceiptCaptureMode.RECEIPT);
+        assertEquals(36.00, d.totalAmount, 0.001);
+    }
 }

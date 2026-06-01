@@ -20,6 +20,12 @@
   ],
   "completed_tasks": [
     {
+      "id": "ocr-tip-inclusive-total-2026-05",
+      "title": "Receipt OCR: prefer amount spent including tips",
+      "status": "completed",
+      "intent": "ReceiptFieldParser tip composition + total paid labels; ReceiptFieldParserTest; receipt-ocr.md + features.md + README."
+    },
+    {
       "id": "transaction-tab-draft-preservation-2026-05",
       "title": "Preserve transaction dialog drafts across type tabs + transfer/split defaults",
       "status": "completed",
