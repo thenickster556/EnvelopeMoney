@@ -44,6 +44,19 @@ public final class ReceiptFieldParser {
     private static final Pattern GUEST_OR_TABLE = Pattern.compile("(?i)guest\\s*check|table\\s*#?|server\\s*[:#]");
     private static final Pattern STREET_START = Pattern.compile("^\\d{1,5}\\s+[A-Za-z]");
     private static final Pattern LINE_ZIP_ONLY = Pattern.compile("(?i)^\\d{5}(-\\d{4})?\\s*$");
+    private static final Pattern TRANSACTION_BOILERPLATE = Pattern.compile(
+            "(?i)\\b(transaction|auth|approval|approved|terminal|cashier|invoice|receipt\\s*#|"
+                    + "customer\\s+copy|merchant\\s+copy|trans\\s|mid\\b|batch\\s|ref\\s*#)");
+    private static final Pattern CARD_BRAND = Pattern.compile(
+            "(?i)\\b(visa|mastercard|amex|american\\s+express|debit|credit\\s+card)\\b");
+    private static final Pattern WELCOME_PREFIX = Pattern.compile("(?i)^welcome\\s+to\\s+");
+    private static final Pattern THANKS_SHOPPING_PREFIX = Pattern.compile(
+            "(?i)^thank\\s+you\\s+for\\s+shopping\\s+at\\s+");
+    private static final Pattern TRAILING_STORE_ID = Pattern.compile(
+            "(?i)\\s+(store\\s*#?|#|no\\.?)\\s*\\d+\\s*$");
+
+    private static final int BRAND_SCAN_TOP_LINES = 6;
+    private static final int MAX_BRAND_DISPLAY_LENGTH = 40;
 
     private ReceiptFieldParser() {
     }
@@ -67,7 +80,7 @@ public final class ReceiptFieldParser {
             m = inferMode(lines);
         }
 
-        String merchant = extractMerchant(lines);
+        String merchant = extractMerchant(ocr.getLines());
         AmountPick pick = pickTotal(lines, m);
 
         Double amount = pick.amount;
@@ -132,40 +145,52 @@ public final class ReceiptFieldParser {
     }
 
     @Nullable
-    private static String extractMerchant(List<String> lines) {
-        int limit = Math.min(lines.size(), 10);
+    private static String extractMerchant(List<OcrLine> ocrLines) {
+        if (ocrLines == null || ocrLines.isEmpty()) {
+            return null;
+        }
+        int limit = Math.min(ocrLines.size(), BRAND_SCAN_TOP_LINES);
+        int maxHeightInTop = 0;
+        for (int i = 0; i < limit; i++) {
+            maxHeightInTop = Math.max(maxHeightInTop, ocrLines.get(i).lineHeightPx);
+        }
+
         int bestScore = Integer.MIN_VALUE;
         int bestIndex = -1;
         for (int i = 0; i < limit; i++) {
-            String line = lines.get(i);
-            if (line.length() < 3 || line.length() > 80) {
+            String line = ocrLines.get(i).text.trim();
+            if (!isViableBrandCandidate(line)) {
                 continue;
             }
-            if (TOTAL_LABEL.matcher(line).find() || SUBTOTAL_OR_TAX.matcher(line).find()) {
-                continue;
-            }
-            if (ISO_DATE.matcher(line).find() || US_DATE.matcher(line).find()) {
-                continue;
-            }
-            if (line.matches("(?i)^\\s*\\d+\\s*$")) {
-                continue;
-            }
-            if (mostlyNumeric(line)) {
-                continue;
-            }
-            if (isJunkMerchantLine(line)) {
-                continue;
-            }
-            int s = scoreMerchantLine(line);
-            if (s > bestScore) {
-                bestScore = s;
+            int score = scoreBrandLine(line, i, ocrLines.get(i).lineHeightPx, maxHeightInTop);
+            if (score > bestScore || (score == bestScore && bestIndex >= 0 && i < bestIndex)) {
+                bestScore = score;
                 bestIndex = i;
             }
         }
         if (bestIndex < 0) {
             return null;
         }
-        return normalizeMerchantDisplay(lines.get(bestIndex));
+        return normalizeBrandDisplay(ocrLines.get(bestIndex).text);
+    }
+
+    private static boolean isViableBrandCandidate(String line) {
+        if (line.length() < 3 || line.length() > 80) {
+            return false;
+        }
+        if (TOTAL_LABEL.matcher(line).find() || SUBTOTAL_OR_TAX.matcher(line).find()) {
+            return false;
+        }
+        if (ISO_DATE.matcher(line).find() || US_DATE.matcher(line).find()) {
+            return false;
+        }
+        if (line.matches("(?i)^\\s*\\d+\\s*$")) {
+            return false;
+        }
+        if (mostlyNumeric(line)) {
+            return false;
+        }
+        return !isJunkMerchantLine(line);
     }
 
     private static boolean isJunkMerchantLine(String line) {
@@ -185,10 +210,16 @@ public final class ReceiptFieldParser {
         if (STREET_START.matcher(t).find()) {
             return true;
         }
+        if (TRANSACTION_BOILERPLATE.matcher(t).find()) {
+            return true;
+        }
+        if (CARD_BRAND.matcher(t).find()) {
+            return true;
+        }
         return false;
     }
 
-    private static int scoreMerchantLine(String line) {
+    private static int scoreBrandLine(String line, int lineIndex, int lineHeightPx, int maxHeightInTop) {
         int letters = 0;
         int digits = 0;
         for (int i = 0; i < line.length(); i++) {
@@ -206,11 +237,43 @@ public final class ReceiptFieldParser {
         if (len > 60) {
             return -1;
         }
-        int s = letters * 2 - digits;
-        if (len >= 4 && len <= 40) {
-            s += 5;
+
+        int score = letters * 2 - digits * 3;
+        if (lineIndex == 0) {
+            score += 30;
+        } else if (lineIndex == 1) {
+            score += 20;
+        } else if (lineIndex == 2) {
+            score += 10;
         }
-        return s;
+        if (lineHeightPx > 0 && maxHeightInTop > 0) {
+            score += (lineHeightPx * 50) / maxHeightInTop;
+        }
+        if (looksAllCapsish(line)) {
+            score += 8;
+        }
+        if (len >= 4 && len <= MAX_BRAND_DISPLAY_LENGTH) {
+            score += 5;
+        }
+        if (TRAILING_STORE_ID.matcher(line).find()) {
+            score -= 4;
+        }
+        return score;
+    }
+
+    static String normalizeBrandDisplay(String line) {
+        if (line == null) {
+            return null;
+        }
+        String cleaned = line.trim().replaceAll("\\s+", " ");
+        cleaned = WELCOME_PREFIX.matcher(cleaned).replaceFirst("");
+        cleaned = THANKS_SHOPPING_PREFIX.matcher(cleaned).replaceFirst("");
+        cleaned = TRAILING_STORE_ID.matcher(cleaned).replaceFirst("");
+        cleaned = cleaned.trim();
+        if (cleaned.length() > MAX_BRAND_DISPLAY_LENGTH) {
+            cleaned = cleaned.substring(0, MAX_BRAND_DISPLAY_LENGTH).trim();
+        }
+        return normalizeMerchantDisplay(cleaned);
     }
 
     static String normalizeMerchantDisplay(String line) {

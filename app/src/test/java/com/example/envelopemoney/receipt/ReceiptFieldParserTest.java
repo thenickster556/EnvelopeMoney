@@ -186,4 +186,47 @@ public class ReceiptFieldParserTest {
         ReceiptDraft d = ReceiptFieldParser.parse(ocr, ReceiptCaptureMode.RECEIPT);
         assertEquals(36.00, d.totalAmount, 0.001);
     }
+
+    @Test
+    public void brand_tallTopLine_beatsAddress() {
+        OcrResult ocr = new OcrResult(Arrays.asList(
+                new OcrLine("123 Main St", 0.9f, 18),
+                new OcrLine("WALMART", 0.9f, 72),
+                new OcrLine("TOTAL $12.34", 0.9f, 20)
+        ));
+        ReceiptDraft d = ReceiptFieldParser.parse(ocr, ReceiptCaptureMode.RECEIPT);
+        assertEquals("Walmart", d.merchantForComment);
+    }
+
+    @Test
+    public void brand_firstLineCheckers() {
+        OcrResult ocr = new OcrResult(Arrays.asList(
+                new OcrLine("CHECKERS", 0.9f, 60),
+                new OcrLine("123 Main St", 0.9f, 18),
+                new OcrLine("TOTAL 9.99", 0.9f, 20)
+        ));
+        ReceiptDraft d = ReceiptFieldParser.parse(ocr, ReceiptCaptureMode.RESTAURANT);
+        assertEquals("Checkers", d.merchantForComment);
+    }
+
+    @Test
+    public void normalizeBrandDisplay_stripsWelcomeTo() {
+        assertEquals("Checkers", ReceiptFieldParser.normalizeBrandDisplay("Welcome to Checkers"));
+    }
+
+    @Test
+    public void normalizeBrandDisplay_stripsStoreNumber() {
+        assertEquals("Walmart", ReceiptFieldParser.normalizeBrandDisplay("WALMART #1234"));
+    }
+
+    @Test
+    public void brand_skipsTransactionBoilerplate() {
+        OcrResult ocr = new OcrResult(Arrays.asList(
+                new OcrLine("AUTH 123456", 0.9f, 40),
+                new OcrLine("CHECKERS", 0.9f, 55),
+                new OcrLine("TOTAL 15.00", 0.9f, 22)
+        ));
+        ReceiptDraft d = ReceiptFieldParser.parse(ocr, ReceiptCaptureMode.RECEIPT);
+        assertEquals("Checkers", d.merchantForComment);
+    }
 }

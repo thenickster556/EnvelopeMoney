@@ -1469,7 +1469,8 @@ public class MainActivity extends AppCompatActivity {
                 etAmount.setText(String.format(Locale.getDefault(), "%.2f", draft.totalAmount));
             }
         }
-        if (draft.merchantForComment != null && etComment != null) {
+        if (draft.merchantForComment != null && etComment != null
+                && etComment.getText().toString().trim().isEmpty()) {
             etComment.setText(draft.merchantForComment);
         }
         if (draft.dateYyyyMmDd != null && etDate != null) {
@@ -2871,7 +2872,8 @@ public class MainActivity extends AppCompatActivity {
             public void afterTextChanged(Editable s) {
                 if (splitViews.section.getVisibility() == View.VISIBLE
                         && !splitViews.hasMeaningfulInteraction) {
-                    applySplitDefaultAllocations(splitViews, parseAmountOrZero(s), false);
+                    applySplitDefaultAllocations(splitViews,
+                            parseAmountOrZero(s == null ? null : s.toString()), false);
                 }
                 updateSplitSectionSummary(splitViews);
             }
@@ -2983,7 +2985,8 @@ public class MainActivity extends AppCompatActivity {
             public void afterTextChanged(Editable s) {
                 if (transferViews.section.getVisibility() == View.VISIBLE
                         && !transferViews.hasMeaningfulInteraction) {
-                    applyTransferDefaultAllocations(transferViews, parseAmountOrZero(s), false);
+                    applyTransferDefaultAllocations(transferViews,
+                            parseAmountOrZero(s == null ? null : s.toString()), false);
                 }
                 updateTransferSectionSummary(transferViews);
             }
