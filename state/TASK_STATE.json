@@ -20,6 +20,12 @@
   ],
   "completed_tasks": [
     {
+      "id": "ocr-top-line-brand-fallback-2026-05",
+      "title": "Receipt OCR: top-line first-word fallback instead of Unknown merchant",
+      "status": "completed",
+      "intent": "guessMerchantFromTopLine; remove Unknown merchant; ReceiptFieldParserTest; docs + commit."
+    },
+    {
       "id": "ocr-brand-comment-2026-05",
       "title": "Receipt OCR: brand-only comment from top prominent store name",
       "status": "completed",

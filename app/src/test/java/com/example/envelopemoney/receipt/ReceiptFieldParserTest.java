@@ -229,4 +229,32 @@ public class ReceiptFieldParserTest {
         ReceiptDraft d = ReceiptFieldParser.parse(ocr, ReceiptCaptureMode.RECEIPT);
         assertEquals("Checkers", d.merchantForComment);
     }
+
+    @Test
+    public void guessMerchantFromTopLine_usesFirstWord() {
+        assertEquals("Walmart", ReceiptFieldParser.guessMerchantFromTopLine(Arrays.asList(
+                new OcrLine("WALMART SUPERCENTER #4821", 0.9f, 50)
+        )));
+    }
+
+    @Test
+    public void fallback_firstWordWhenNoScoredBrand() {
+        OcrResult ocr = new OcrResult(Arrays.asList(
+                new OcrLine("QT", 0.9f, 10),
+                new OcrLine("12.345 gal", 0.9f, 12),
+                new OcrLine("$45.67", 0.9f, 14)
+        ));
+        ReceiptDraft d = ReceiptFieldParser.parse(ocr, ReceiptCaptureMode.GAS);
+        assertEquals("Qt", d.merchantForComment);
+    }
+
+    @Test
+    public void noUnknownMerchantFallback() {
+        OcrResult ocr = new OcrResult(Arrays.asList(
+                new OcrLine("X", 0.9f),
+                new OcrLine("TOTAL 1.00", 0.9f)
+        ));
+        ReceiptDraft d = ReceiptFieldParser.parse(ocr, ReceiptCaptureMode.RECEIPT);
+        assertEquals("X", d.merchantForComment);
+    }
 }

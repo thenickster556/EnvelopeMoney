@@ -86,11 +86,10 @@ public final class ReceiptFieldParser {
         Double amount = pick.amount;
         float conf = pick.confidence;
         if (merchant == null || merchant.isEmpty()) {
-            if (m == ReceiptCaptureMode.GAS) {
-                merchant = "Gas";
-            } else {
-                merchant = "Unknown merchant";
-            }
+            merchant = guessMerchantFromTopLine(ocr.getLines());
+        }
+        if ((merchant == null || merchant.isEmpty()) && m == ReceiptCaptureMode.GAS) {
+            merchant = "Gas";
         }
 
         return new ReceiptDraft(merchant, amount, date, conf, sample);
@@ -169,9 +168,77 @@ public final class ReceiptFieldParser {
             }
         }
         if (bestIndex < 0) {
-            return null;
+            return guessMerchantFromTopLine(ocrLines);
         }
         return normalizeBrandDisplay(ocrLines.get(bestIndex).text);
+    }
+
+    /**
+     * Best-guess brand when heuristics find no scored candidate: first significant word on the
+     * topmost OCR line (receipts usually print the store name there).
+     */
+    @Nullable
+    static String guessMerchantFromTopLine(List<OcrLine> ocrLines) {
+        if (ocrLines == null || ocrLines.isEmpty()) {
+            return null;
+        }
+        for (OcrLine ocrLine : ocrLines) {
+            String line = ocrLine.text != null ? ocrLine.text.trim() : "";
+            if (line.isEmpty()) {
+                continue;
+            }
+            String word = firstSignificantWord(line);
+            if (word == null || word.isEmpty()) {
+                return normalizeBrandDisplay(line);
+            }
+            return normalizeMerchantDisplay(word);
+        }
+        return null;
+    }
+
+    @Nullable
+    private static String firstSignificantWord(String line) {
+        String cleaned = line.trim();
+        cleaned = WELCOME_PREFIX.matcher(cleaned).replaceFirst("");
+        cleaned = THANKS_SHOPPING_PREFIX.matcher(cleaned).replaceFirst("");
+        cleaned = cleaned.trim();
+        if (cleaned.isEmpty()) {
+            return null;
+        }
+        String[] tokens = cleaned.split("\\s+");
+        for (String token : tokens) {
+            String lettersOnly = token.replaceAll("[^\\p{L}0-9'&.-]", "");
+            if (lettersOnly.length() < 2) {
+                continue;
+            }
+            if (!lettersOnly.chars().anyMatch(Character::isLetter)) {
+                continue;
+            }
+            if (isSkipTopFallbackWord(lettersOnly)) {
+                continue;
+            }
+            return lettersOnly;
+        }
+        for (String token : tokens) {
+            String lettersOnly = token.replaceAll("[^\\p{L}0-9'&.-]", "");
+            if (!lettersOnly.isEmpty()) {
+                return lettersOnly;
+            }
+        }
+        return null;
+    }
+
+    private static boolean isSkipTopFallbackWord(String word) {
+        String lower = word.toLowerCase(Locale.US);
+        return "welcome".equals(lower)
+                || "to".equals(lower)
+                || "the".equals(lower)
+                || "thank".equals(lower)
+                || "you".equals(lower)
+                || "customer".equals(lower)
+                || "merchant".equals(lower)
+                || "copy".equals(lower)
+                || "receipt".equals(lower);
     }
 
     private static boolean isViableBrandCandidate(String line) {
