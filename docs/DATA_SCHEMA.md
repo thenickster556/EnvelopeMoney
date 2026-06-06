@@ -77,5 +77,5 @@ When `paydays_json` is non-empty **and** a pond has `accountBalance` set, `remai
 - Recurring is not supported for split purchases in v1 (dialog hides time/recurring on non-Spending tabs).
 
 ## Pond totals footer
-- **Reconciliation mode** (paydays configured + at least one Account): one line, three values — **In bank** (sum of accounts), **Still to deposit** (sum of `max(0, limit - account)` per pond), **Target** (sum of limits for those ponds). All amounts cent-rounded.
+- **Reconciliation mode** (paydays configured + at least one Account): one line, two values — **In bank** (sum of accounts), **Still to deposit** (sum of `max(0, limit - account)` per pond). Monthly **limit** is shown separately on each pond row / edit dialog (not repeated as Target). All amounts cent-rounded.
 - **Legacy** (otherwise): **Account (entered)** sum, **Remaining** sum, **Difference** when any Account exists; or Remaining only when none.

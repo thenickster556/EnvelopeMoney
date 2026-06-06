@@ -20,6 +20,12 @@
   ],
   "completed_tasks": [
     {
+      "id": "remove-reconcile-target-label-2026-05",
+      "title": "Remove duplicate Target from pond reconciliation UI",
+      "status": "completed",
+      "intent": "pond_*_reconcile strings + MainActivity 3 sites; docs/README updated."
+    },
+    {
       "id": "ocr-top-line-brand-fallback-2026-05",
       "title": "Receipt OCR: top-line first-word fallback instead of Unknown merchant",
       "status": "completed",

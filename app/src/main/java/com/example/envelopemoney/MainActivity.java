@@ -1848,8 +1848,7 @@ public class MainActivity extends AppCompatActivity {
             if (reconcile.isActive()) {
                 amounts += "\n" + getString(R.string.pond_row_reconcile,
                         reconcile.getInBank(),
-                        reconcile.getStillToDepositForMonth(),
-                        reconcile.getMonthTarget());
+                        reconcile.getStillToDepositForMonth());
             } else if (envelope.getAccountBalance() != null) {
                 amounts += String.format(Locale.getDefault(), " | Account: $%.2f",
                         envelope.getAccountBalance());
@@ -4110,7 +4109,7 @@ public class MainActivity extends AppCompatActivity {
                     limit, account, paydays, calendarForCurrentMonth(), Calendar.getInstance());
             preview.setVisibility(View.VISIBLE);
             preview.setText(getString(R.string.pond_edit_reconcile_preview,
-                    r.getInBank(), r.getStillToDepositForMonth(), r.getMonthTarget()));
+                    r.getInBank(), r.getStillToDepositForMonth()));
         } catch (NumberFormatException ignored) {
             preview.setVisibility(View.GONE);
         }
@@ -4157,7 +4156,6 @@ public class MainActivity extends AppCompatActivity {
         boolean reconcileFooter = !paydays.isEmpty();
         double sumInBank = 0d;
         double sumStillToDeposit = 0d;
-        double sumTarget = 0d;
         int acctCount = 0;
         for (Envelope e : envelopes) {
             if (e.getAccountBalance() == null) {
@@ -4168,7 +4166,6 @@ public class MainActivity extends AppCompatActivity {
             if (r.isActive()) {
                 sumInBank += r.getInBank();
                 sumStillToDeposit += r.getStillToDepositForMonth();
-                sumTarget += r.getMonthTarget();
             }
         }
         if (acctCount == 0) {
@@ -4178,8 +4175,7 @@ public class MainActivity extends AppCompatActivity {
         if (reconcileFooter) {
             tvPondTotalsFooter.setText(getString(R.string.pond_footer_reconcile,
                     MoneyMath.roundToCents(sumInBank),
-                    MoneyMath.roundToCents(sumStillToDeposit),
-                    MoneyMath.roundToCents(sumTarget)));
+                    MoneyMath.roundToCents(sumStillToDeposit)));
             return;
         }
         double sumAcct = 0d;

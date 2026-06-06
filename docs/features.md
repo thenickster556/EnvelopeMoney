@@ -19,7 +19,7 @@
 ## Bills days and paydays
 - Users configure recurring **days of each month** (1–31) from the **calendar icon on the custom top bar** via a **Bills days / Paydays** tabbed dialog (not a full month calendar).
 - **Bills days** drive the bills-period transaction filter only.
-- **Paydays** drive optional **bank reconciliation** when a pond has **Account (bank slice)** entered: **Remaining** can auto-sync to **still to deposit** (`max(0, monthly limit − account)`), cent-rounded. Footer and edit-pond preview show **one line, three values**: In bank | Still to deposit | Target.
+- **Paydays** drive optional **bank reconciliation** when a pond has **Account (bank slice)** entered: **Remaining** can auto-sync to **still to deposit** (`max(0, monthly limit − account)`), cent-rounded. Footer, pond row, and edit-pond preview show **one line, two values**: In bank | Still to deposit (monthly **Limit** stays on the pond row / edit limit field—no duplicate Target).
 - A separate **bills-period filter** icon next to the transfers toggle sets the **end date** to **today**. With **one** configured bills day, the **start date** is always that day in the **previous** calendar month (clamped), e.g. bills on the 12th and today May 13 → April 12 (not May 12). With **multiple** bills days, the start is the latest bills day on or before today, walking to prior months when needed. Toggling off restores the previously saved date range.
 - Changing the visible month clears the bills-period filter.
 
