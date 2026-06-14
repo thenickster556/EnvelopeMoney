@@ -20,6 +20,12 @@
   ],
   "completed_tasks": [
     {
+      "id": "fix-no-pond-found-false-positive-2026-05",
+      "title": "Fix false 'No pond found' on transaction save",
+      "status": "completed",
+      "intent": "PondLookup + requireSelectedPond; error string; PondLookupTest; features/README."
+    },
+    {
       "id": "remove-reconcile-target-label-2026-05",
       "title": "Remove duplicate Target from pond reconciliation UI",
       "status": "completed",

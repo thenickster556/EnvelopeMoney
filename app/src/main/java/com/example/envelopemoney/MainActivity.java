@@ -1097,8 +1097,9 @@ public class MainActivity extends AppCompatActivity {
         bindDialogDropdownOptions(spinnerEnvelope, getEnvelopeNames());
         String savedSourceEnvelope = PrefManager.getLastAddTransactionEnvelope(this);
         List<String> envelopeNames = getEnvelopeNames();
-        if (savedSourceEnvelope != null && envelopeNames.contains(savedSourceEnvelope)) {
-            spinnerEnvelope.setText(savedSourceEnvelope, false);
+        Envelope savedSourcePond = PondLookup.findByName(envelopes, savedSourceEnvelope);
+        if (savedSourcePond != null) {
+            spinnerEnvelope.setText(savedSourcePond.getName(), false);
         } else if (!envelopeNames.isEmpty()) {
             spinnerEnvelope.setText(envelopeNames.get(0), false);
         }
@@ -1312,11 +1313,11 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 if (typeTab == TAB_TYPE_TRANSFER) {
-                    String envelopeName = getSelectedDropdownValue(spinnerEnvelope);
-                    if (envelopeName == null || envelopeName.isEmpty()) {
-                        showError("Select a pond");
+                    Envelope env = requireSelectedPond(spinnerEnvelope);
+                    if (env == null) {
                         return;
                     }
+                    String envelopeName = env.getName();
                     double amount = Double.parseDouble(etAmount.getText().toString());
                     Transaction newTransaction = new Transaction(envelopeName, amount, date, comment);
                     if (receiptUri != null && !receiptUri.isEmpty()) {
@@ -1327,11 +1328,6 @@ public class MainActivity extends AppCompatActivity {
                     if (!validation.isValid()) {
                         transferViews.saveAttempted = true;
                         updateTransferSectionSummary(transferViews);
-                        return;
-                    }
-                    Envelope env = findEnvelopeByName(envelopeName);
-                    if (env == null) {
-                        showError("Envelope not found");
                         return;
                     }
                     PrefManager.setLastAddTransactionEnvelope(MainActivity.this, envelopeName);
@@ -1345,11 +1341,11 @@ public class MainActivity extends AppCompatActivity {
                     return;
                 }
 
-                String envelopeName = getSelectedDropdownValue(spinnerEnvelope);
-                if (envelopeName == null || envelopeName.isEmpty()) {
-                    showError("Select a pond");
+                Envelope env = requireSelectedPond(spinnerEnvelope);
+                if (env == null) {
                     return;
                 }
+                String envelopeName = env.getName();
                 double amount = Double.parseDouble(etAmount.getText().toString());
 
                 Transaction newTransaction = new Transaction(envelopeName, amount, date, comment);
@@ -1366,12 +1362,6 @@ public class MainActivity extends AppCompatActivity {
                     newTransaction.setRecurringDays(selectedRecurringDays);
                     newTransaction.setRecurringSeriesId(UUID.randomUUID().toString());
                     newTransaction.setRecurringTemplate(true);
-                }
-
-                Envelope env = findEnvelopeByName(envelopeName);
-                if (env == null) {
-                    showError("Envelope not found");
-                    return;
                 }
 
                 PrefManager.setLastAddTransactionEnvelope(MainActivity.this, envelopeName);
@@ -2144,9 +2134,9 @@ public class MainActivity extends AppCompatActivity {
 
         bindDialogDropdownOptions(spinnerEnvelope, getEnvelopeNames());
 
-        int envelopeIndex = getEnvelopeNames().indexOf(editTransaction.getEnvelopeName());
-        if (envelopeIndex >= 0) {
-            spinnerEnvelope.setText(getEnvelopeNames().get(envelopeIndex), false);
+        Envelope envelopeForEdit = PondLookup.findByName(envelopes, editTransaction.getEnvelopeName());
+        if (envelopeForEdit != null) {
+            spinnerEnvelope.setText(envelopeForEdit.getName(), false);
         }
 
         List<Integer> selectedRecurringDays = new ArrayList<>(editTransaction.getRecurringDays());
@@ -2412,11 +2402,11 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 String oldEnvelopeName = editTransaction.getEnvelopeName();
-                String newEnvelopeName = getSelectedDropdownValue(spinnerEnvelope);
-                if (newEnvelopeName == null || newEnvelopeName.isEmpty()) {
-                    showError("Select a pond");
+                Envelope selectedPond = requireSelectedPond(spinnerEnvelope);
+                if (selectedPond == null) {
                     return;
                 }
+                String newEnvelopeName = selectedPond.getName();
                 double newAmount = Double.parseDouble(etAmount.getText().toString());
 
                 if (isTransactionDialogRecurringSelected(tabTransactionType, tabTransactionTime) && selectedRecurringDays.isEmpty()) {
@@ -2545,10 +2535,19 @@ public class MainActivity extends AppCompatActivity {
 
 
     private Envelope findEnvelopeByName(String envelopeName) {
-        for (Envelope env : envelopes) {
-            if (env.getName().equals(envelopeName)) {
-                return env;
-            }
+        return PondLookup.findByName(envelopes, envelopeName);
+    }
+
+    @Nullable
+    private Envelope requireSelectedPond(@Nullable MaterialAutoCompleteTextView dropdown) {
+        Envelope pond = PondLookup.findByName(envelopes, getSelectedDropdownValue(dropdown));
+        if (pond != null) {
+            return pond;
+        }
+        if (getSelectedDropdownValue(dropdown) == null) {
+            showError("Select a pond");
+        } else {
+            showError(getString(R.string.error_no_pond_found));
         }
         return null;
     }
@@ -2992,6 +2991,7 @@ public class MainActivity extends AppCompatActivity {
         });
         sourceSpinner.setOnItemClickListener((parent, view, position, id) -> {
             String selectedSource = (String) parent.getItemAtPosition(position);
+            sourceSpinner.setText(selectedSource, false);
             if (transferViews.section.getVisibility() == View.VISIBLE) {
                 markTransferInteraction(transferViews);
             }

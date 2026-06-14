@@ -14,6 +14,7 @@
     <string name="ponds_section_title">Ponds</string>
     <string name="transaction_history_title">Transaction History</string>
     <string name="select_pond_label">Select pond</string>
+    <string name="error_no_pond_found">No pond found</string>
     <string name="pond_account_label">Account (bank slice)</string>
     <string name="pond_account_hint">Optional — cash in bank for this pond</string>
     <string name="pond_footer_partial">Remaining (all ponds): $%.2f</string>
