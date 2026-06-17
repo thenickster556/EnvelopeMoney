@@ -2,11 +2,9 @@ package com.example.envelopemoney.receipt;
 
 import android.content.Context;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.net.Uri;
 
 import java.io.IOException;
-import java.io.InputStream;
 
 /**
  * Photo picker URIs ({@code picker_get_content}) cannot be delegated to another activity with URI grants.
@@ -25,11 +23,8 @@ public final class ReceiptPickerUriNormalizer {
         if (!s.contains("picker_get_content")) {
             return uri;
         }
-        try (InputStream is = context.getContentResolver().openInputStream(uri)) {
-            if (is == null) {
-                throw new IOException("openInputStream null");
-            }
-            Bitmap bmp = BitmapFactory.decodeStream(is);
+        try {
+            Bitmap bmp = ReceiptExifBitmapLoader.decodeUpright(context, uri);
             if (bmp == null) {
                 throw new IOException("decode bitmap failed");
             }

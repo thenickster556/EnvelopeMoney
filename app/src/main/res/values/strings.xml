@@ -12,6 +12,15 @@
     <string name="menu_slideshow">Slideshow</string>
 
     <string name="ponds_section_title">Ponds</string>
+    <string name="pond_selected_count">%1$d selected</string>
+    <string name="pond_select_all">Select all</string>
+    <string name="pond_unselect_all">Unselect all</string>
+    <string name="pond_reorder">Reorder</string>
+    <string name="pond_reorder_done">Done</string>
+    <string name="pond_payday_progress">Payday progress: %1$d/%2$d reached</string>
+    <string name="content_desc_pond_drag_handle">Drag to reorder pond</string>
+    <string name="content_desc_pond_select_toggle">Select or unselect all ponds</string>
+    <string name="content_desc_pond_reorder">Reorder ponds</string>
     <string name="transaction_history_title">Transaction History</string>
     <string name="select_pond_label">Select pond</string>
     <string name="error_no_pond_found">No pond found</string>

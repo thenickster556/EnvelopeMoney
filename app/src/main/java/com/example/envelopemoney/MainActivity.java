@@ -5,7 +5,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -17,7 +16,7 @@ import android.graphics.PorterDuff;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.view.Gravity;
-import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.TouchDelegate;
 import android.view.View;
 import android.view.ViewGroup;
@@ -34,12 +33,14 @@ import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
+import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.Spinner;
 import android.widget.TextView;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AlertDialog;
@@ -47,6 +48,7 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import com.example.envelopemoney.receipt.PaddleOcrAdapter;
 import com.example.envelopemoney.receipt.ReceiptCaptureActivity;
+import com.example.envelopemoney.receipt.ReceiptExifBitmapLoader;
 import com.example.envelopemoney.receipt.ReceiptPickerUriNormalizer;
 import com.example.envelopemoney.receipt.ReceiptPreviewActivity;
 import com.example.envelopemoney.receipt.ReceiptCaptureMode;
@@ -54,10 +56,14 @@ import com.example.envelopemoney.receipt.ReceiptDraft;
 import com.example.envelopemoney.receipt.ReceiptOcrPipeline;
 import com.example.envelopemoney.receipt.ReceiptRowUi;
 import com.example.envelopemoney.ui.BoundedNestedScrollView;
+import com.google.android.material.button.MaterialButton;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.slider.Slider;
 import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.textfield.MaterialAutoCompleteTextView;
+import androidx.recyclerview.widget.ItemTouchHelper;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.drawable.DrawableCompat;
 
@@ -103,13 +109,19 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private final Set<String> expandedSplitGroupIds = new HashSet<>();
-    private ListView listViewEnvelopes;
+    private RecyclerView recyclerViewEnvelopes;
     private List<Envelope> envelopes;
     private boolean monthRolloverInProgress = false;
     private ListView listViewTransactions;
     private TransactionAdapter transactionAdapter;
     private List<Transaction> allTransactions = new ArrayList<>();
     private EnvelopeAdapter envelopeAdapter;
+    private TextView tvPondSelectedCount;
+    private MaterialButton btnPondSelectToggle;
+    private MaterialButton btnPondReorder;
+    private boolean pondReorderMode = false;
+    @Nullable
+    private ItemTouchHelper pondItemTouchHelper;
     private TextView tvTransactionsTotal;
     private LinearLayout layoutTransferTotals;
     private Spinner spinnerTransferTotals;
@@ -619,6 +631,14 @@ public class MainActivity extends AppCompatActivity {
 
                 @Override
                 public void onStopTrackingTouch(Slider slider) {
+                    double trueMax = Math.max(0d, parseAmountOrZero(activeSplitTotalInput) - splitAllocatedExcluding(SplitPurchaseBucketRowController.this));
+                    double sliderMax = TransferBucketUiHelper.computeSliderMaximum(trueMax, TRANSFER_STEP_AMOUNT);
+                    double resolved = TransferBucketUiHelper.resolveAmountAtSliderMax(
+                            slider.getValue(), sliderMax, trueMax);
+                    if (Math.abs(resolved - allocation.getAmount()) > 0.0001d) {
+                        setAmountInternal(resolved, true);
+                        updateSplitSectionSummary(activeSplitDialogViews);
+                    }
                 }
             });
             amountSlider.addOnChangeListener((slider, value, fromUser) -> {
@@ -626,7 +646,10 @@ public class MainActivity extends AppCompatActivity {
                     return;
                 }
                 markSplitInteraction(activeSplitDialogViews);
-                setAmountInternal(value, true);
+                double trueMax = Math.max(0d, parseAmountOrZero(activeSplitTotalInput) - splitAllocatedExcluding(SplitPurchaseBucketRowController.this));
+                double sliderMax = TransferBucketUiHelper.computeSliderMaximum(trueMax, TRANSFER_STEP_AMOUNT);
+                double resolved = TransferBucketUiHelper.resolveAmountAtSliderMax(value, sliderMax, trueMax);
+                setAmountInternal(resolved, true);
                 updateSplitSectionSummary(activeSplitDialogViews);
             });
             manualAmountView.addTextChangedListener(new TextWatcher() {
@@ -746,7 +769,10 @@ public class MainActivity extends AppCompatActivity {
         btnAddEnvelope.setOnClickListener(v -> showEnvelopeDialog(null));
 
         btnToggleEnvelopes = findViewById(R.id.btnToggleEnvelopes);
-        listViewEnvelopes = findViewById(R.id.listViewEnvelopes);
+        recyclerViewEnvelopes = findViewById(R.id.recyclerViewEnvelopes);
+        tvPondSelectedCount = findViewById(R.id.tvPondSelectedCount);
+        btnPondSelectToggle = findViewById(R.id.btnPondSelectToggle);
+        btnPondReorder = findViewById(R.id.btnPondReorder);
         layoutEnvelopesSection = findViewById(R.id.layoutEnvelopesSection);
         envelopesCollapsed = PrefManager.isEnvelopesCollapsed(this);
         applyEnvelopesCollapsedState();
@@ -756,6 +782,8 @@ public class MainActivity extends AppCompatActivity {
             PrefManager.setEnvelopesCollapsed(MainActivity.this, envelopesCollapsed);
             applyEnvelopesCollapsedState();
         });
+        btnPondSelectToggle.setOnClickListener(v -> toggleAllPondSelection());
+        btnPondReorder.setOnClickListener(v -> togglePondReorderMode());
         listViewTransactions = findViewById(R.id.listViewTransactions);
         layoutTransferTotals = findViewById(R.id.layoutTransferTotals);
         spinnerTransferTotals = findViewById(R.id.spinnerTransferTotals);
@@ -795,7 +823,10 @@ public class MainActivity extends AppCompatActivity {
         transactionAdapter = new TransactionAdapter(this, allTransactions);
         listViewTransactions.setAdapter(transactionAdapter);
         envelopeAdapter = new EnvelopeAdapter(this, envelopes);
-        listViewEnvelopes.setAdapter(envelopeAdapter);
+        recyclerViewEnvelopes.setLayoutManager(new LinearLayoutManager(this));
+        recyclerViewEnvelopes.setAdapter(envelopeAdapter);
+        setupPondDragHelper();
+        updatePondHeaderControls();
 
 
 
@@ -990,7 +1021,9 @@ public class MainActivity extends AppCompatActivity {
             PrefManager.saveEnvelopes(this, envelopes);
             if (envelopeAdapter != null && transactionAdapter != null) {
                 envelopeAdapter = new EnvelopeAdapter(this, envelopes);
-                listViewEnvelopes.setAdapter(envelopeAdapter);
+                recyclerViewEnvelopes.setAdapter(envelopeAdapter);
+                setupPondDragHelper();
+                updatePondHeaderControls();
                 updateDisplay();
             }
         } catch (RuntimeException exception) {
@@ -1406,8 +1439,8 @@ public class MainActivity extends AppCompatActivity {
                 syncReceiptActionUi(receiptDialogHostView);
             });
             Bitmap bmp;
-            try (java.io.InputStream is = getContentResolver().openInputStream(finalUri)) {
-                bmp = is != null ? BitmapFactory.decodeStream(is) : null;
+            try {
+                bmp = ReceiptExifBitmapLoader.decodeUpright(MainActivity.this, finalUri);
             } catch (java.io.IOException | SecurityException e) {
                 Log.e("EnvelopeMoney", "receipt decode", e);
                 bmp = null;
@@ -1687,6 +1720,7 @@ public class MainActivity extends AppCompatActivity {
         if (transactionAdapter != null) {
             updateTransactionHistory();
         }
+        updatePondHeaderControls();
         updatePondTotalsFooter();
     }
 
@@ -1810,54 +1844,198 @@ public class MainActivity extends AppCompatActivity {
 
 
 
-    private class EnvelopeAdapter extends ArrayAdapter<Envelope> {
-        public EnvelopeAdapter(Context context, List<Envelope> envelopes) {
-            super(context, R.layout.item_envelope, envelopes);
+    private void setupPondDragHelper() {
+        if (recyclerViewEnvelopes == null) {
+            return;
+        }
+        ItemTouchHelper.Callback callback = new ItemTouchHelper.SimpleCallback(
+                ItemTouchHelper.UP | ItemTouchHelper.DOWN, 0) {
+            @Override
+            public boolean isLongPressDragEnabled() {
+                return pondReorderMode;
+            }
+
+            @Override
+            public boolean onMove(@NonNull RecyclerView recyclerView,
+                                    @NonNull RecyclerView.ViewHolder viewHolder,
+                                    @NonNull RecyclerView.ViewHolder target) {
+                int from = viewHolder.getBindingAdapterPosition();
+                int to = target.getBindingAdapterPosition();
+                if (from == RecyclerView.NO_POSITION || to == RecyclerView.NO_POSITION) {
+                    return false;
+                }
+                Collections.swap(envelopes, from, to);
+                envelopeAdapter.notifyItemMoved(from, to);
+                return true;
+            }
+
+            @Override
+            public void onSwiped(@NonNull RecyclerView.ViewHolder viewHolder, int direction) {
+            }
+
+            @Override
+            public void onSelectedChanged(@Nullable RecyclerView.ViewHolder viewHolder, int actionState) {
+                super.onSelectedChanged(viewHolder, actionState);
+                if (viewHolder != null && actionState == ItemTouchHelper.ACTION_STATE_DRAG) {
+                    viewHolder.itemView.setAlpha(0.92f);
+                    viewHolder.itemView.setElevation(12f);
+                }
+            }
+
+            @Override
+            public void clearView(@NonNull RecyclerView recyclerView,
+                                  @NonNull RecyclerView.ViewHolder viewHolder) {
+                super.clearView(recyclerView, viewHolder);
+                viewHolder.itemView.setAlpha(1f);
+                viewHolder.itemView.setElevation(0f);
+                PrefManager.saveEnvelopes(MainActivity.this, envelopes);
+            }
+        };
+        if (pondItemTouchHelper != null) {
+            pondItemTouchHelper.attachToRecyclerView(null);
+        }
+        pondItemTouchHelper = new ItemTouchHelper(callback);
+        pondItemTouchHelper.attachToRecyclerView(recyclerViewEnvelopes);
+    }
+
+    private int countSelectedPonds() {
+        int count = 0;
+        for (Envelope envelope : envelopes) {
+            if (envelope.isSelected()) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private void updatePondHeaderControls() {
+        if (tvPondSelectedCount == null || btnPondSelectToggle == null || btnPondReorder == null) {
+            return;
+        }
+        int selected = countSelectedPonds();
+        int total = envelopes.size();
+        tvPondSelectedCount.setText(getString(R.string.pond_selected_count, selected));
+        boolean anySelected = selected > 0;
+        btnPondSelectToggle.setText(anySelected ? R.string.pond_unselect_all : R.string.pond_select_all);
+        btnPondSelectToggle.setEnabled(total > 0);
+        btnPondReorder.setText(pondReorderMode ? R.string.pond_reorder_done : R.string.pond_reorder);
+        btnPondReorder.setEnabled(total > 1);
+        if (envelopeAdapter != null) {
+            envelopeAdapter.notifyDataSetChanged();
+        }
+    }
+
+    private void toggleAllPondSelection() {
+        if (envelopes.isEmpty()) {
+            return;
+        }
+        boolean selectAll = countSelectedPonds() == 0;
+        for (Envelope envelope : envelopes) {
+            envelope.setSelected(selectAll);
+        }
+        PrefManager.saveEnvelopes(this, envelopes);
+        updateTransactionHistory();
+        updatePondHeaderControls();
+    }
+
+    private void togglePondReorderMode() {
+        if (envelopes.size() <= 1) {
+            return;
+        }
+        pondReorderMode = !pondReorderMode;
+        updatePondHeaderControls();
+    }
+
+    private class EnvelopeAdapter extends RecyclerView.Adapter<EnvelopeAdapter.EnvelopeViewHolder> {
+        private final LayoutInflater inflater;
+
+        EnvelopeAdapter(Context context, List<Envelope> envelopes) {
+            this.inflater = LayoutInflater.from(context);
+        }
+
+        @NonNull
+        @Override
+        public EnvelopeViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+            View row = inflater.inflate(R.layout.item_envelope, parent, false);
+            return new EnvelopeViewHolder(row);
         }
 
         @Override
-        public View getView(int position, View convertView, ViewGroup parent) {
-            Envelope envelope = getItem(position);
-
-            if (convertView == null) {
-                convertView = LayoutInflater.from(getContext())
-                        .inflate(R.layout.item_envelope, parent, false);
-            }
-
-            CheckBox cbSelect = convertView.findViewById(R.id.cbSelect);
-            TextView tvName = convertView.findViewById(R.id.tvName);
-            TextView tvAmounts = convertView.findViewById(R.id.tvAmounts);
-            ImageButton btnOptions = convertView.findViewById(R.id.btnOptions);
-
-            tvName.setText(envelope.getName());
-            String amounts = String.format(Locale.getDefault(),
-                    "Limit: $%.2f | Remaining: $%.2f",
-                    envelope.getLimit(),
-                    envelope.getRemaining());
-            PondBankReconciliationHelper.Result reconcile = computePondReconciliation(envelope);
-            if (reconcile.isActive()) {
-                amounts += "\n" + getString(R.string.pond_row_reconcile,
-                        reconcile.getInBank(),
-                        reconcile.getStillToDepositForMonth());
-            } else if (envelope.getAccountBalance() != null) {
-                amounts += String.format(Locale.getDefault(), " | Account: $%.2f",
-                        envelope.getAccountBalance());
-            }
-            tvAmounts.setText(amounts);
-
-
-            cbSelect.setOnCheckedChangeListener(null);
-            cbSelect.setChecked(envelope.isSelected());
-            cbSelect.setOnCheckedChangeListener((buttonView, isChecked) -> {
-                envelope.setSelected(isChecked);
-                updateTransactionHistory();
-                PrefManager.saveEnvelopes(getContext(), envelopes);
-            });
-
-            btnOptions.setOnClickListener(v -> showEnvelopeOptionsDialog(position));
-            return convertView;
+        public void onBindViewHolder(@NonNull EnvelopeViewHolder holder, int position) {
+            Envelope envelope = envelopes.get(position);
+            holder.bind(envelope, position);
         }
 
+        @Override
+        public int getItemCount() {
+            return envelopes.size();
+        }
+
+        class EnvelopeViewHolder extends RecyclerView.ViewHolder {
+            private final CheckBox cbSelect;
+            private final TextView tvName;
+            private final TextView tvAmounts;
+            private final ImageButton btnOptions;
+            private final ImageView ivDragHandle;
+
+            EnvelopeViewHolder(@NonNull View itemView) {
+                super(itemView);
+                cbSelect = itemView.findViewById(R.id.cbSelect);
+                tvName = itemView.findViewById(R.id.tvName);
+                tvAmounts = itemView.findViewById(R.id.tvAmounts);
+                btnOptions = itemView.findViewById(R.id.btnOptions);
+                ivDragHandle = itemView.findViewById(R.id.ivPondDragHandle);
+            }
+
+            void bind(Envelope envelope, int position) {
+                tvName.setText(envelope.getName());
+                String amounts = String.format(Locale.getDefault(),
+                        "Limit: $%.2f | Remaining: $%.2f",
+                        envelope.getLimit(),
+                        envelope.getRemaining());
+                PondBankReconciliationHelper.Result reconcile = computePondReconciliation(envelope);
+                if (reconcile.isActive()) {
+                    amounts += "\n" + getString(R.string.pond_row_reconcile,
+                            reconcile.getInBank(),
+                            reconcile.getStillToDepositForMonth());
+                    if (reconcile.getPaydaysInMonth() > 0) {
+                        amounts += "\n" + getString(R.string.pond_payday_progress,
+                                reconcile.getPaydaysPassed(),
+                                reconcile.getPaydaysInMonth());
+                    }
+                } else if (envelope.getAccountBalance() != null) {
+                    amounts += String.format(Locale.getDefault(), " | Account: $%.2f",
+                            envelope.getAccountBalance());
+                }
+                tvAmounts.setText(amounts);
+
+                cbSelect.setOnCheckedChangeListener(null);
+                cbSelect.setChecked(envelope.isSelected());
+                cbSelect.setOnCheckedChangeListener((buttonView, isChecked) -> {
+                    envelope.setSelected(isChecked);
+                    updateTransactionHistory();
+                    PrefManager.saveEnvelopes(MainActivity.this, envelopes);
+                    updatePondHeaderControls();
+                });
+
+                ivDragHandle.setVisibility(pondReorderMode ? View.VISIBLE : View.GONE);
+                btnOptions.setEnabled(!pondReorderMode);
+                btnOptions.setAlpha(pondReorderMode ? 0.4f : 1f);
+                btnOptions.setOnClickListener(v -> {
+                    if (!pondReorderMode) {
+                        showEnvelopeOptionsDialog(position);
+                    }
+                });
+                ivDragHandle.setOnTouchListener((v, event) -> {
+                    if (pondReorderMode && pondItemTouchHelper != null
+                            && event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                        pondItemTouchHelper.startDrag(this);
+                        return true;
+                    }
+                    return false;
+                });
+            }
+        }
     }
 
     // Rest of helper methods (showEnvelopeOptionsDialog, showEnvelopeDialog,

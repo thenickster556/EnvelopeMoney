@@ -54,8 +54,13 @@ public final class ReceiptFieldParser {
             "(?i)^thank\\s+you\\s+for\\s+shopping\\s+at\\s+");
     private static final Pattern TRAILING_STORE_ID = Pattern.compile(
             "(?i)\\s+(store\\s*#?|#|no\\.?)\\s*\\d+\\s*$");
+    private static final Pattern ORDER_OR_POINTS_LINE = Pattern.compile(
+            "(?i)\\b(order\\s*#|order\\s+number|points\\s*\\d|rewards\\s*\\d|invoice\\s*#|trans\\s*#|ref\\s*#)\\b");
+    private static final Pattern SURVEY_OR_POLICY_LINE = Pattern.compile(
+            "(?i)\\b(survey|return\\s+policy|tell\\s+us|save\\s+\\d+%|visit\\s+us\\s+at)\\b");
 
     private static final int BRAND_SCAN_TOP_LINES = 6;
+    private static final int MAX_BRAND_WORDS = 2;
     private static final int MAX_BRAND_DISPLAY_LENGTH = 40;
 
     private ReceiptFieldParser() {
@@ -245,6 +250,12 @@ public final class ReceiptFieldParser {
         if (line.length() < 3 || line.length() > 80) {
             return false;
         }
+        if (countWords(line) > 8) {
+            return false;
+        }
+        if (SURVEY_OR_POLICY_LINE.matcher(line).find()) {
+            return false;
+        }
         if (TOTAL_LABEL.matcher(line).find() || SUBTOTAL_OR_TAX.matcher(line).find()) {
             return false;
         }
@@ -304,6 +315,9 @@ public final class ReceiptFieldParser {
         if (len > 60) {
             return -1;
         }
+        if (countWords(line) > 4) {
+            score -= 20;
+        }
 
         int score = letters * 2 - digits * 3;
         if (lineIndex == 0) {
@@ -337,10 +351,39 @@ public final class ReceiptFieldParser {
         cleaned = THANKS_SHOPPING_PREFIX.matcher(cleaned).replaceFirst("");
         cleaned = TRAILING_STORE_ID.matcher(cleaned).replaceFirst("");
         cleaned = cleaned.trim();
+        cleaned = trimToBrandWords(cleaned);
         if (cleaned.length() > MAX_BRAND_DISPLAY_LENGTH) {
             cleaned = cleaned.substring(0, MAX_BRAND_DISPLAY_LENGTH).trim();
         }
         return normalizeMerchantDisplay(cleaned);
+    }
+
+    static String trimToBrandWords(String cleaned) {
+        if (cleaned == null || cleaned.isEmpty()) {
+            return cleaned;
+        }
+        String[] words = cleaned.split("\\s+");
+        if (words.length <= MAX_BRAND_WORDS) {
+            return cleaned;
+        }
+        if (words.length == 3 && looksAllCapsish(cleaned) && cleaned.length() <= 28) {
+            return cleaned;
+        }
+        StringBuilder b = new StringBuilder();
+        for (int i = 0; i < words.length && i < MAX_BRAND_WORDS; i++) {
+            if (i > 0) {
+                b.append(' ');
+            }
+            b.append(words[i]);
+        }
+        return b.toString();
+    }
+
+    private static int countWords(String line) {
+        if (line == null || line.trim().isEmpty()) {
+            return 0;
+        }
+        return line.trim().split("\\s+").length;
     }
 
     static String normalizeMerchantDisplay(String line) {
@@ -427,8 +470,13 @@ public final class ReceiptFieldParser {
         }
 
         List<Double> candidates = new ArrayList<>();
-        for (String line : lines) {
+        List<Integer> candidateScores = new ArrayList<>();
+        for (int i = 0; i < lines.size(); i++) {
+            String line = lines.get(i);
             if (mode == ReceiptCaptureMode.GAS && GAS_GALLON.matcher(line).find()) {
+                continue;
+            }
+            if (shouldSkipFallbackMoneyLine(line, mode)) {
                 continue;
             }
             if (mode == ReceiptCaptureMode.RESTAURANT && SUBTOTAL_OR_TAX.matcher(line).find()
@@ -440,6 +488,7 @@ public final class ReceiptFieldParser {
                 Double v = parseMoneyGroup(m);
                 if (v != null && v > 0 && v < 100_000) {
                     candidates.add(v);
+                    candidateScores.add(scoreFallbackMoneyLine(line, m, i, lines.size(), mode));
                 }
             }
         }
@@ -448,14 +497,48 @@ public final class ReceiptFieldParser {
             return new AmountPick(null, 0.2f);
         }
 
-        if (mode == ReceiptCaptureMode.GAS || mode == ReceiptCaptureMode.AUTO) {
-            double max = Collections.max(candidates);
-            return new AmountPick(max, 0.55f);
+        int bestIndex = 0;
+        for (int i = 1; i < candidates.size(); i++) {
+            if (candidateScores.get(i) > candidateScores.get(bestIndex)) {
+                bestIndex = i;
+            }
         }
+        double best = candidates.get(bestIndex);
+        float conf = candidateScores.get(bestIndex) >= 40 ? 0.72f : 0.55f;
+        return new AmountPick(best, conf);
+    }
 
-        // Restaurant / receipt: prefer largest remaining candidate
-        double max = Collections.max(candidates);
-        return new AmountPick(max, 0.5f);
+    private static boolean shouldSkipFallbackMoneyLine(String line, ReceiptCaptureMode mode) {
+        if (ORDER_OR_POINTS_LINE.matcher(line).find() && !TOTAL_LABEL.matcher(line).find()) {
+            return true;
+        }
+        if (PHONE.matcher(line).find() && !TOTAL_LABEL.matcher(line).find()) {
+            return true;
+        }
+        return ISO_DATE.matcher(line).find() || US_DATE.matcher(line).find();
+    }
+
+    private static int scoreFallbackMoneyLine(String line, Matcher moneyMatch, int lineIndex, int lineCount,
+                                              ReceiptCaptureMode mode) {
+        int score = lineIndex;
+        if (moneyMatch.group(1) != null && !moneyMatch.group(1).isEmpty()) {
+            score += 50;
+        }
+        if (TOTAL_LINE_STRONG.matcher(line).find()) {
+            score += 80;
+        } else if (TOTAL_LABEL.matcher(line).find()) {
+            score += 60;
+        }
+        if (lineIndex >= lineCount / 2) {
+            score += 25;
+        }
+        if (ORDER_OR_POINTS_LINE.matcher(line).find()) {
+            score -= 100;
+        }
+        if (mode == ReceiptCaptureMode.RESTAURANT && isExplicitTipLine(line)) {
+            score -= 10;
+        }
+        return score;
     }
 
   /** Strong / weak total labels scanned from the bottom (final charge is usually last). */

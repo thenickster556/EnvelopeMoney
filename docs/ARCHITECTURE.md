@@ -13,7 +13,7 @@ Mountain Money (package `com.example.envelopemoney`) is a single-activity Androi
 - `BillsDayAnchor`
   - Pure helper for bills-period filter start (unit-tested). **One** configured bills day → that day in the **previous** calendar month (clamped). **Multiple** days → latest bills day on or before today, walking backward by month when needed.
 - `MoneyMath` / `PondBankReconciliationHelper`
-  - Cent-rounded bank reconciliation (`roundToCents`, 2 dp). When global paydays and per-pond Account are set, `remaining` can auto-sync to **still to deposit** (`max(0, limit - account)`). Footer, pond row, and edit preview show **In bank** and **Still to deposit** only (limit shown separately; schedule fields computed but not shown).
+  - Cent-rounded bank reconciliation (`roundToCents`, 2 dp). When global paydays and per-pond Account are set, `remaining` can auto-sync to the **schedule gap** still-to-deposit (`max(0, expectedInBankByToday - account)`). Footer, pond row (with payday progress), and edit preview show **In bank** and **Still to deposit** only (limit shown separately).
 - `TransferDestinationList`
   - Builds the transfer destination pond name list (all ponds except the source) for add/edit transfer UI.
 - `TransferGroupDraft` / `TransferSyncHelper`
@@ -31,7 +31,8 @@ Mountain Money (package `com.example.envelopemoney`) is a single-activity Androi
 - `PrefManager`
   - Serializes/deserializes envelope state, UI preference state, bills days JSON, paydays JSON, and bills-filter state.
 - Receipt capture (`com.example.envelopemoney.receipt`)
-  - `ReceiptCaptureActivity` — CameraX preview, capture mode, shutter; persists JPEG via `MediaStoreReceiptSaver` (`Pictures/Mountain Money`).
+  - `ReceiptCaptureActivity` — CameraX preview, capture mode, shutter; persists upright JPEG via EXIF-aware decode + `MediaStoreReceiptSaver` (`Pictures/Mountain Money`).
+  - `ReceiptExifBitmapLoader` — applies EXIF orientation when decoding capture/picker JPEGs.
   - `ReceiptOcrPipeline` — preprocess bitmap, `OcrEngine` (default: on-device Latin text recognition; slot for PaddleOCR), `ReceiptFieldParser` heuristics (merchant junk filters incl. order/receipt/invoice headers + title case for ALL CAPS OCR; bottom-up “amount due” / last labeled total, then bottom-most money fallback for restaurant/receipt modes).
   - `ReceiptRowUi` — pure helper for when to show the list-row receipt thumbnail.
   - Wired from `MainActivity` add/edit transaction dialogs (`ActivityResultContracts`); `receiptDialogHostView` selects the active dialog for OCR results. Fullscreen image preview: `ReceiptPreviewActivity` (view-only 90° until **Save rotation**; `ReceiptRotatedJpegWriter` decodes, **Matrix**-rotates, overwrites same `content://` URI at JPEG **92**; reload bitmap; `MaterialAlertDialogBuilder` for replace + discard-when-dirty), `ReceiptZoomImageView`, `ReceiptBitmapLoader`.

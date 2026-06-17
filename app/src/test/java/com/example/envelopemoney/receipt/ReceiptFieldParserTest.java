@@ -257,4 +257,26 @@ public class ReceiptFieldParserTest {
         ReceiptDraft d = ReceiptFieldParser.parse(ocr, ReceiptCaptureMode.RECEIPT);
         assertEquals("X", d.merchantForComment);
     }
+
+    @Test
+    public void merchant_trimsLongSentenceToBrandWords() {
+        OcrResult ocr = new OcrResult(Arrays.asList(
+                new OcrLine("FRESH MARKET DOWNTOWN LOCATION", 0.9f, 50),
+                new OcrLine("TOTAL $12.34", 0.9f)
+        ));
+        ReceiptDraft d = ReceiptFieldParser.parse(ocr, ReceiptCaptureMode.RECEIPT);
+        assertEquals("Fresh Market", d.merchantForComment);
+    }
+
+    @Test
+    public void total_prefersDollarTotalOverOrderNumber() {
+        OcrResult ocr = new OcrResult(Arrays.asList(
+                new OcrLine("MART", 0.9f),
+                new OcrLine("Order #48291", 0.9f),
+                new OcrLine("Points 120", 0.9f),
+                new OcrLine("Total $24.31", 0.9f)
+        ));
+        ReceiptDraft d = ReceiptFieldParser.parse(ocr, ReceiptCaptureMode.RECEIPT);
+        assertEquals(24.31, d.totalAmount, 0.001);
+    }
 }

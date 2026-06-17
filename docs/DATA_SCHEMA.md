@@ -34,7 +34,7 @@ The app persists most business state via SharedPreferences.
 - `accountBalance: Double?` — optional real-world bank slice for this pond (not the budget remainder)
 
 ### Bank reconciliation mode (optional)
-When `paydays_json` is non-empty **and** a pond has `accountBalance` set, `remaining` may be overwritten by `PondBankReconciliationHelper` using `MoneyMath.roundToCents(max(0, limit - accountBalance))`. This is **not** the default: ponds without paydays configured, or without Account entered, keep transaction-driven `remaining` via `calculateRemaining`. Manual remainder override is cleared when reconciliation applies to that pond.
+When `paydays_json` is non-empty **and** a pond has `accountBalance` set, `remaining` may be overwritten by `PondBankReconciliationHelper` using the **payday schedule gap** as of today: `MoneyMath.roundToCents(max(0, expectedInBankByToday - accountBalance))` where `expectedInBankByToday = (limit / paydaysInMonth) * paydaysPassed`. Displayed **Still to deposit** uses the same schedule gap (not full-month `limit - account`). Pond order is the `envelopes` JSON array order (reorder persists by rewriting that list). Manual remainder override is cleared when reconciliation applies to that pond. Ponds without paydays or without Account keep transaction-driven `remaining` via `calculateRemaining`.
 
 ## MonthData Model
 - `limit: double` — **effective budget ceiling for that calendar month** in snapshots (may equal base + unused from the prior month when carry-over applies); distinct from envelope `limit` above.
@@ -77,5 +77,5 @@ When `paydays_json` is non-empty **and** a pond has `accountBalance` set, `remai
 - Recurring is not supported for split purchases in v1 (dialog hides time/recurring on non-Spending tabs).
 
 ## Pond totals footer
-- **Reconciliation mode** (paydays configured + at least one Account): one line, two values — **In bank** (sum of accounts), **Still to deposit** (sum of `max(0, limit - account)` per pond). Monthly **limit** is shown separately on each pond row / edit dialog (not repeated as Target). All amounts cent-rounded.
+- **Reconciliation mode** (paydays configured + at least one Account): one line, two values — **In bank** (sum of accounts), **Still to deposit** (sum of schedule-gap still-to-deposit per pond with Account). Monthly **limit** is shown separately on each pond row / edit dialog (not repeated as Target). All amounts cent-rounded.
 - **Legacy** (otherwise): **Account (entered)** sum, **Remaining** sum, **Difference** when any Account exists; or Remaining only when none.

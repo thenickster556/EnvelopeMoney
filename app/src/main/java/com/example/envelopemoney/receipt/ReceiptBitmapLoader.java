@@ -40,11 +40,38 @@ public final class ReceiptBitmapLoader {
                 }
             }
             opts.inJustDecodeBounds = false;
+            Bitmap decoded;
             try (InputStream is2 = context.getContentResolver().openInputStream(uri)) {
-                return is2 != null ? BitmapFactory.decodeStream(is2, null, opts) : null;
+                decoded = is2 != null ? BitmapFactory.decodeStream(is2, null, opts) : null;
             }
+            if (decoded == null) {
+                return null;
+            }
+            int rotation = readExifRotation(context, uri);
+            if (rotation == 0) {
+                return decoded;
+            }
+            android.graphics.Matrix matrix = new android.graphics.Matrix();
+            matrix.postRotate(rotation);
+            Bitmap rotated = Bitmap.createBitmap(decoded, 0, 0, decoded.getWidth(), decoded.getHeight(), matrix, true);
+            if (rotated != decoded) {
+                decoded.recycle();
+            }
+            return rotated;
         } catch (SecurityException e) {
             throw new IOException("uri permission denied", e);
+        }
+    }
+
+    private static int readExifRotation(Context context, Uri uri) throws IOException {
+        try (InputStream is = context.getContentResolver().openInputStream(uri)) {
+            if (is == null) {
+                return 0;
+            }
+            return ReceiptExifBitmapLoader.exifToDegrees(
+                    new androidx.exifinterface.media.ExifInterface(is).getAttributeInt(
+                            androidx.exifinterface.media.ExifInterface.TAG_ORIENTATION,
+                            androidx.exifinterface.media.ExifInterface.ORIENTATION_NORMAL));
         }
     }
 }

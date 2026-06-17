@@ -7,7 +7,7 @@ import java.util.TreeSet;
 
 /**
  * Bank-vs-budget reconciliation for ponds with an entered account balance and configured paydays.
- * Auto-sync uses {@link #getStillToDepositForMonth()} (month target minus in bank), not schedule gap.
+ * {@link #getStillToDepositForMonth()} is the schedule gap as of today (expected in bank minus actual).
  */
 public final class PondBankReconciliationHelper {
 
@@ -48,17 +48,18 @@ public final class PondBankReconciliationHelper {
         List<Integer> paydaysInMonth = resolvePaydayDaysInMonth(paydayDaysOfMonth, month);
         int paydaysPassed = countPaydaysOnOrBefore(paydaysInMonth, todayMidnight, month);
 
-        double stillToDepositForMonth =
-                MoneyMath.roundToCents(Math.max(0d, monthTarget - inBank));
-
         int n = paydaysInMonth.size();
         double perPayday = n == 0 ? 0d : MoneyMath.roundToCents(monthTarget / n);
         double expectedByToday = MoneyMath.roundToCents(perPayday * paydaysPassed);
-        double behindSchedule = MoneyMath.roundToCents(Math.max(0d, expectedByToday - inBank));
+        double stillToDepositForMonth =
+                MoneyMath.roundToCents(Math.max(0d, expectedByToday - inBank));
+        double fullMonthStillToDeposit =
+                MoneyMath.roundToCents(Math.max(0d, monthTarget - inBank));
+        double behindSchedule = stillToDepositForMonth;
         double aheadOfTarget = MoneyMath.roundToCents(Math.max(0d, inBank - monthTarget));
 
         return new Result(true, monthTarget, inBank, stillToDepositForMonth,
-                perPayday, n, paydaysPassed, expectedByToday, behindSchedule, aheadOfTarget);
+                fullMonthStillToDeposit, perPayday, n, paydaysPassed, expectedByToday, behindSchedule, aheadOfTarget);
     }
 
     static List<Integer> resolvePaydayDaysInMonth(List<Integer> paydayDaysOfMonth, Calendar month) {
@@ -81,9 +82,15 @@ public final class PondBankReconciliationHelper {
         if (paydaysInMonth.isEmpty()) {
             return 0;
         }
-        if (today.get(Calendar.YEAR) != month.get(Calendar.YEAR)
-                || today.get(Calendar.MONTH) != month.get(Calendar.MONTH)) {
+        int monthYear = month.get(Calendar.YEAR);
+        int monthMonth = month.get(Calendar.MONTH);
+        int todayYear = today.get(Calendar.YEAR);
+        int todayMonth = today.get(Calendar.MONTH);
+        if (monthYear < todayYear || (monthYear == todayYear && monthMonth < todayMonth)) {
             return paydaysInMonth.size();
+        }
+        if (monthYear > todayYear || (monthYear == todayYear && monthMonth > todayMonth)) {
+            return 0;
         }
         int todayDom = today.get(Calendar.DAY_OF_MONTH);
         int count = 0;
@@ -100,6 +107,7 @@ public final class PondBankReconciliationHelper {
         private final double monthTarget;
         private final double inBank;
         private final double stillToDepositForMonth;
+        private final double fullMonthStillToDeposit;
         private final double perPayday;
         private final int paydaysInMonth;
         private final int paydaysPassed;
@@ -111,6 +119,7 @@ public final class PondBankReconciliationHelper {
                        double monthTarget,
                        double inBank,
                        double stillToDepositForMonth,
+                       double fullMonthStillToDeposit,
                        double perPayday,
                        int paydaysInMonth,
                        int paydaysPassed,
@@ -121,6 +130,7 @@ public final class PondBankReconciliationHelper {
             this.monthTarget = monthTarget;
             this.inBank = inBank;
             this.stillToDepositForMonth = stillToDepositForMonth;
+            this.fullMonthStillToDeposit = fullMonthStillToDeposit;
             this.perPayday = perPayday;
             this.paydaysInMonth = paydaysInMonth;
             this.paydaysPassed = paydaysPassed;
@@ -130,7 +140,7 @@ public final class PondBankReconciliationHelper {
         }
 
         static Result inactive(double monthTarget) {
-            return new Result(false, MoneyMath.roundToCents(monthTarget), 0d, 0d,
+            return new Result(false, MoneyMath.roundToCents(monthTarget), 0d, 0d, 0d,
                     0d, 0, 0, 0d, 0d, 0d);
         }
 
@@ -148,6 +158,10 @@ public final class PondBankReconciliationHelper {
 
         public double getStillToDepositForMonth() {
             return stillToDepositForMonth;
+        }
+
+        public double getFullMonthStillToDeposit() {
+            return fullMonthStillToDeposit;
         }
 
         public double getPerPayday() {

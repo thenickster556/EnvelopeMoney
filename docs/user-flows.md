@@ -8,6 +8,12 @@
 5. If the bills-period filter was left on, the start date is set to the computed bills anchor and the end date to today (saved prefs hold the pre-filter range for restore when toggled off).
 6. Pond and transaction lists render for the active month.
 
+## Pond list flow
+1. Pond section header shows **N selected**, **Select all** / **Unselect all**, and **Reorder**.
+2. Checkbox toggles filter the transaction list (footer totals still sum all ponds).
+3. **Reorder** shows drag handles; drag a row (or long-press) to reorder with a lifted shadow; order persists in the envelopes JSON array.
+4. **Done** exits reorder mode.
+
 ## Add Transaction Flow
 1. User opens the transaction dialog (check icon confirms, close icon cancels).
 2. User selects pond, date, amount, and comment (fields appear first in the scrollable body).
@@ -17,7 +23,7 @@
 6. User may switch **Spending**, **Transfer**, and **Split purchase** tabs to compare modes; transfer buckets and split slices stay in memory (sections hide/show only) until save or cancel.
 7. If **Transfer** is selected, the dialog auto-scrolls to the transfer summary/buckets; the first bucket defaults to **100%** of the source amount when still unallocated. **Add transfer bucket** re-splits the source total evenly (integer percents with the first bucket taking the ceiling share, e.g. $100 across three buckets → $34 / $33 / $33). Pond and destination selectors open as anchored dropdowns inside the modal; scrolling dismisses those dropdowns cleanly.
 8. If **Split purchase** is selected, an empty **purchase total** may be prefilled from the spending **amount**; two default slices receive an even split of the purchase total when unset, and **Add slice** redistributes like transfer buckets. Scrolling dismisses slice dropdowns.
-9. Transfer and split bucket amounts can be adjusted by fixed `$0.50` slider/stepper controls or exact-cent manual entry; validation stays quiet until the user interacts or attempts save.
+9. Transfer and split bucket amounts can be adjusted by fixed `$0.50` slider/stepper controls or exact-cent manual entry; split slices at slider **100%** absorb odd-cent remainders automatically; validation stays quiet until the user interacts or attempts save.
 10. Validation runs without dismissing the dialog on errors.
 11. Transaction is persisted and visible in history (optional `receiptImageUri` stored when applicable). Rows with a receipt show a **photo** icon; tap opens preview. **Split purchase** rows show a compact slice line by default; an expand control toggles the full allocation breakdown for that group (all sibling rows stay in sync).
 

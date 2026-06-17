@@ -4,10 +4,10 @@ import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.view.Surface;
 import android.widget.RadioGroup;
 import android.widget.Toast;
 
@@ -32,7 +32,7 @@ import java.io.IOException;
 import java.util.concurrent.ExecutionException;
 
 /**
- * Camera capture for receipts; saves JPEG to {@link MediaStoreReceiptSaver} (Gallery: Pictures/Mountain Money).
+ * Camera capture for receipts; saves upright JPEG to {@link MediaStoreReceiptSaver}.
  */
 public class ReceiptCaptureActivity extends AppCompatActivity {
 
@@ -106,7 +106,12 @@ public class ReceiptCaptureActivity extends AppCompatActivity {
                 ProcessCameraProvider provider = future.get();
                 Preview preview = new Preview.Builder().build();
                 preview.setSurfaceProvider(previewView.getSurfaceProvider());
-                imageCapture = new ImageCapture.Builder().build();
+                int rotation = previewView.getDisplay() != null
+                        ? previewView.getDisplay().getRotation()
+                        : Surface.ROTATION_0;
+                imageCapture = new ImageCapture.Builder()
+                        .setTargetRotation(rotation)
+                        .build();
                 CameraSelector selector = CameraSelector.DEFAULT_BACK_CAMERA;
                 provider.unbindAll();
                 provider.bindToLifecycle(this, selector, preview, imageCapture);
@@ -136,7 +141,13 @@ public class ReceiptCaptureActivity extends AppCompatActivity {
                 new ImageCapture.OnImageSavedCallback() {
                     @Override
                     public void onImageSaved(@NonNull ImageCapture.OutputFileResults outputFileResults) {
-                        Bitmap bmp = BitmapFactory.decodeFile(out.getAbsolutePath());
+                        Bitmap bmp;
+                        try {
+                            bmp = ReceiptExifBitmapLoader.decodeUprightFromFile(out.getAbsolutePath());
+                        } catch (IOException e) {
+                            Toast.makeText(ReceiptCaptureActivity.this, R.string.receipt_ocr_failed, Toast.LENGTH_SHORT).show();
+                            return;
+                        }
                         if (bmp == null) {
                             Toast.makeText(ReceiptCaptureActivity.this, R.string.receipt_ocr_failed, Toast.LENGTH_SHORT).show();
                             return;

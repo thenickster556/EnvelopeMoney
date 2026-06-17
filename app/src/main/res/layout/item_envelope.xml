@@ -3,7 +3,19 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="horizontal"
-    android:padding="12dp">
+    android:padding="12dp"
+    android:elevation="0dp">
+
+    <ImageView
+        android:id="@+id/ivPondDragHandle"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:layout_marginEnd="4dp"
+        android:layout_marginRight="4dp"
+        android:src="@android:drawable/ic_menu_sort_by_size"
+        android:tint="?attr/colorControlNormal"
+        android:contentDescription="@string/content_desc_pond_drag_handle"
+        android:visibility="gone" />
 
     <CheckBox
         android:id="@+id/cbSelect"

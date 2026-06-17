@@ -28,7 +28,7 @@ public class PondBankReconciliationHelperTest {
     }
 
     @Test
-    public void userExample_100Limit50BankTwoPaydays_stillToDeposit50() {
+    public void userExample_scheduleGapStillToDeposit() {
         List<Integer> paydays = Arrays.asList(1, 15);
         Calendar may = monthStart(2026, Calendar.MAY);
         Calendar today = cal(2026, Calendar.MAY, 13);
@@ -37,9 +37,11 @@ public class PondBankReconciliationHelperTest {
         assertTrue(r.isActive());
         assertEquals(100.00, r.getMonthTarget(), 0.001);
         assertEquals(50.00, r.getInBank(), 0.001);
-        assertEquals(50.00, r.getStillToDepositForMonth(), 0.001);
+        assertEquals(0.00, r.getStillToDepositForMonth(), 0.001);
+        assertEquals(50.00, r.getFullMonthStillToDeposit(), 0.001);
         assertEquals(50.00, r.getPerPayday(), 0.001);
         assertEquals(2, r.getPaydaysInMonth());
+        assertEquals(1, r.getPaydaysPassed());
     }
 
     @Test
@@ -69,7 +71,7 @@ public class PondBankReconciliationHelperTest {
     }
 
     @Test
-    public void midMonthSchedule_expectedByTodayAndBehindSchedule() {
+    public void midMonthSchedule_stillToDepositEqualsBehindSchedule() {
         List<Integer> paydays = Arrays.asList(1, 15);
         Calendar may = monthStart(2026, Calendar.MAY);
         Calendar today = cal(2026, Calendar.MAY, 13);
@@ -78,7 +80,19 @@ public class PondBankReconciliationHelperTest {
         assertEquals(50.00, r.getPerPayday(), 0.001);
         assertEquals(1, r.getPaydaysPassed());
         assertEquals(50.00, r.getExpectedInBankByToday(), 0.001);
+        assertEquals(10.00, r.getStillToDepositForMonth(), 0.001);
         assertEquals(10.00, r.getBehindSchedule(), 0.001);
+    }
+
+    @Test
+    public void beforeFirstPayday_stillToDepositZero() {
+        List<Integer> paydays = Arrays.asList(15, 30);
+        Calendar may = monthStart(2026, Calendar.MAY);
+        Calendar today = cal(2026, Calendar.MAY, 10);
+        PondBankReconciliationHelper.Result r =
+                PondBankReconciliationHelper.compute(100d, 0d, paydays, may, today);
+        assertEquals(0, r.getPaydaysPassed());
+        assertEquals(0.00, r.getStillToDepositForMonth(), 0.001);
     }
 
     @Test

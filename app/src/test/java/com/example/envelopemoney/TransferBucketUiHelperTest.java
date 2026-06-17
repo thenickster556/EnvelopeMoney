@@ -11,6 +11,18 @@ import static org.junit.Assert.assertTrue;
 public class TransferBucketUiHelperTest {
 
     @Test
+    public void resolveAmountAtSliderMax_absorbsOddCentRemainder() {
+        assertEquals(10.37d, TransferBucketUiHelper.resolveAmountAtSliderMax(10f, 10d, 10.37d), 0.0001d);
+        assertEquals(5.00d, TransferBucketUiHelper.resolveAmountAtSliderMax(5f, 10d, 10.37d), 0.0001d);
+    }
+
+    @Test
+    public void computeSliderMaximum_floorsToStep() {
+        assertEquals(10.00d, TransferBucketUiHelper.computeSliderMaximum(10.37d, 0.5d), 0.0001d);
+        assertEquals(10.50d, TransferBucketUiHelper.computeSliderMaximum(10.50d, 0.5d), 0.0001d);
+    }
+
+    @Test
     public void snapToStep_roundsToNearestFixedTransferStep() {
         assertEquals(4.5d, TransferBucketUiHelper.snapToStep(4.37d, 0.5d, 10d), 0.0001d);
         assertEquals(10d, TransferBucketUiHelper.snapToStep(12d, 0.5d, 10d), 0.0001d);

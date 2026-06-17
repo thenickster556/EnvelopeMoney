@@ -20,6 +20,12 @@
   ],
   "completed_tasks": [
     {
+      "id": "pond-payday-receipt-polish-2026-06",
+      "title": "Pond reorder/selection, payday reconciliation, split cents, receipt OCR",
+      "status": "completed",
+      "intent": "RecyclerView pond reorder + select all/unselect all; schedule-gap still-to-deposit; split slider remainder cents; EXIF upright capture; OCR brand/total heuristics; docs/tests/commit."
+    },
+    {
       "id": "fix-no-pond-found-false-positive-2026-05",
       "title": "Fix false 'No pond found' on transaction save",
       "status": "completed",
@@ -162,5 +168,5 @@
       "title": "Fullscreen zoomable rotatable ReceiptPreviewActivity; ReceiptZoomImageView; ReceiptBitmapLoader"
     }
   ],
-  "last_updated": "2026-05-19"
+  "last_updated": "2026-06-17"
 }

@@ -24,6 +24,32 @@ public final class TransferBucketUiHelper {
         return roundCurrency(clampNonNegative(snapped, maxAmount));
     }
 
+    public static double computeSliderMaximum(double maxAmountForBucket, double stepAmount) {
+        if (maxAmountForBucket <= 0d) {
+            return 0d;
+        }
+        if (stepAmount <= 0d) {
+            return roundCurrency(maxAmountForBucket);
+        }
+        return Math.floor((maxAmountForBucket + 0.0001d) / stepAmount) * stepAmount;
+    }
+
+    public static boolean isAtSliderMaximum(float sliderValue, double sliderMaximum) {
+        return sliderValue >= sliderMaximum - 0.0001f;
+    }
+
+    /**
+     * When the slider is at its stepped maximum but true remainder includes odd cents, absorb them.
+     */
+    public static double resolveAmountAtSliderMax(float sliderValue,
+                                                  double sliderMaximum,
+                                                  double trueMaxAmount) {
+        if (isAtSliderMaximum(sliderValue, sliderMaximum)) {
+            return roundCurrency(Math.max(0d, trueMaxAmount));
+        }
+        return roundCurrency(sliderValue);
+    }
+
     public static List<String> buildScaleLabels(double maxAmount) {
         return buildScaleLabels(maxAmount, DEFAULT_SCALE_LABEL_COUNT);
     }
