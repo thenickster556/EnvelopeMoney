@@ -20,6 +20,12 @@
   ],
   "completed_tasks": [
     {
+      "id": "pond-header-single-row-2026-06",
+      "title": "Consolidate pond header into single icon toolbar row",
+      "status": "completed",
+      "intent": "Single-row pond header: title + count left; select/reorder/collapse/add icons right; ImageButton state; auto-exit reorder on collapse; docs + commit."
+    },
+    {
       "id": "pond-payday-receipt-polish-2026-06",
       "title": "Pond reorder/selection, payday reconciliation, split cents, receipt OCR",
       "status": "completed",

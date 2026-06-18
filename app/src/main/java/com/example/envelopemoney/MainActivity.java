@@ -16,6 +16,7 @@ import android.graphics.PorterDuff;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.view.Gravity;
+import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.TouchDelegate;
 import android.view.View;
@@ -56,7 +57,6 @@ import com.example.envelopemoney.receipt.ReceiptDraft;
 import com.example.envelopemoney.receipt.ReceiptOcrPipeline;
 import com.example.envelopemoney.receipt.ReceiptRowUi;
 import com.example.envelopemoney.ui.BoundedNestedScrollView;
-import com.google.android.material.button.MaterialButton;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.slider.Slider;
 import com.google.android.material.tabs.TabLayout;
@@ -117,8 +117,8 @@ public class MainActivity extends AppCompatActivity {
     private List<Transaction> allTransactions = new ArrayList<>();
     private EnvelopeAdapter envelopeAdapter;
     private TextView tvPondSelectedCount;
-    private MaterialButton btnPondSelectToggle;
-    private MaterialButton btnPondReorder;
+    private ImageButton btnPondSelectToggle;
+    private ImageButton btnPondReorder;
     private boolean pondReorderMode = false;
     @Nullable
     private ItemTouchHelper pondItemTouchHelper;
@@ -777,10 +777,16 @@ public class MainActivity extends AppCompatActivity {
         envelopesCollapsed = PrefManager.isEnvelopesCollapsed(this);
         applyEnvelopesCollapsedState();
         expandTouchTarget(btnToggleEnvelopes, 8);
+        expandTouchTarget(btnPondSelectToggle, 8);
+        expandTouchTarget(btnPondReorder, 8);
         btnToggleEnvelopes.setOnClickListener(v -> {
             envelopesCollapsed = !envelopesCollapsed;
             PrefManager.setEnvelopesCollapsed(MainActivity.this, envelopesCollapsed);
+            if (envelopesCollapsed && pondReorderMode) {
+                pondReorderMode = false;
+            }
             applyEnvelopesCollapsedState();
+            updatePondHeaderControls();
         });
         btnPondSelectToggle.setOnClickListener(v -> toggleAllPondSelection());
         btnPondReorder.setOnClickListener(v -> togglePondReorderMode());
@@ -1916,10 +1922,23 @@ public class MainActivity extends AppCompatActivity {
         int total = envelopes.size();
         tvPondSelectedCount.setText(getString(R.string.pond_selected_count, selected));
         boolean anySelected = selected > 0;
-        btnPondSelectToggle.setText(anySelected ? R.string.pond_unselect_all : R.string.pond_select_all);
+        btnPondSelectToggle.setImageResource(anySelected
+                ? R.drawable.ic_pond_unselect_all
+                : R.drawable.ic_pond_select_all);
+        btnPondSelectToggle.setContentDescription(getString(anySelected
+                ? R.string.pond_unselect_all
+                : R.string.pond_select_all));
         btnPondSelectToggle.setEnabled(total > 0);
-        btnPondReorder.setText(pondReorderMode ? R.string.pond_reorder_done : R.string.pond_reorder);
+        btnPondSelectToggle.setAlpha(total > 0 ? 1f : 0.4f);
+        btnPondReorder.setImageResource(pondReorderMode
+                ? R.drawable.ic_dialog_check
+                : R.drawable.ic_pond_reorder);
+        btnPondReorder.setContentDescription(getString(pondReorderMode
+                ? R.string.pond_reorder_done
+                : R.string.pond_reorder));
         btnPondReorder.setEnabled(total > 1);
+        btnPondReorder.setAlpha(total > 1 ? 1f : 0.4f);
+        btnPondReorder.setSelected(pondReorderMode);
         if (envelopeAdapter != null) {
             envelopeAdapter.notifyDataSetChanged();
         }

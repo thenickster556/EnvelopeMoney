@@ -9,10 +9,10 @@
 6. Pond and transaction lists render for the active month.
 
 ## Pond list flow
-1. Pond section header shows **N selected**, **Select all** / **Unselect all**, and **Reorder**.
+1. Pond section header is one row: **Ponds** + **N selected** on the left; **select**, **reorder**, **collapse**, and **add** icons on the right (same pattern as Transaction History).
 2. Checkbox toggles filter the transaction list (footer totals still sum all ponds).
-3. **Reorder** shows drag handles; drag a row (or long-press) to reorder with a lifted shadow; order persists in the envelopes JSON array.
-4. **Done** exits reorder mode.
+3. **Reorder** icon shows drag handles; drag a row (or long-press handle) to reorder with a lifted shadow; order persists in the envelopes JSON array.
+4. **Done** icon exits reorder mode; collapsing the pond section also exits reorder mode.
 
 ## Add Transaction Flow
 1. User opens the transaction dialog (check icon confirms, close icon cancels).

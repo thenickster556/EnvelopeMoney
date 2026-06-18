@@ -315,11 +315,10 @@ public final class ReceiptFieldParser {
         if (len > 60) {
             return -1;
         }
+        int score = letters * 2 - digits * 3;
         if (countWords(line) > 4) {
             score -= 20;
         }
-
-        int score = letters * 2 - digits * 3;
         if (lineIndex == 0) {
             score += 30;
         } else if (lineIndex == 1) {

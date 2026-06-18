@@ -6,7 +6,7 @@
 - Ponds track remaining funds (budget math) and month-specific snapshots.
 - Optional **Account** field per pond: user-entered cash in the bank for that slice, for reconciliation against budget remainder.
 - Ponds can be collapsed in the UI and that preference is persisted.
-- Pond list header shows **selected count**, **Select all** / **Unselect all**, and **Reorder** (drag handles + shadow while dragging); order persists in the envelopes JSON array.
+- Pond list header is a **single row**: **Ponds** title + **N selected** on the left; **icon toolbar** on the right (select all / unselect all, reorder / done, collapse, add) matching the Transaction History header pattern. Drag handles + shadow while reordering; order persists in the envelopes JSON array. Collapsing the section auto-exits reorder mode.
 - Footer under the pond list shows sums of entered Account values, sum of Remaining, and the difference when any Account is set.
 
 ## Transactions

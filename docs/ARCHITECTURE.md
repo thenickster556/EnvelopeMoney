@@ -5,7 +5,7 @@ Mountain Money (package `com.example.envelopemoney`) is a single-activity Androi
 
 ## Core Components
 - `MainActivity`
-  - Owns screen initialization, custom top bar (`app_bar_main` outlined bar: theme-driven title and icon tints; DayNight bar fill/stroke via color resources), pond list, transactions list, month navigation, transfer totals spinner (destination ponds only), dialogs, bills-period filter, and rollover triggering.
+  - Owns screen initialization, custom top bar (`app_bar_main` outlined bar: theme-driven title and icon tints; DayNight bar fill/stroke via color resources), pond list (single-row header: title + selected count + icon actions), transactions list, month navigation, transfer totals spinner (destination ponds only), dialogs, bills-period filter, and rollover triggering.
   - Add/edit transaction dialogs use **TabLayout** rows for **Spending / Transfer / Split purchase** (time tabs **One-time / Recurring** only on Spending), placed **below the comment** field so core fields are entered before mode. `expandedSplitGroupIds` toggles synchronized inline split breakdown rows in the transaction list.
   - Uses **`MaterialAlertDialogBuilder`** for modal dialogs; add/edit transaction layouts use **`BoundedNestedScrollView`** + receipt **icon toolbar** (`wireReceiptRow`, `syncReceiptActionUi`, `receiptDialogHostView`) with **`applyIconMaterialDialogActions`** for icon-only confirm/dismiss on the shell and recurring sub-pickers.
 - `MonthRolloverHelper`
