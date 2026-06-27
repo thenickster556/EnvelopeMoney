@@ -56,7 +56,7 @@ When `paydays_json` is non-empty **and** a pond has `accountBalance` set, `remai
 - `recurringDays: List<Integer>`
 - `recurringSeriesId: String?`
 - `recurringTemplate: boolean`
-- `receiptImageUri: String?` — optional `content://` URI for a JPEG saved under **Pictures/Mountain Money** (camera path) or the picked gallery URI.
+- `receiptImageUri: String?` — optional `content://` URI for a JPEG under **Pictures/Mountain Money** (camera capture or gallery pick after `ReceiptPickerUriNormalizer` copy). Not an ephemeral picker URI.
 
 ## TransferData Model
 - `id: String`

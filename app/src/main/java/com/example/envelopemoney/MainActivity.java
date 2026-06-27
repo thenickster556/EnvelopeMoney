@@ -53,6 +53,7 @@ import com.example.envelopemoney.receipt.ReceiptExifBitmapLoader;
 import com.example.envelopemoney.receipt.ReceiptPickerUriNormalizer;
 import com.example.envelopemoney.receipt.ReceiptPreviewActivity;
 import com.example.envelopemoney.receipt.ReceiptCaptureMode;
+import com.example.envelopemoney.receipt.ReceiptDateFilterHelper;
 import com.example.envelopemoney.receipt.ReceiptDraft;
 import com.example.envelopemoney.receipt.ReceiptOcrPipeline;
 import com.example.envelopemoney.receipt.ReceiptRowUi;
@@ -733,9 +734,15 @@ public class MainActivity extends AppCompatActivity {
         galleryPickLauncher = registerForActivityResult(
                 new ActivityResultContracts.GetContent(),
                 uri -> {
-                    if (uri != null && receiptDialogHostView != null) {
-                        runReceiptOcr(uri, ReceiptCaptureMode.AUTO);
+                    if (uri == null) {
+                        return;
                     }
+                    if (receiptDialogHostView == null) {
+                        Toast.makeText(MainActivity.this, R.string.receipt_gallery_dialog_lost,
+                                Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                    runReceiptOcr(uri, ReceiptCaptureMode.AUTO);
                 });
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
@@ -1432,7 +1439,12 @@ public class MainActivity extends AppCompatActivity {
             } catch (IOException e) {
                 Log.e("EnvelopeMoney", "receipt persist picker uri", e);
                 runOnUiThread(() -> {
+                    if (receiptDialogHostView != null) {
+                        receiptDialogHostView.setTag(R.id.tag_receipt_image_uri, null);
+                        syncReceiptActionUi(receiptDialogHostView);
+                    }
                     if (status != null) {
+                        status.setVisibility(View.VISIBLE);
                         status.setText(R.string.receipt_ocr_failed);
                     }
                     Toast.makeText(MainActivity.this, R.string.receipt_ocr_failed, Toast.LENGTH_LONG).show();
@@ -1506,7 +1518,16 @@ public class MainActivity extends AppCompatActivity {
             etDate.setText(draft.dateYyyyMmDd);
         }
         if (status != null) {
-            if (draft.amountConfidence < 0.45f) {
+            TextView tvStartDate = findViewById(R.id.tvStartDate);
+            TextView tvEndDate = findViewById(R.id.tvEndDate);
+            String startText = tvStartDate != null ? tvStartDate.getText().toString() : null;
+            String endText = tvEndDate != null ? tvEndDate.getText().toString() : null;
+            boolean outsideFilter = ReceiptDateFilterHelper.isIsoDateOutsideFilterRange(
+                    draft.dateYyyyMmDd, startText, endText);
+            if (outsideFilter) {
+                status.setVisibility(View.VISIBLE);
+                status.setText(R.string.receipt_date_outside_filter);
+            } else if (draft.amountConfidence < 0.45f) {
                 status.setVisibility(View.VISIBLE);
                 status.setText("Check amount — low confidence");
             } else {

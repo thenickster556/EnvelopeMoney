@@ -20,6 +20,12 @@
   ],
   "completed_tasks": [
     {
+      "id": "gallery-receipt-save-fix-2026-06",
+      "title": "Fix gallery receipt save to pond",
+      "status": "completed",
+      "intent": "Always copy gallery URIs to Mountain Money; toast on lost dialog; OCR date filter hint; tests + docs + commit."
+    },
+    {
       "id": "pond-header-single-row-2026-06",
       "title": "Consolidate pond header into single icon toolbar row",
       "status": "completed",
