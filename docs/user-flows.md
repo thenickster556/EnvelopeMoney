@@ -55,7 +55,7 @@
 
 ## Bills period filter
 1. User taps the **filter** icon beside the transfers toggle (disabled or toast if no bills days configured).
-2. App saves the current start/end display strings, sets **start** to the bills anchor date and **end** to today, and persists filter state. With a **single** configured bills day, **start** is always that day in the **prior** month (e.g. bills on the 12th, today May 13 → April 12).
+2. App saves the current start/end display strings, sets **start** to the bills anchor date and **end** to today, and persists filter state. Anchor rules: latest passed bills day in the current month when applicable (May 15, bills 10 → May 10); prior month when none passed yet (Feb 10, bills 15 → Jan 15); on a multi-day period-end, previous bills day in the set (Apr 15, [1,15] → Apr 1); single bills day on today → same day previous month.
 3. User taps again to turn off; previous start/end strings are restored.
 
 ## Month Navigation Flow

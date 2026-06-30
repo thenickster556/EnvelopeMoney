@@ -11,7 +11,7 @@ Mountain Money (package `com.example.envelopemoney`) is a single-activity Androi
 - `MonthRolloverHelper`
   - Sanitizes persisted envelope state, repairs legacy month data, and computes a safe launch month on a deep copy before the activity adopts it. On rollover, **carry increases the available pool** (`remaining`, baselines, `MonthData`) while **`Envelope.limit` stays the user’s base monthly budget** (`originalLimit`).
 - `BillsDayAnchor`
-  - Pure helper for bills-period filter start (unit-tested). **One** configured bills day → that day in the **previous** calendar month (clamped). **Multiple** days → latest bills day on or before today, walking backward by month when needed.
+  - Pure helper for bills-period filter start (unit-tested). Unified month walk: latest bills day on or before today in current month, else walk backward; period-start adjustment when today lands on a bills-day boundary (multi-day → prior day in set; single-day on today → previous month).
 - `MoneyMath` / `PondBankReconciliationHelper`
   - Cent-rounded bank reconciliation (`roundToCents`, 2 dp). When global paydays and per-pond Account are set, `remaining` can auto-sync to the **schedule gap** still-to-deposit (`max(0, expectedInBankByToday - account)`). Footer, pond row (with payday progress), and edit preview show **In bank** and **Still to deposit** only (limit shown separately).
 - `TransferDestinationList`

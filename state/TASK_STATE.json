@@ -20,6 +20,12 @@
   ],
   "completed_tasks": [
     {
+      "id": "bills-anchor-unified-2026-06",
+      "title": "Fix bills-period anchor nearest previous bills day",
+      "status": "completed",
+      "intent": "Unified BillsDayAnchor month walk; remove single-day prev-month bug; multi-day period-end adjustment; tests + docs + commit."
+    },
+    {
       "id": "gallery-receipt-save-fix-2026-06",
       "title": "Fix gallery receipt save to pond",
       "status": "completed",
