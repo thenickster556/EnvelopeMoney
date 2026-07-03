@@ -9,6 +9,7 @@ import android.net.Uri;
 import androidx.annotation.Nullable;
 import androidx.exifinterface.media.ExifInterface;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 
@@ -51,6 +52,28 @@ public final class ReceiptExifBitmapLoader {
     }
 
     @Nullable
+    public static Bitmap decodeUprightFromBytes(byte[] data) throws IOException {
+        if (data == null || data.length == 0) {
+            return null;
+        }
+        Bitmap bitmap = BitmapFactory.decodeByteArray(data, 0, data.length);
+        if (bitmap == null) {
+            return null;
+        }
+        int rotation = readExifRotationDegreesFromBytes(data);
+        if (rotation == 0) {
+            return bitmap;
+        }
+        Matrix matrix = new Matrix();
+        matrix.postRotate(rotation);
+        Bitmap rotated = Bitmap.createBitmap(bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix, true);
+        if (rotated != bitmap) {
+            bitmap.recycle();
+        }
+        return rotated;
+    }
+
+    @Nullable
     public static Bitmap decodeUprightFromFile(String path) throws IOException {
         if (path == null) {
             return null;
@@ -75,6 +98,14 @@ public final class ReceiptExifBitmapLoader {
             bitmap.recycle();
         }
         return rotated;
+    }
+
+    static int readExifRotationDegreesFromBytes(byte[] data) throws IOException {
+        if (data == null || data.length == 0) {
+            return 0;
+        }
+        ExifInterface exif = new ExifInterface(new ByteArrayInputStream(data));
+        return exifToDegrees(exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL));
     }
 
     static int readExifRotationDegrees(Context context, Uri uri) throws IOException {

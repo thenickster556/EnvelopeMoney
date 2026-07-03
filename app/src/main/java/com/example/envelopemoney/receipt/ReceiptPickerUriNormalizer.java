@@ -7,6 +7,7 @@ import android.net.Uri;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Locale;
@@ -57,6 +58,16 @@ public final class ReceiptPickerUriNormalizer {
         return shouldImportToAppGallery(uriString);
     }
 
+    static boolean canStreamCopyBytesInPlace(byte[] data) throws IOException {
+        if (data == null || data.length < 2) {
+            return false;
+        }
+        if ((data[0] & 0xFF) != 0xFF || (data[1] & 0xFF) != 0xD8) {
+            return false;
+        }
+        return ReceiptExifBitmapLoader.readExifRotationDegreesFromBytes(data) == 0;
+    }
+
     /**
      * True when JPEG bytes can be streamed into the app album without a decode/rotate pass.
      */
@@ -65,14 +76,47 @@ public final class ReceiptPickerUriNormalizer {
             return false;
         }
         String mime = context.getContentResolver().getType(uri);
-        if (mime == null) {
-            return false;
-        }
-        mime = mime.toLowerCase(Locale.US);
-        if (!mime.equals("image/jpeg") && !mime.equals("image/jpg")) {
-            return false;
+        if (mime != null) {
+            mime = mime.toLowerCase(Locale.US);
+            if (!mime.equals("image/jpeg") && !mime.equals("image/jpg")) {
+                return false;
+            }
         }
         return ReceiptExifBitmapLoader.readExifRotationDegrees(context, uri) == 0;
+    }
+
+    /**
+     * Import bytes already read from a picker URI (safe to call off the main thread).
+     */
+    @NonNull
+    public static ImportResult normalizeImportFromBytes(Context context, byte[] data, Uri originalUri)
+            throws IOException {
+        if (data == null || data.length == 0) {
+            throw new IOException("empty image bytes");
+        }
+        if (originalUri != null && !shouldImportToAppGallery(originalUri.toString())) {
+            return new ImportResult(originalUri, false);
+        }
+        if (canStreamCopyBytesInPlace(data)) {
+            try (InputStream in = new ByteArrayInputStream(data)) {
+                Uri saved = MediaStoreReceiptSaver.saveJpegStream(context, in);
+                boolean deleted = originalUri != null
+                        && ReceiptSourceDeleter.tryDeleteSource(context, originalUri);
+                return new ImportResult(saved, deleted);
+            }
+        }
+        Bitmap bmp = ReceiptExifBitmapLoader.decodeUprightFromBytes(data);
+        if (bmp == null) {
+            throw new IOException("decode bitmap failed");
+        }
+        try {
+            Uri saved = MediaStoreReceiptSaver.saveJpeg(context, bmp);
+            boolean deleted = originalUri != null
+                    && ReceiptSourceDeleter.tryDeleteSource(context, originalUri);
+            return new ImportResult(saved, deleted);
+        } finally {
+            bmp.recycle();
+        }
     }
 
     @NonNull

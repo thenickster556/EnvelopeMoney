@@ -78,7 +78,9 @@ import com.example.envelopemoney.Transaction;
 
 import java.lang.reflect.Field;
 import java.text.ParseException;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -146,6 +148,8 @@ public class MainActivity extends AppCompatActivity {
     private boolean awaitingGalleryPick;
     @Nullable
     private Button receiptDialogSaveButton;
+    @Nullable
+    private AlertDialog activeReceiptTransactionDialog;
     private boolean receiptImportInProgress;
     private ActivityResultLauncher<Intent> receiptCaptureLauncher;
     private ActivityResultLauncher<String> galleryPickLauncher;
@@ -735,6 +739,7 @@ public class MainActivity extends AppCompatActivity {
                         }
                     }
                     if (uriStr != null) {
+                        ensureReceiptTransactionDialogVisible();
                         View host = resolveReceiptDialogHost();
                         if (host != null) {
                             startReceiptImportAndOcr(Uri.parse(uriStr), mode);
@@ -744,19 +749,19 @@ public class MainActivity extends AppCompatActivity {
         galleryPickLauncher = registerForActivityResult(
                 new ActivityResultContracts.GetContent(),
                 uri -> {
+                    awaitingGalleryPick = false;
                     if (uri == null) {
-                        awaitingGalleryPick = false;
+                        ensureReceiptTransactionDialogVisible();
                         return;
                     }
                     View host = resolveReceiptDialogHost();
                     if (host == null) {
-                        awaitingGalleryPick = false;
                         Toast.makeText(MainActivity.this, R.string.receipt_gallery_dialog_lost,
                                 Toast.LENGTH_LONG).show();
                         return;
                     }
                     receiptDialogHostView = host;
-                    awaitingGalleryPick = false;
+                    ensureReceiptTransactionDialogVisible();
                     startReceiptImportAndOcr(uri, ReceiptCaptureMode.AUTO);
                 });
         super.onCreate(savedInstanceState);
@@ -1324,9 +1329,13 @@ public class MainActivity extends AppCompatActivity {
                 .setNegativeButton(android.R.string.cancel, null);
 
         AlertDialog dialog = builder.create();
+        activeReceiptTransactionDialog = dialog;
         dialog.setOnDismissListener(d -> {
             if (awaitingGalleryPick) {
                 return;
+            }
+            if (activeReceiptTransactionDialog == dialog) {
+                activeReceiptTransactionDialog = null;
             }
             if (receiptDialogHostView == dialogView) {
                 receiptDialogHostView = null;
@@ -1444,6 +1453,7 @@ public class MainActivity extends AppCompatActivity {
 
                 PrefManager.setLastAddTransactionEnvelope(MainActivity.this, envelopeName);
                 env.addTransaction(newTransaction, currentMonth);
+                synchronizeAllEnvelopesForMonth(resolveTransactionMonth(newTransaction));
                 PrefManager.saveEnvelopes(MainActivity.this, envelopes);
                 updateDisplay();
                 dialog.dismiss();
@@ -1461,6 +1471,24 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /**
+     * The transaction dialog is often dismissed while the gallery/camera activity is on screen.
+     * Re-show it so the user can confirm save after import/OCR.
+     */
+    private void ensureReceiptTransactionDialogVisible() {
+        AlertDialog dialog = activeReceiptTransactionDialog;
+        if (dialog == null || dialog.isShowing()) {
+            return;
+        }
+        dialog.show();
+        configureTransactionDialogWindow(dialog);
+        applyIconMaterialDialogActions(dialog);
+        Button positive = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+        if (positive != null) {
+            receiptDialogSaveButton = positive;
+        }
+    }
+
     @Nullable
     private View resolveReceiptDialogHost() {
         if (receiptDialogHostView != null) {
@@ -1469,9 +1497,40 @@ public class MainActivity extends AppCompatActivity {
         return receiptImportHostView;
     }
 
+    private byte[] readUriBytes(Uri uri) throws IOException {
+        try (InputStream in = getContentResolver().openInputStream(uri)) {
+            if (in == null) {
+                throw new IOException("openInputStream null");
+            }
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = in.read(buffer)) != -1) {
+                out.write(buffer, 0, read);
+            }
+            return out.toByteArray();
+        } catch (SecurityException e) {
+            throw new IOException("uri permission denied", e);
+        }
+    }
+
+    private void handleReceiptImportFailure(@Nullable View host, @Nullable TextView status, IOException e) {
+        Log.e("EnvelopeMoney", "receipt import picker uri", e);
+        receiptImportInProgress = false;
+        setReceiptDialogSaveEnabled(true);
+        if (host != null) {
+            host.setTag(R.id.tag_receipt_image_uri, null);
+            syncReceiptActionUi(host);
+        }
+        if (status != null) {
+            status.setVisibility(View.VISIBLE);
+            status.setText(R.string.receipt_ocr_failed);
+        }
+        Toast.makeText(this, R.string.receipt_ocr_failed, Toast.LENGTH_LONG).show();
+    }
+
     /**
-     * Imports picker/camera URIs on the main thread (while read grants are live), attaches the
-     * stable app album URI to the dialog, then runs OCR on a background thread.
+     * Reads picker bytes on the main thread, imports on a worker, attaches the stable URI, then OCR.
      */
     private void startReceiptImportAndOcr(Uri imageUri, ReceiptCaptureMode mode) {
         View host = resolveReceiptDialogHost();
@@ -1479,6 +1538,7 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         receiptDialogHostView = host;
+        ensureReceiptTransactionDialogVisible();
         if (receiptImportInProgress) {
             return;
         }
@@ -1490,38 +1550,52 @@ public class MainActivity extends AppCompatActivity {
             status.setText(R.string.receipt_ocr_reading);
         }
 
-        Uri appOwnedUri;
-        boolean moved;
-        try {
-            try {
-                getContentResolver().takePersistableUriPermission(
-                        imageUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            } catch (SecurityException ignored) {
-            }
-            ReceiptPickerUriNormalizer.ImportResult result =
-                    ReceiptPickerUriNormalizer.normalizeImport(this, imageUri);
-            appOwnedUri = result.uri;
-            moved = result.sourceDeleted;
-        } catch (IOException e) {
-            Log.e("EnvelopeMoney", "receipt import picker uri", e);
-            receiptImportInProgress = false;
-            setReceiptDialogSaveEnabled(true);
-            host.setTag(R.id.tag_receipt_image_uri, null);
+        if (ReceiptPickerUriNormalizer.isAppOwnedReceiptUri(imageUri.toString())) {
+            host.setTag(R.id.tag_receipt_image_uri, imageUri.toString());
             syncReceiptActionUi(host);
-            if (status != null) {
-                status.setVisibility(View.VISIBLE);
-                status.setText(R.string.receipt_ocr_failed);
-            }
-            Toast.makeText(this, R.string.receipt_ocr_failed, Toast.LENGTH_LONG).show();
+            runReceiptOcrBackground(imageUri, mode, status);
             return;
         }
 
-        host.setTag(R.id.tag_receipt_image_uri, appOwnedUri.toString());
-        syncReceiptActionUi(host);
-        if (moved) {
-            Toast.makeText(this, R.string.receipt_gallery_save_hint, Toast.LENGTH_SHORT).show();
+        final byte[] pickedBytes;
+        try {
+            pickedBytes = readUriBytes(imageUri);
+        } catch (IOException e) {
+            handleReceiptImportFailure(host, status, e);
+            return;
         }
-        runReceiptOcrBackground(appOwnedUri, mode, status);
+
+        final Uri originalUri = imageUri;
+        Executors.newSingleThreadExecutor().execute(() -> {
+            try {
+                ReceiptPickerUriNormalizer.ImportResult result =
+                        ReceiptPickerUriNormalizer.normalizeImportFromBytes(
+                                MainActivity.this, pickedBytes, originalUri);
+                runOnUiThread(() -> {
+                    View activeHost = receiptDialogHostView != null
+                            ? receiptDialogHostView
+                            : resolveReceiptDialogHost();
+                    if (activeHost == null) {
+                        receiptImportInProgress = false;
+                        setReceiptDialogSaveEnabled(true);
+                        return;
+                    }
+                    ensureReceiptTransactionDialogVisible();
+                    activeHost.setTag(R.id.tag_receipt_image_uri, result.uri.toString());
+                    syncReceiptActionUi(activeHost);
+                    if (result.sourceDeleted) {
+                        Toast.makeText(MainActivity.this, R.string.receipt_gallery_save_hint,
+                                Toast.LENGTH_SHORT).show();
+                    }
+                    runReceiptOcrBackground(result.uri, mode, status);
+                });
+            } catch (IOException e) {
+                runOnUiThread(() -> handleReceiptImportFailure(
+                        receiptDialogHostView != null ? receiptDialogHostView : host,
+                        status,
+                        e));
+            }
+        });
     }
 
     private void runReceiptOcrBackground(Uri appOwnedUri, ReceiptCaptureMode mode, TextView status) {
@@ -1554,6 +1628,8 @@ public class MainActivity extends AppCompatActivity {
                         receiptImportInProgress = false;
                         setReceiptDialogSaveEnabled(true);
                         applyReceiptDraft(draft, status);
+                        Toast.makeText(MainActivity.this, R.string.receipt_ready_to_save,
+                                Toast.LENGTH_SHORT).show();
                     });
                 }
 
@@ -1641,6 +1717,7 @@ public class MainActivity extends AppCompatActivity {
         View btnReceiptGallery = dialogView.findViewById(R.id.btnReceiptGallery);
         if (btnReceiptCamera != null) {
             btnReceiptCamera.setOnClickListener(v -> {
+                receiptImportHostView = dialogView;
                 Intent intent = new Intent(MainActivity.this, ReceiptCaptureActivity.class);
                 receiptCaptureLauncher.launch(intent);
             });
@@ -2637,9 +2714,13 @@ public class MainActivity extends AppCompatActivity {
                 .setNegativeButton(android.R.string.cancel, null);
 
         AlertDialog dialog = builder.create();
+        activeReceiptTransactionDialog = dialog;
         dialog.setOnDismissListener(d -> {
             if (awaitingGalleryPick) {
                 return;
+            }
+            if (activeReceiptTransactionDialog == dialog) {
+                activeReceiptTransactionDialog = null;
             }
             if (receiptDialogHostView == dialogView) {
                 receiptDialogHostView = null;

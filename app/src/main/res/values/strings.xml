@@ -80,6 +80,7 @@
     <string name="receipt_ocr_failed">Could not read receipt. Try again or enter manually.</string>
     <string name="receipt_gallery_dialog_lost">Re-open the transaction dialog and pick the image again.</string>
     <string name="receipt_import_in_progress">Wait for the receipt import to finish.</string>
+    <string name="receipt_ready_to_save">Receipt loaded — tap check to save.</string>
     <string name="receipt_date_outside_filter">Date is outside your Start/End range — widen the filter to see this entry after save.</string>
     <string name="receipt_preview">Preview receipt</string>
     <string name="receipt_remove">Remove receipt</string>

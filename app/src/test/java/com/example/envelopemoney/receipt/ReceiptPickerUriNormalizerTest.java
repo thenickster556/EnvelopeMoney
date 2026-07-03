@@ -51,4 +51,10 @@ public class ReceiptPickerUriNormalizerTest {
         assertFalse(ReceiptPickerUriNormalizer.shouldCopyToAppGallery(
                 "file:///storage/emulated/0/Pictures/Mountain Money/MountainMoney_1.jpg"));
     }
+
+    @Test
+    public void canStreamCopyBytesInPlace_falseForEmptyOrNonJpeg() throws Exception {
+        assertFalse(ReceiptPickerUriNormalizer.canStreamCopyBytesInPlace(new byte[0]));
+        assertFalse(ReceiptPickerUriNormalizer.canStreamCopyBytesInPlace(new byte[]{0x00, 0x01}));
+    }
 }
