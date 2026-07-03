@@ -20,6 +20,12 @@
   ],
   "completed_tasks": [
     {
+      "id": "gallery-receipt-move-2026-07",
+      "title": "Fix gallery receipt import move + reliable save",
+      "status": "completed",
+      "intent": "Main-thread import before OCR; save guard; move via ReceiptSourceDeleter; tests + docs + commit."
+    },
+    {
       "id": "bills-anchor-unified-2026-06",
       "title": "Fix bills-period anchor nearest previous bills day",
       "status": "completed",

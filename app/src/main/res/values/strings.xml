@@ -73,7 +73,7 @@
     <string name="receipt_mode_receipt">Receipt</string>
     <string name="receipt_mode_restaurant">Eat out</string>
     <string name="receipt_mode_gas">Gas</string>
-    <string name="receipt_gallery_save_hint">Saved to Gallery: Pictures/Mountain Money</string>
+    <string name="receipt_gallery_save_hint">Receipt moved to Pictures/Mountain Money</string>
     <string name="receipt_scan_camera">Camera scan</string>
     <string name="receipt_scan_gallery">From gallery</string>
     <string name="receipt_ocr_reading">Reading receipt…</string>

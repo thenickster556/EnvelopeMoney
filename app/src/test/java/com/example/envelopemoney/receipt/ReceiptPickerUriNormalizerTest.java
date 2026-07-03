@@ -29,17 +29,25 @@ public class ReceiptPickerUriNormalizerTest {
     }
 
     @Test
-    public void shouldCopyToAppGallery_trueForExternalPickerUris() {
-        assertTrue(ReceiptPickerUriNormalizer.shouldCopyToAppGallery(
+    public void shouldImportToAppGallery_trueForExternalPickerUris() {
+        assertTrue(ReceiptPickerUriNormalizer.shouldImportToAppGallery(
                 "content://com.android.providers.media.documents/document/image%3A12345"));
-        assertTrue(ReceiptPickerUriNormalizer.shouldCopyToAppGallery(
+        assertTrue(ReceiptPickerUriNormalizer.shouldImportToAppGallery(
                 "content://media/picker_get_content/0/com.android.providers.media.photopicker/media/1"));
-        assertTrue(ReceiptPickerUriNormalizer.shouldCopyToAppGallery(
+        assertTrue(ReceiptPickerUriNormalizer.shouldImportToAppGallery(
                 "content://media/external/images/media/999"));
     }
 
     @Test
-    public void shouldCopyToAppGallery_falseForAppAlbum() {
+    public void shouldImportToAppGallery_falseForAppAlbum() {
+        assertFalse(ReceiptPickerUriNormalizer.shouldImportToAppGallery(
+                "file:///storage/emulated/0/Pictures/Mountain Money/MountainMoney_1.jpg"));
+    }
+
+    @Test
+    public void shouldCopyToAppGallery_aliasOfShouldImport() {
+        assertTrue(ReceiptPickerUriNormalizer.shouldCopyToAppGallery(
+                "content://media/external/images/media/999"));
         assertFalse(ReceiptPickerUriNormalizer.shouldCopyToAppGallery(
                 "file:///storage/emulated/0/Pictures/Mountain Money/MountainMoney_1.jpg"));
     }
