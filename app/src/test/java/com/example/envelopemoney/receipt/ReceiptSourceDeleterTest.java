@@ -46,4 +46,11 @@ public class ReceiptSourceDeleterTest {
                 null,
                 android.net.Uri.parse("file:///storage/Pictures/Mountain Money/x.jpg")));
     }
+
+    @Test
+    public void shouldAttemptDelete_trueForDocumentUri() {
+        assertTrue(ReceiptSourceDeleter.shouldAttemptDelete(
+                "content://com.android.providers.media.documents/document/image%3A12345",
+                "content://media/external/images/media/99999"));
+    }
 }

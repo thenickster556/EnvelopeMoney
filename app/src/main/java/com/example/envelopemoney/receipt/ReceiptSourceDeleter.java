@@ -1,10 +1,15 @@
 package com.example.envelopemoney.receipt;
 
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.net.Uri;
+import android.provider.DocumentsContract;
 
 import androidx.annotation.Nullable;
 
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.Locale;
 
 /**
@@ -42,7 +47,7 @@ public final class ReceiptSourceDeleter {
     }
 
     /**
-     * @return true when {@link Context#getContentResolver()} reports rows deleted
+     * @return true when the source was removed
      */
     public static boolean tryDeleteSource(Context context, Uri sourceUri) {
         if (context == null || sourceUri == null) {
@@ -51,13 +56,30 @@ public final class ReceiptSourceDeleter {
         if (!shouldAttemptDelete(sourceUri.toString(), null)) {
             return false;
         }
+        if (DocumentsContract.isDocumentUri(context, sourceUri)) {
+            try {
+                return DocumentsContract.deleteDocument(context.getContentResolver(), sourceUri);
+            } catch (FileNotFoundException ignored) {
+                return false;
+            } catch (SecurityException ignored) {
+                return false;
+            } catch (RuntimeException ignored) {
+                return false;
+            }
+        }
+        if ("file".equalsIgnoreCase(sourceUri.getScheme())) {
+            String path = sourceUri.getPath();
+            if (path != null) {
+                return new java.io.File(path).delete();
+            }
+            return false;
+        }
         try {
             int rows = context.getContentResolver().delete(sourceUri, null, null);
             return rows > 0;
         } catch (SecurityException ignored) {
             return false;
-        } catch (RuntimeException e) {
-            // RecoverableSecurityException (API 29+) and other delete denials
+        } catch (RuntimeException ignored) {
             return false;
         }
     }

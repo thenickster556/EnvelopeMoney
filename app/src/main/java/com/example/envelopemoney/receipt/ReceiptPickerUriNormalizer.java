@@ -8,6 +8,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.Locale;
 
 /**
@@ -56,6 +57,24 @@ public final class ReceiptPickerUriNormalizer {
         return shouldImportToAppGallery(uriString);
     }
 
+    /**
+     * True when JPEG bytes can be streamed into the app album without a decode/rotate pass.
+     */
+    static boolean canStreamCopyInPlace(Context context, Uri uri) throws IOException {
+        if (context == null || uri == null) {
+            return false;
+        }
+        String mime = context.getContentResolver().getType(uri);
+        if (mime == null) {
+            return false;
+        }
+        mime = mime.toLowerCase(Locale.US);
+        if (!mime.equals("image/jpeg") && !mime.equals("image/jpg")) {
+            return false;
+        }
+        return ReceiptExifBitmapLoader.readExifRotationDegrees(context, uri) == 0;
+    }
+
     @NonNull
     public static ImportResult normalizeImport(Context context, Uri uri) throws IOException {
         if (uri == null) {
@@ -66,6 +85,16 @@ public final class ReceiptPickerUriNormalizer {
         }
         Uri original = uri;
         try {
+            if (canStreamCopyInPlace(context, uri)) {
+                try (InputStream in = context.getContentResolver().openInputStream(uri)) {
+                    if (in == null) {
+                        throw new IOException("openInputStream null");
+                    }
+                    Uri saved = MediaStoreReceiptSaver.saveJpegStream(context, in);
+                    boolean deleted = ReceiptSourceDeleter.tryDeleteSource(context, original);
+                    return new ImportResult(saved, deleted);
+                }
+            }
             Bitmap bmp = ReceiptExifBitmapLoader.decodeUpright(context, uri);
             if (bmp == null) {
                 throw new IOException("decode bitmap failed");

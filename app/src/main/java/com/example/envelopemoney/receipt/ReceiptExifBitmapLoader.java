@@ -77,7 +77,7 @@ public final class ReceiptExifBitmapLoader {
         return rotated;
     }
 
-    private static int readExifRotationDegrees(Context context, Uri uri) throws IOException {
+    static int readExifRotationDegrees(Context context, Uri uri) throws IOException {
         try (InputStream is = context.getContentResolver().openInputStream(uri)) {
             if (is == null) {
                 return 0;
