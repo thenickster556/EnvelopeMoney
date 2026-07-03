@@ -16,6 +16,7 @@ import java.util.Locale;
  * External and photo-picker URIs are imported into {@link MediaStoreReceiptSaver}'s Mountain Money
  * album so preview, OCR, and persisted {@code receiptImageUri} use a stable app-owned URI (same as camera).
  * When the platform allows, the original picker file is deleted after import (move semantics).
+ * If delete is denied, the new copy is removed and the original URI is kept (no duplicate).
  */
 public final class ReceiptPickerUriNormalizer {
 
@@ -86,6 +87,22 @@ public final class ReceiptPickerUriNormalizer {
     }
 
     /**
+     * Try to delete the picker source after saving to the app album. If delete fails, remove the
+     * new copy and keep the original URI so only one file remains.
+     */
+    @NonNull
+    static ImportResult finishImportMoveOrRollback(Context context, Uri saved, Uri originalUri) {
+        if (originalUri == null) {
+            return new ImportResult(saved, false);
+        }
+        if (ReceiptSourceDeleter.tryDeleteSource(context, originalUri)) {
+            return new ImportResult(saved, true);
+        }
+        ReceiptSourceDeleter.tryDeleteSource(context, saved);
+        return new ImportResult(originalUri, false);
+    }
+
+    /**
      * Import bytes already read from a picker URI (safe to call off the main thread).
      */
     @NonNull
@@ -100,9 +117,7 @@ public final class ReceiptPickerUriNormalizer {
         if (canStreamCopyBytesInPlace(data)) {
             try (InputStream in = new ByteArrayInputStream(data)) {
                 Uri saved = MediaStoreReceiptSaver.saveJpegStream(context, in);
-                boolean deleted = originalUri != null
-                        && ReceiptSourceDeleter.tryDeleteSource(context, originalUri);
-                return new ImportResult(saved, deleted);
+                return finishImportMoveOrRollback(context, saved, originalUri);
             }
         }
         Bitmap bmp = ReceiptExifBitmapLoader.decodeUprightFromBytes(data);
@@ -111,9 +126,7 @@ public final class ReceiptPickerUriNormalizer {
         }
         try {
             Uri saved = MediaStoreReceiptSaver.saveJpeg(context, bmp);
-            boolean deleted = originalUri != null
-                    && ReceiptSourceDeleter.tryDeleteSource(context, originalUri);
-            return new ImportResult(saved, deleted);
+            return finishImportMoveOrRollback(context, saved, originalUri);
         } finally {
             bmp.recycle();
         }
@@ -135,8 +148,7 @@ public final class ReceiptPickerUriNormalizer {
                         throw new IOException("openInputStream null");
                     }
                     Uri saved = MediaStoreReceiptSaver.saveJpegStream(context, in);
-                    boolean deleted = ReceiptSourceDeleter.tryDeleteSource(context, original);
-                    return new ImportResult(saved, deleted);
+                    return finishImportMoveOrRollback(context, saved, original);
                 }
             }
             Bitmap bmp = ReceiptExifBitmapLoader.decodeUpright(context, uri);
@@ -145,8 +157,7 @@ public final class ReceiptPickerUriNormalizer {
             }
             try {
                 Uri saved = MediaStoreReceiptSaver.saveJpeg(context, bmp);
-                boolean deleted = ReceiptSourceDeleter.tryDeleteSource(context, original);
-                return new ImportResult(saved, deleted);
+                return finishImportMoveOrRollback(context, saved, original);
             } finally {
                 bmp.recycle();
             }

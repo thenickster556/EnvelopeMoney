@@ -150,9 +150,11 @@ public class MainActivity extends AppCompatActivity {
     private Button receiptDialogSaveButton;
     @Nullable
     private AlertDialog activeReceiptTransactionDialog;
+    @Nullable
+    private View.OnClickListener receiptDialogSaveListener;
     private boolean receiptImportInProgress;
     private ActivityResultLauncher<Intent> receiptCaptureLauncher;
-    private ActivityResultLauncher<String> galleryPickLauncher;
+    private ActivityResultLauncher<String[]> galleryPickLauncher;
 
     private static class TransferTotalsOption {
         final String optionKey;
@@ -747,12 +749,17 @@ public class MainActivity extends AppCompatActivity {
                     }
                 });
         galleryPickLauncher = registerForActivityResult(
-                new ActivityResultContracts.GetContent(),
+                new ActivityResultContracts.OpenDocument(),
                 uri -> {
                     awaitingGalleryPick = false;
                     if (uri == null) {
                         ensureReceiptTransactionDialogVisible();
                         return;
+                    }
+                    try {
+                        getContentResolver().takePersistableUriPermission(
+                                uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    } catch (SecurityException ignored) {
                     }
                     View host = resolveReceiptDialogHost();
                     if (host == null) {
@@ -1342,6 +1349,7 @@ public class MainActivity extends AppCompatActivity {
             }
             receiptImportHostView = null;
             receiptDialogSaveButton = null;
+            receiptDialogSaveListener = null;
             receiptImportInProgress = false;
             if (activeTransferDialogViews == transferViews) {
                 activeTransferDialogViews = null;
@@ -1361,7 +1369,7 @@ public class MainActivity extends AppCompatActivity {
             splitViews.positiveButton = positive;
             updateTransferSectionSummary(transferViews);
             updateSplitSectionSummary(splitViews);
-            positive.setOnClickListener(v -> {
+            receiptDialogSaveListener = v -> {
             try {
                 if (receiptImportInProgress) {
                     Toast.makeText(MainActivity.this, R.string.receipt_import_in_progress,
@@ -1371,7 +1379,8 @@ public class MainActivity extends AppCompatActivity {
                 int typeTab = tabTransactionType.getSelectedTabPosition();
                 String comment = etComment.getText().toString();
                 String date = etDate.getText().toString();
-                Object uriTag = dialogView.getTag(R.id.tag_receipt_image_uri);
+                View receiptHost = receiptDialogHostView != null ? receiptDialogHostView : dialogView;
+                Object uriTag = receiptHost.getTag(R.id.tag_receipt_image_uri);
                 String receiptUri = uriTag instanceof String ? (String) uriTag : null;
 
                 if (typeTab == TAB_TYPE_SPLIT) {
@@ -1461,8 +1470,29 @@ public class MainActivity extends AppCompatActivity {
                 showError("Invalid amount entered!");
             }
         });
+            bindReceiptTransactionDialogSave(dialog);
         });
         dialog.show();
+    }
+
+    private void bindReceiptTransactionDialogSave(AlertDialog dialog) {
+        if (dialog == null) {
+            return;
+        }
+        Button positive = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+        if (positive == null) {
+            return;
+        }
+        receiptDialogSaveButton = positive;
+        if (activeTransferDialogViews != null) {
+            activeTransferDialogViews.positiveButton = positive;
+        }
+        if (activeSplitDialogViews != null) {
+            activeSplitDialogViews.positiveButton = positive;
+        }
+        if (receiptDialogSaveListener != null) {
+            positive.setOnClickListener(receiptDialogSaveListener);
+        }
     }
 
     private void setReceiptDialogSaveEnabled(boolean enabled) {
@@ -1483,10 +1513,7 @@ public class MainActivity extends AppCompatActivity {
         dialog.show();
         configureTransactionDialogWindow(dialog);
         applyIconMaterialDialogActions(dialog);
-        Button positive = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
-        if (positive != null) {
-            receiptDialogSaveButton = positive;
-        }
+        bindReceiptTransactionDialogSave(dialog);
     }
 
     @Nullable
@@ -1566,6 +1593,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         final Uri originalUri = imageUri;
+        final byte[] bytesForOcr = pickedBytes;
         Executors.newSingleThreadExecutor().execute(() -> {
             try {
                 ReceiptPickerUriNormalizer.ImportResult result =
@@ -1583,11 +1611,11 @@ public class MainActivity extends AppCompatActivity {
                     ensureReceiptTransactionDialogVisible();
                     activeHost.setTag(R.id.tag_receipt_image_uri, result.uri.toString());
                     syncReceiptActionUi(activeHost);
-                    if (result.sourceDeleted) {
-                        Toast.makeText(MainActivity.this, R.string.receipt_gallery_save_hint,
-                                Toast.LENGTH_SHORT).show();
+                    if (ReceiptPickerUriNormalizer.isAppOwnedReceiptUri(result.uri.toString())) {
+                        runReceiptOcrBackground(result.uri, mode, status);
+                    } else {
+                        runReceiptOcrBackgroundFromBytes(bytesForOcr, mode, status);
                     }
-                    runReceiptOcrBackground(result.uri, mode, status);
                 });
             } catch (IOException e) {
                 runOnUiThread(() -> handleReceiptImportFailure(
@@ -1628,8 +1656,55 @@ public class MainActivity extends AppCompatActivity {
                         receiptImportInProgress = false;
                         setReceiptDialogSaveEnabled(true);
                         applyReceiptDraft(draft, status);
-                        Toast.makeText(MainActivity.this, R.string.receipt_ready_to_save,
-                                Toast.LENGTH_SHORT).show();
+                    });
+                }
+
+                @Override
+                public void onError(Throwable t) {
+                    bitmap.recycle();
+                    runOnUiThread(() -> {
+                        receiptImportInProgress = false;
+                        setReceiptDialogSaveEnabled(true);
+                        if (status != null) {
+                            status.setVisibility(View.VISIBLE);
+                            status.setText(R.string.receipt_ocr_failed);
+                        }
+                    });
+                }
+            });
+        });
+    }
+
+    private void runReceiptOcrBackgroundFromBytes(byte[] imageBytes, ReceiptCaptureMode mode, TextView status) {
+        Executors.newSingleThreadExecutor().execute(() -> {
+            Bitmap bmp;
+            try {
+                bmp = ReceiptExifBitmapLoader.decodeUprightFromBytes(imageBytes);
+            } catch (IOException e) {
+                Log.e("EnvelopeMoney", "receipt decode bytes", e);
+                bmp = null;
+            }
+            if (bmp == null) {
+                runOnUiThread(() -> {
+                    receiptImportInProgress = false;
+                    setReceiptDialogSaveEnabled(true);
+                    if (status != null) {
+                        status.setVisibility(View.VISIBLE);
+                        status.setText(R.string.receipt_ocr_failed);
+                    }
+                });
+                return;
+            }
+            final Bitmap bitmap = bmp;
+            ReceiptOcrPipeline pipeline = new ReceiptOcrPipeline(PaddleOcrAdapter.createDefaultEngine());
+            pipeline.runAsync(this, bitmap, mode, new ReceiptOcrPipeline.PipelineCallback() {
+                @Override
+                public void onResult(ReceiptDraft draft) {
+                    bitmap.recycle();
+                    runOnUiThread(() -> {
+                        receiptImportInProgress = false;
+                        setReceiptDialogSaveEnabled(true);
+                        applyReceiptDraft(draft, status);
                     });
                 }
 
@@ -1726,7 +1801,7 @@ public class MainActivity extends AppCompatActivity {
             btnReceiptGallery.setOnClickListener(v -> {
                 receiptImportHostView = dialogView;
                 awaitingGalleryPick = true;
-                galleryPickLauncher.launch("image/*");
+                galleryPickLauncher.launch(new String[]{"image/*"});
             });
         }
         View btnPreview = dialogView.findViewById(R.id.btnReceiptPreview);
@@ -2727,6 +2802,7 @@ public class MainActivity extends AppCompatActivity {
             }
             receiptImportHostView = null;
             receiptDialogSaveButton = null;
+            receiptDialogSaveListener = null;
             receiptImportInProgress = false;
             if (activeTransferDialogViews == transferViews) {
                 activeTransferDialogViews = null;
@@ -2746,7 +2822,7 @@ public class MainActivity extends AppCompatActivity {
             splitViews.positiveButton = positive;
             updateTransferSectionSummary(transferViews);
             updateSplitSectionSummary(splitViews);
-            positive.setOnClickListener(v -> {
+            receiptDialogSaveListener = v -> {
             try {
                 if (receiptImportInProgress) {
                     Toast.makeText(MainActivity.this, R.string.receipt_import_in_progress,
@@ -2765,7 +2841,8 @@ public class MainActivity extends AppCompatActivity {
                 String newComment = etComment.getText().toString();
                 String newDate = etDate.getText().toString();
                 String previousMonth = resolveTransactionMonth(editTransaction);
-                Object receiptUriTag = dialogView.getTag(R.id.tag_receipt_image_uri);
+                View receiptHost = receiptDialogHostView != null ? receiptDialogHostView : dialogView;
+                Object receiptUriTag = receiptHost.getTag(R.id.tag_receipt_image_uri);
                 String receiptUri = receiptUriTag instanceof String ? (String) receiptUriTag : null;
 
                 if (typeTab == TAB_TYPE_SPLIT) {
@@ -2884,6 +2961,7 @@ public class MainActivity extends AppCompatActivity {
                 showError("Invalid amount entered!");
             }
         });
+            bindReceiptTransactionDialogSave(dialog);
         });
 
         dialog.show();
