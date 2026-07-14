@@ -154,7 +154,7 @@ public class MainActivity extends AppCompatActivity {
     private View.OnClickListener receiptDialogSaveListener;
     private boolean receiptImportInProgress;
     private ActivityResultLauncher<Intent> receiptCaptureLauncher;
-    private ActivityResultLauncher<String[]> galleryPickLauncher;
+    private ActivityResultLauncher<String> galleryPickLauncher;
 
     private static class TransferTotalsOption {
         final String optionKey;
@@ -749,17 +749,12 @@ public class MainActivity extends AppCompatActivity {
                     }
                 });
         galleryPickLauncher = registerForActivityResult(
-                new ActivityResultContracts.OpenDocument(),
+                new ActivityResultContracts.GetContent(),
                 uri -> {
                     awaitingGalleryPick = false;
                     if (uri == null) {
                         ensureReceiptTransactionDialogVisible();
                         return;
-                    }
-                    try {
-                        getContentResolver().takePersistableUriPermission(
-                                uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                    } catch (SecurityException ignored) {
                     }
                     View host = resolveReceiptDialogHost();
                     if (host == null) {
@@ -1398,6 +1393,7 @@ public class MainActivity extends AppCompatActivity {
                         synchronizeAllEnvelopesForMonth(m);
                     }
                     PrefManager.saveEnvelopes(MainActivity.this, envelopes);
+                    ensureDateFilterIncludes(date);
                     updateDisplay();
                     dialog.dismiss();
                     return;
@@ -1427,6 +1423,7 @@ public class MainActivity extends AppCompatActivity {
                     TransferSyncHelper.applyTransferGroup(envelopes, newTransaction, envelopeName, allocations);
                     synchronizeAllEnvelopesForMonth(resolveTransactionMonth(newTransaction));
                     PrefManager.saveEnvelopes(MainActivity.this, envelopes);
+                    ensureDateFilterIncludes(date);
                     updateDisplay();
                     dialog.dismiss();
                     return;
@@ -1464,12 +1461,13 @@ public class MainActivity extends AppCompatActivity {
                 env.addTransaction(newTransaction, currentMonth);
                 synchronizeAllEnvelopesForMonth(resolveTransactionMonth(newTransaction));
                 PrefManager.saveEnvelopes(MainActivity.this, envelopes);
+                ensureDateFilterIncludes(date);
                 updateDisplay();
                 dialog.dismiss();
             } catch (NumberFormatException e) {
                 showError("Invalid amount entered!");
             }
-        });
+        };
             bindReceiptTransactionDialogSave(dialog);
         });
         dialog.show();
@@ -1766,6 +1764,46 @@ public class MainActivity extends AppCompatActivity {
         syncReceiptActionUi(receiptDialogHostView);
     }
 
+    /** Widens Start/End so a newly saved transaction is visible in history. */
+    private void ensureDateFilterIncludes(@Nullable String isoDateYyyyMmDd) {
+        if (isoDateYyyyMmDd == null || isoDateYyyyMmDd.trim().isEmpty()) {
+            return;
+        }
+        TextView tvStart = findViewById(R.id.tvStartDate);
+        TextView tvEnd = findViewById(R.id.tvEndDate);
+        if (tvStart == null || tvEnd == null) {
+            return;
+        }
+        SimpleDateFormat iso = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault());
+        SimpleDateFormat display = new SimpleDateFormat("MMM d, yyyy", Locale.getDefault());
+        try {
+            Date tx = iso.parse(isoDateYyyyMmDd.trim());
+            if (tx == null) {
+                return;
+            }
+            Date start = display.parse(tvStart.getText().toString());
+            Date end = display.parse(tvEnd.getText().toString());
+            boolean changed = false;
+            if (start != null && tx.before(start)) {
+                tvStart.setText(display.format(tx));
+                changed = true;
+            }
+            if (end != null && tx.after(end)) {
+                tvEnd.setText(display.format(tx));
+                changed = true;
+            }
+            if (changed && billsPeriodFilterActive) {
+                billsPeriodFilterActive = false;
+                PrefManager.setBillsFilterActive(this, false);
+                ImageButton btn = findViewById(R.id.btnBillsPeriodFilter);
+                if (btn != null) {
+                    updateBillsPeriodFilterButton(btn);
+                }
+            }
+        } catch (ParseException ignored) {
+        }
+    }
+
     private void syncReceiptActionUi(@Nullable View host) {
         if (host == null) {
             return;
@@ -1801,7 +1839,7 @@ public class MainActivity extends AppCompatActivity {
             btnReceiptGallery.setOnClickListener(v -> {
                 receiptImportHostView = dialogView;
                 awaitingGalleryPick = true;
-                galleryPickLauncher.launch(new String[]{"image/*"});
+                galleryPickLauncher.launch("image/*");
             });
         }
         View btnPreview = dialogView.findViewById(R.id.btnReceiptPreview);
@@ -2866,6 +2904,7 @@ public class MainActivity extends AppCompatActivity {
                         synchronizeAllEnvelopesForMonth(m);
                     }
                     PrefManager.saveEnvelopes(MainActivity.this, envelopes);
+                    ensureDateFilterIncludes(newDate);
                     updateDisplay();
                     dialog.dismiss();
                     return;
@@ -2955,12 +2994,13 @@ public class MainActivity extends AppCompatActivity {
                 synchronizeAllEnvelopesForMonth(resolveTransactionMonth(editTransaction));
 
                 PrefManager.saveEnvelopes(MainActivity.this, envelopes);
+                ensureDateFilterIncludes(newDate);
                 updateDisplay();
                 dialog.dismiss();
             } catch (NumberFormatException e) {
                 showError("Invalid amount entered!");
             }
-        });
+        };
             bindReceiptTransactionDialogSave(dialog);
         });
 
