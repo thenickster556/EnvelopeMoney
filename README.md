@@ -50,6 +50,8 @@ PondBankReconciliationHelperTest
 ```
 
 ## Change Log
+- 2026-07-14: **Payday Remaining / Still-to-deposit formula:** With paydays + Account, Remaining = Account checkpoint + unlocked payday Limit slices − month spend; Still to deposit = unpassed payday slices; paydays count on/after their day and reset each month. `PondBankReconciliationHelper` + `MainActivity` wiring + `PondBankReconciliationHelperTest`. Docs updated. Local full Gradle still needs JDK **8–15**; helper unit tests verified via JUnit on JDK 21.
+- 2026-07-14: **Intent (in progress):** Fix payday Remaining / Still-to-deposit — Remaining = Account checkpoint + unlocked payday slices − month spend; Still to deposit = unpassed payday slices of Limit; count paydays only on/after their day; reset each month. Helper + MainActivity + tests + docs.
 - 2026-03-21: Initialized repository memory system.
 - 2026-03-21: Added `MonthRolloverHelper`, startup rollover sanitization, envelope state repair helpers, and month normalization tests.
 - 2026-03-21: Verification is currently blocked locally because this machine only exposes Java 25 while Gradle 6.7.1 requires an older compatible JDK.

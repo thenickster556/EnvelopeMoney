@@ -40,7 +40,7 @@
     <string name="dialog_bills_paydays_title">Bills &amp; paydays</string>
     <string name="tab_bills_days">Bills days</string>
     <string name="tab_paydays">Paydays</string>
-    <string name="dialog_paydays_message">Choose paydays in each month. Used with Account (bank) to track how much is still to deposit.</string>
+    <string name="dialog_paydays_message">Choose paydays in each month. With Account (bank checkpoint), Remaining estimates Account plus arrived payday slices of Limit minus spending; Still to deposit is Limit money for paydays not yet arrived.</string>
     <string name="pond_footer_reconcile">In bank: $%.2f | Still to deposit: $%.2f</string>
     <string name="pond_edit_reconcile_preview">In bank: $%.2f | Still to deposit: $%.2f</string>
     <string name="pond_row_reconcile">In bank: $%.2f | Still to deposit: $%.2f</string>

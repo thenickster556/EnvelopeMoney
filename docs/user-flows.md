@@ -51,7 +51,7 @@
 ## Bills days and paydays configuration
 1. User taps the **calendar** on the custom top bar.
 2. **Bills days** tab: toggle days 1–31 and save to `bills_days_json` (unchanged filter behavior).
-3. **Paydays** tab: toggle paydays 1–31 and save to `paydays_json`. Saving applies bank reconciliation to ponds that have Account set (check icon confirms).
+3. **Paydays** tab: toggle paydays 1–31 and save to `paydays_json`. Saving applies bank reconciliation to ponds that have Account set (check icon confirms): Remaining becomes Account + unlocked payday slices − month spend; Still to deposit becomes unpassed payday slices of Limit.
 
 ## Bills period filter
 1. User taps the **filter** icon beside the transfers toggle (disabled or toast if no bills days configured).

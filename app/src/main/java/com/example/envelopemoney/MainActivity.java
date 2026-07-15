@@ -869,6 +869,19 @@ public class MainActivity extends AppCompatActivity {
         updatePondTotalsFooter();
     }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Re-apply payday unlock math when returning (e.g. after a payday day passed in the background).
+        if (envelopes == null || envelopes.isEmpty()) {
+            return;
+        }
+        updateDisplay();
+        if (isGlobalPaydayReconciliationEnabled()) {
+            PrefManager.saveEnvelopes(this, envelopes);
+        }
+    }
+
     private void applyEnvelopesCollapsedState() {
         if (layoutEnvelopesSection == null || btnToggleEnvelopes == null) {
             return;
@@ -2013,6 +2026,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void updateDisplay() {
+        applyPaydayReconciliationToAllEligibleEnvelopes();
         if (envelopeAdapter != null) {
             envelopeAdapter.notifyDataSetChanged();
         }
@@ -4579,9 +4593,10 @@ public class MainActivity extends AppCompatActivity {
                 envelope.getAccountBalance(),
                 paydays,
                 calendarForCurrentMonth(),
-                Calendar.getInstance());
+                Calendar.getInstance(),
+                monthSpendForEnvelope(envelope));
         envelope.clearManualRemainingOverride();
-        envelope.setRemaining(MoneyMath.roundToCents(result.getStillToDepositForMonth()));
+        envelope.setRemaining(MoneyMath.roundToCents(result.getEstimatedRemaining()));
     }
 
     private void applyPaydayReconciliationToAllEligibleEnvelopes() {
@@ -4593,6 +4608,28 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /** Sum of this pond's transaction amounts for {@link #currentMonth} (same month match as Envelope). */
+    private double monthSpendForEnvelope(Envelope envelope) {
+        if (envelope == null || currentMonth == null) {
+            return 0d;
+        }
+        double spent = 0d;
+        List<Transaction> transactions = envelope.getTransactions();
+        if (transactions == null) {
+            return 0d;
+        }
+        for (Transaction transaction : transactions) {
+            if (transaction == null) {
+                continue;
+            }
+            String transactionMonth = transaction.getMonth();
+            if (transactionMonth != null && transactionMonth.equals(currentMonth)) {
+                spent += safe(transaction.getAmount());
+            }
+        }
+        return MoneyMath.roundToCents(spent);
+    }
+
     @Nullable
     private PondBankReconciliationHelper.Result computePondReconciliation(Envelope envelope) {
         List<Integer> paydays = PrefManager.getPaydays(this);
@@ -4601,7 +4638,8 @@ public class MainActivity extends AppCompatActivity {
                 envelope.getAccountBalance(),
                 paydays,
                 calendarForCurrentMonth(),
-                Calendar.getInstance());
+                Calendar.getInstance(),
+                monthSpendForEnvelope(envelope));
     }
 
     private void refreshBankReconcilePreview(TextView preview, double limit, String accountText) {

@@ -20,7 +20,12 @@
 ## Bills days and paydays
 - Users configure recurring **days of each month** (1–31) from the **calendar icon on the custom top bar** via a **Bills days / Paydays** tabbed dialog (not a full month calendar).
 - **Bills days** drive the bills-period transaction filter only.
-- **Paydays** drive optional **bank reconciliation** when a pond has **Account (bank slice)** entered: **Still to deposit** is the **schedule gap** as of today (`max(0, expected in bank by paydays reached − account)`); **Remaining** auto-syncs to that gap when reconciliation is active. Pond row also shows **Payday progress** (`N/M reached`). Footer and edit preview show **In bank | Still to deposit** (monthly **Limit** stays on the pond row / edit limit field—no duplicate Target). Ponds without Account keep standard transaction-driven remaining (limit + carry-over − spending).
+- **Paydays** drive optional **bank reconciliation** when a pond has **Account (bank slice)** entered:
+  - **In bank** is the user’s last recorded checkpoint for that pond (manual; not auto-written when a payday arrives).
+  - **Still to deposit** is Limit money for paydays that have **not yet arrived** this month (fair `Limit / N` slices for unpassed days).
+  - **Remaining** is estimated spendable: **Account + unlocked payday slices − this month’s spending**. Unlocked slices are only for paydays on or before today; progress **resets each calendar month**.
+  - Pond row also shows **Payday progress** (`N/M reached`). Footer and edit preview show **In bank | Still to deposit** (monthly **Limit** stays on the pond row / edit limit field—no duplicate Target).
+  - Ponds without Account keep standard transaction-driven remaining (limit + carry-over − spending).
 - A separate **bills-period filter** icon next to the transfers toggle sets the **end date** to **today**. **Start** uses `BillsDayAnchor`: latest bills day on or before today in the current month when one has passed (e.g. bills on the 10th, today May 15 → May 10); walk to prior month(s) when none have passed yet (bills on the 15th, today Feb 10 → Jan 15); when today equals a period-end bills day with **multiple** configured days, start at the previous bills day in the set (Apr 15 with days 1 and 15 → Apr 1); when today equals the **only** bills day, start at that day in the **previous** month. Toggling off restores the previously saved date range.
 - Changing the visible month clears the bills-period filter.
 

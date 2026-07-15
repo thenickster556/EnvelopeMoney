@@ -20,6 +20,12 @@
   ],
   "completed_tasks": [
     {
+      "id": "payday-remaining-formula-2026-07",
+      "title": "Fix payday Remaining / Still-to-deposit formula",
+      "status": "completed",
+      "intent": "Remaining = Account + unlocked payday slices - month spend; Still to deposit = unpassed Limit slices; monthly reset; helper tests + docs + commit."
+    },
+    {
       "id": "gallery-receipt-move-2026-07",
       "title": "Fix gallery receipt import move + reliable save",
       "status": "completed",
@@ -192,5 +198,5 @@
       "title": "Fullscreen zoomable rotatable ReceiptPreviewActivity; ReceiptZoomImageView; ReceiptBitmapLoader"
     }
   ],
-  "last_updated": "2026-06-17"
+  "last_updated": "2026-07-14"
 }

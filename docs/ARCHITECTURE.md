@@ -13,7 +13,7 @@ Mountain Money (package `com.example.envelopemoney`) is a single-activity Androi
 - `BillsDayAnchor`
   - Pure helper for bills-period filter start (unit-tested). Unified month walk: latest bills day on or before today in current month, else walk backward; period-start adjustment when today lands on a bills-day boundary (multi-day → prior day in set; single-day on today → previous month).
 - `MoneyMath` / `PondBankReconciliationHelper`
-  - Cent-rounded bank reconciliation (`roundToCents`, 2 dp). When global paydays and per-pond Account are set, `remaining` can auto-sync to the **schedule gap** still-to-deposit (`max(0, expectedInBankByToday - account)`). Footer, pond row (with payday progress), and edit preview show **In bank** and **Still to deposit** only (limit shown separately).
+  - Cent-rounded bank reconciliation (`roundToCents`, 2 dp). When global paydays and per-pond Account are set: **Still to deposit** = Limit shares for paydays not yet arrived; **Remaining** = Account + unlocked shares − month spend (paydays count on/after their day; resets each month). Footer, pond row (with payday progress), and edit preview show **In bank** and **Still to deposit** only (limit shown separately).
 - `TransferDestinationList`
   - Builds the transfer destination pond name list (all ponds except the source) for add/edit transfer UI.
 - `TransferGroupDraft` / `TransferSyncHelper`
