@@ -1588,7 +1588,7 @@ public class MainActivity extends AppCompatActivity {
             status.setText(R.string.receipt_ocr_reading);
         }
 
-        if (ReceiptPickerUriNormalizer.isAppOwnedReceiptUri(imageUri.toString())) {
+        if (ReceiptPickerUriNormalizer.isAppOwnedReceiptUri(this, imageUri)) {
             host.setTag(R.id.tag_receipt_image_uri, imageUri.toString());
             syncReceiptActionUi(host);
             runReceiptOcrBackground(imageUri, mode, status);
@@ -1622,7 +1622,7 @@ public class MainActivity extends AppCompatActivity {
                     ensureReceiptTransactionDialogVisible();
                     activeHost.setTag(R.id.tag_receipt_image_uri, result.uri.toString());
                     syncReceiptActionUi(activeHost);
-                    if (ReceiptPickerUriNormalizer.isAppOwnedReceiptUri(result.uri.toString())) {
+                    if (ReceiptPickerUriNormalizer.isAppOwnedReceiptUri(MainActivity.this, result.uri)) {
                         runReceiptOcrBackground(result.uri, mode, status);
                     } else {
                         runReceiptOcrBackgroundFromBytes(bytesForOcr, mode, status);
@@ -1882,17 +1882,39 @@ public class MainActivity extends AppCompatActivity {
         if (uri == null) {
             return;
         }
+        // Preview is read-only: open the stored URI. Do not re-run normalizeImport/move — that can
+        // delete the only Mountain Money MediaStore row while the tag still points at it.
         Executors.newSingleThreadExecutor().execute(() -> {
-            Uri resolved = uri;
+            Uri openUri = uri;
             try {
-                resolved = ReceiptPickerUriNormalizer.normalize(MainActivity.this, resolved);
-            } catch (IOException e) {
+                if (ReceiptPickerUriNormalizer.shouldImportToAppGallery(MainActivity.this, uri)) {
+                    // Legacy tag still holds a picker URI: import once and update the dialog tag.
+                    ReceiptPickerUriNormalizer.ImportResult imported =
+                            ReceiptPickerUriNormalizer.normalizeImport(MainActivity.this, uri);
+                    openUri = imported.uri;
+                    final Uri tagUri = openUri;
+                    runOnUiThread(() -> {
+                        View host = resolveReceiptDialogHost();
+                        if (host != null && tagUri != null) {
+                            host.setTag(R.id.tag_receipt_image_uri, tagUri.toString());
+                            syncReceiptActionUi(host);
+                        }
+                    });
+                }
+                // Smoke-check the URI is readable before launching preview.
+                try (java.io.InputStream probe =
+                             getContentResolver().openInputStream(openUri)) {
+                    if (probe == null) {
+                        throw new IOException("openInputStream null");
+                    }
+                }
+            } catch (IOException | SecurityException e) {
                 Log.e("EnvelopeMoney", "receipt preview uri", e);
                 runOnUiThread(() -> Toast.makeText(MainActivity.this,
                         R.string.receipt_preview_load_failed, Toast.LENGTH_LONG).show());
                 return;
             }
-            final Uri out = resolved;
+            final Uri out = openUri;
             runOnUiThread(() -> startActivity(new Intent(MainActivity.this, ReceiptPreviewActivity.class)
                     .putExtra(ReceiptPreviewActivity.EXTRA_IMAGE_URI, out.toString())));
         });

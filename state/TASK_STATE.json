@@ -20,6 +20,12 @@
   ],
   "completed_tasks": [
     {
+      "id": "receipt-preview-reopen-2026-07",
+      "title": "Fix gallery receipt preview reopen after move",
+      "status": "completed",
+      "intent": "Context-aware Mountain Money ownership; preview opens stored URI without re-import/move; tests + docs + commit."
+    },
+    {
       "id": "payday-remaining-formula-2026-07",
       "title": "Fix payday Remaining / Still-to-deposit formula",
       "status": "completed",
@@ -198,5 +204,5 @@
       "title": "Fullscreen zoomable rotatable ReceiptPreviewActivity; ReceiptZoomImageView; ReceiptBitmapLoader"
     }
   ],
-  "last_updated": "2026-07-14"
+  "last_updated": "2026-07-21"
 }

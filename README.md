@@ -50,6 +50,7 @@ PondBankReconciliationHelperTest
 ```
 
 ## Change Log
+- 2026-07-21: **Gallery receipt preview reopen:** Context-aware Mountain Money ownership (`DISPLAY_NAME` / `RELATIVE_PATH` / path markers); Preview and list photo open the stored URI without re-import/move (avoids deleting the MediaStore row). Tests: `ReceiptPickerUriNormalizerTest`. Docs updated.
 - 2026-07-14: **Payday Remaining / Still-to-deposit formula:** With paydays + Account, Remaining = Account checkpoint + unlocked payday Limit slices − month spend; Still to deposit = unpassed payday slices; paydays count on/after their day and reset each month. `PondBankReconciliationHelper` + `MainActivity` wiring + `PondBankReconciliationHelperTest`. Docs updated. Local full Gradle still needs JDK **8–15**; helper unit tests verified via JUnit on JDK 21.
 - 2026-07-14: **Intent (in progress):** Fix payday Remaining / Still-to-deposit — Remaining = Account checkpoint + unlocked payday slices − month spend; Still to deposit = unpassed payday slices of Limit; count paydays only on/after their day; reset each month. Helper + MainActivity + tests + docs.
 - 2026-03-21: Initialized repository memory system.

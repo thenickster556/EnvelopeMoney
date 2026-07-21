@@ -22,6 +22,7 @@ public final class ReceiptSourceDeleter {
 
     /**
      * True when deleting {@code sourceUriString} is worth attempting after import to {@code appOwnedUriString}.
+     * String-path ownership only; prefer {@link #shouldAttemptDelete(Context, Uri, Uri)} for MediaStore IDs.
      */
     public static boolean shouldAttemptDelete(@Nullable String sourceUriString,
                                               @Nullable String appOwnedUriString) {
@@ -32,6 +33,25 @@ public final class ReceiptSourceDeleter {
             return false;
         }
         return !ReceiptPickerUriNormalizer.isAppOwnedReceiptUri(sourceUriString);
+    }
+
+    /**
+     * True when deleting {@code sourceUri} is safe after import. Never deletes app-owned Mountain Money files.
+     */
+    public static boolean shouldAttemptDelete(@Nullable Context context,
+                                              @Nullable Uri sourceUri,
+                                              @Nullable Uri appOwnedUri) {
+        if (sourceUri == null) {
+            return false;
+        }
+        if (appOwnedUri != null && sourceUri.equals(appOwnedUri)) {
+            return false;
+        }
+        if (ReceiptPickerUriNormalizer.isAppOwnedReceiptUri(context, sourceUri)) {
+            return false;
+        }
+        return shouldAttemptDelete(sourceUri.toString(),
+                appOwnedUri != null ? appOwnedUri.toString() : null);
     }
 
     /**
@@ -53,7 +73,7 @@ public final class ReceiptSourceDeleter {
         if (context == null || sourceUri == null) {
             return false;
         }
-        if (!shouldAttemptDelete(sourceUri.toString(), null)) {
+        if (!shouldAttemptDelete(context, sourceUri, null)) {
             return false;
         }
         if (DocumentsContract.isDocumentUri(context, sourceUri)) {
