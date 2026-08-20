@@ -9,4 +9,5 @@
     <dimen name="dialog_transaction_scroll_max_height">460dp</dimen>
     <dimen name="comment_suggestion_row_height">44dp</dimen>
     <dimen name="comment_suggestion_list_max_height">132dp</dimen>
+    <dimen name="analysis_month_chart_height">160dp</dimen>
 </resources>

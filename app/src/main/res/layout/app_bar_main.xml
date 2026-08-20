@@ -48,6 +48,17 @@
                 android:tint="?attr/colorControlNormal" />
 
             <ImageButton
+                android:id="@+id/btnAnalysis"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/content_desc_analysis"
+                android:padding="10dp"
+                android:scaleType="centerInside"
+                android:src="@drawable/ic_analysis"
+                android:tint="?attr/colorControlNormal" />
+
+            <ImageButton
                 android:id="@+id/btnRecalculateBalances"
                 android:layout_width="48dp"
                 android:layout_height="48dp"

@@ -53,8 +53,16 @@
 - Malformed month strings, null month maps, null collections, and legacy transactions without a month are repaired safely.
 - The active month is persisted only after the repaired envelope state is ready.
 
+## Analysis
+- Top-bar **chart icon** (between bills calendar and recalculate) opens **Analysis**.
+- Range presets: **Last 3 / Last 6 / Last 12** calendar months ending on the home displayed month. Always draws one bar per month (including $0).
+- Pond chips start from home selected ponds (all ponds if none selected). Toggling Analysis ponds does **not** change home checkboxes. **All** selects every current pond. Filters are session-only (reset on reopen).
+- **Include transfers** is off by default: spending and split slices count; rows with `transferId` (source and mirrors) do not. On: same as Remaining (`monthSpendForEnvelope`).
+- **Over budget** means spend greater than **`Envelope.limit`** (user monthly budget), not payday Remaining and not `MonthData.limit`. Equal-to-limit is not over.
+- Screen sections: this-month snapshot (Limit / Spent / Remaining / OK or OVER), spend-by-month bars, over-budget list, by-pond bars. Subtitle: **By calendar month, not Start/End**. Android check/X close; web **Close**. History filters stay unchanged.
+
 ## Chrome
-- Primary screen uses a **custom outlined top bar** (no ActionBar menu for reset): app title, bills-days setup calendar, and recalculate balances. Background uses **`mountain_top_bar_fill` / `mountain_top_bar_stroke`** (`bg_top_bar_outline`) with **`values-night`** overrides; title uses **`?attr/colorPrimary`**; bar actions use **`?attr/colorControlNormal`** tints like the rest of the app.
+- Primary screen uses a **custom outlined top bar** (no ActionBar menu for reset): app title, bills-days setup calendar, **analysis**, and recalculate balances. Background uses **`mountain_top_bar_fill` / `mountain_top_bar_stroke`** (`bg_top_bar_outline`) with **`values-night`** overrides; title uses **`?attr/colorPrimary`**; bar actions use **`?attr/colorControlNormal`** tints like the rest of the app.
 
 ## UI and theming
 - App theme: **`Theme.EnvelopeMoney`** / **`Theme.EnvelopeMoney.NoActionBar`** (`Theme.MaterialComponents.DayNight`) with Mountain palette (`mountain_primary`, teal accents).

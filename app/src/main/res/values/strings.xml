@@ -120,5 +120,27 @@
     <string name="split_breakdown_total_line">Split breakdown — total spent $%.2f</string>
     <string name="dialog_delete_split_purchase_message">Delete this entire split purchase from all ponds?</string>
     <string name="content_desc_split_expand">Show split breakdown</string>
+    <string name="content_desc_split_collapse">Hide split breakdown</string>
     <string name="content_desc_comment_suggestions">Comment suggestions</string>
+    <string name="content_desc_analysis">Analysis</string>
+    <string name="dialog_analysis_title">Analysis</string>
+    <string name="analysis_subtitle">By calendar month, not Start/End</string>
+    <string name="analysis_months">Months</string>
+    <string name="analysis_last_3">Last 3</string>
+    <string name="analysis_last_6">Last 6</string>
+    <string name="analysis_last_12">Last 12</string>
+    <string name="analysis_ponds">Ponds</string>
+    <string name="analysis_all_ponds">All</string>
+    <string name="analysis_include_transfers">Include transfers</string>
+    <string name="analysis_this_month">This month (%1$s)</string>
+    <string name="analysis_snapshot_line">%1$s  %2$s / %3$s   Remaining %4$s  %5$s</string>
+    <string name="analysis_snapshot_line_single">%1$s / %2$s   Remaining %3$s  %4$s</string>
+    <string name="analysis_ok">OK</string>
+    <string name="analysis_over">OVER</string>
+    <string name="analysis_spend_by_month">Spend by month</string>
+    <string name="analysis_over_budget_count">Over budget: %1$d pond-months</string>
+    <string name="analysis_over_budget_row">%1$s · %2$s · %3$s / %4$s · +%5$s</string>
+    <string name="analysis_by_pond">By pond (%1$s–%2$s)</string>
+    <string name="analysis_no_spending">No spending in this range</string>
+    <string name="analysis_month_bar_description">%1$s %2$s</string>
 </resources>

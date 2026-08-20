@@ -29,13 +29,13 @@ npm run seed-demo
 ## Stack
 
 - `web/public` — mobile-first HTML/CSS/JS (Mountain palette, ponds copy)
-- `web/domain` — JS ports of Android helpers (MoneyMath, BillsDayAnchor, payday Remaining, transfers/splits, rollover, ReceiptFieldParser, CommentHistory, OcrAmountLearner)
+- `web/domain` — JS ports of Android helpers (MoneyMath, BillsDayAnchor, payday Remaining, transfers/splits, rollover, ReceiptFieldParser, CommentHistory, OcrAmountLearner, SpendAnalysisHelper)
 - `web/server` — Express session auth, profile JSON, GridFS receipts, per-user `web/data/learning/<userId>.db` (sql.js)
 - MongoDB database `mountain_money`: `users`, `profiles`, `sessions`, `receipts` GridFS
 
 ## Behavior
 
-Same as the Android app: ponds, transactions, Spending / Transfer / Split purchase, recurring, bills days vs paydays, payday Remaining = Account + unlocked Limit slices − month spend, bills-period filter, receipt camera/gallery + Tesseract.js OCR + `ReceiptFieldParser`, comment typeahead (3-row list), silent OCR amount-weight learning, preview rotate/save.
+Same as the Android app: ponds, transactions, Spending / Transfer / Split purchase, recurring, bills days vs paydays, payday Remaining = Account + unlocked Limit slices − month spend, bills-period filter, receipt camera/gallery + Tesseract.js OCR + `ReceiptFieldParser`, comment typeahead (3-row list), silent OCR amount-weight learning, preview rotate/save, **Analysis** charts (Last 3/6/12, pond chips, include-transfers).
 
 ## Hosting later
 

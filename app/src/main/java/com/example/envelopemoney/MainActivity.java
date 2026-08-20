@@ -3,13 +3,17 @@ package com.example.envelopemoney;
 import android.app.DatePickerDialog;
 import android.content.Context;
 import android.content.Intent;
+import android.content.res.ColorStateList;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.text.Editable;
+import android.text.SpannableString;
+import android.text.Spanned;
 import android.text.TextWatcher;
+import android.text.style.ForegroundColorSpan;
 import android.util.Log;
 import android.util.TypedValue;
 import android.graphics.PorterDuff;
@@ -60,6 +64,9 @@ import com.example.envelopemoney.receipt.OcrAmountLearner;
 import com.example.envelopemoney.receipt.OcrAmountWeights;
 import com.example.envelopemoney.receipt.ReceiptRowUi;
 import com.example.envelopemoney.ui.BoundedNestedScrollView;
+import com.example.envelopemoney.ui.SpendBarChartView;
+import com.google.android.material.chip.Chip;
+import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.slider.Slider;
 import com.google.android.material.tabs.TabLayout;
@@ -91,6 +98,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -798,6 +806,10 @@ public class MainActivity extends AppCompatActivity {
         ImageButton btnBillsDaysSetup = findViewById(R.id.btnBillsDaysSetup);
         btnBillsDaysSetup.setOnClickListener(v -> showBillsPaydaysSettingsDialog());
         expandTouchTarget(btnBillsDaysSetup, 8);
+
+        ImageButton btnAnalysis = findViewById(R.id.btnAnalysis);
+        btnAnalysis.setOnClickListener(v -> showAnalysisDialog());
+        expandTouchTarget(btnAnalysis, 8);
 
         ImageButton btnRecalculateBalances = findViewById(R.id.btnRecalculateBalances);
         btnRecalculateBalances.setOnClickListener(v -> showResetConfirmationDialog());
@@ -4897,6 +4909,280 @@ public class MainActivity extends AppCompatActivity {
         }
         double diff = sumAcct - sumRem;
         tvPondTotalsFooter.setText(String.format(Locale.getDefault(), getString(R.string.pond_footer_full), sumAcct, sumRem, diff));
+    }
+
+    private void showAnalysisDialog() {
+        View dialogView = getLayoutInflater().inflate(R.layout.dialog_analysis, null);
+        final TextView chipLast3 = dialogView.findViewById(R.id.chipAnalysisLast3);
+        final TextView chipLast6 = dialogView.findViewById(R.id.chipAnalysisLast6);
+        final TextView chipLast12 = dialogView.findViewById(R.id.chipAnalysisLast12);
+        final ChipGroup chipGroupPonds = dialogView.findViewById(R.id.chipGroupAnalysisPonds);
+        final CheckBox cbIncludeTransfers = dialogView.findViewById(R.id.cbAnalysisIncludeTransfers);
+        final TextView tvThisMonthTitle = dialogView.findViewById(R.id.tvAnalysisThisMonthTitle);
+        final LinearLayout layoutSnapshot = dialogView.findViewById(R.id.layoutAnalysisSnapshot);
+        final SpendBarChartView chartMonths = dialogView.findViewById(R.id.chartAnalysisMonths);
+        final TextView tvOverTitle = dialogView.findViewById(R.id.tvAnalysisOverBudgetTitle);
+        final LinearLayout layoutOver = dialogView.findViewById(R.id.layoutAnalysisOverBudget);
+        final TextView tvNoSpending = dialogView.findViewById(R.id.tvAnalysisNoSpending);
+        final TextView tvByPondTitle = dialogView.findViewById(R.id.tvAnalysisByPondTitle);
+        final SpendBarChartView chartPonds = dialogView.findViewById(R.id.chartAnalysisPonds);
+
+        final int[] lastN = { SpendAnalysisHelper.DEFAULT_LAST_N };
+        final LinkedHashSet<String> pondNames = new LinkedHashSet<>(initialAnalysisPondNames());
+        final List<String> allPondNames = allAnalysisPondNames();
+
+        final Runnable refresh = () -> bindAnalysisDialog(
+                lastN[0],
+                new ArrayList<>(pondNames),
+                cbIncludeTransfers.isChecked(),
+                tvThisMonthTitle,
+                layoutSnapshot,
+                chartMonths,
+                tvOverTitle,
+                layoutOver,
+                tvNoSpending,
+                tvByPondTitle,
+                chartPonds);
+
+        chipLast3.setOnClickListener(v -> {
+            lastN[0] = 3;
+            applyAnalysisMonthChipSelection(chipLast3, chipLast6, chipLast12, lastN[0]);
+            refresh.run();
+        });
+        chipLast6.setOnClickListener(v -> {
+            lastN[0] = 6;
+            applyAnalysisMonthChipSelection(chipLast3, chipLast6, chipLast12, lastN[0]);
+            refresh.run();
+        });
+        chipLast12.setOnClickListener(v -> {
+            lastN[0] = 12;
+            applyAnalysisMonthChipSelection(chipLast3, chipLast6, chipLast12, lastN[0]);
+            refresh.run();
+        });
+        cbIncludeTransfers.setOnCheckedChangeListener((button, checked) -> refresh.run());
+        populateAnalysisPondChips(chipGroupPonds, allPondNames, pondNames, refresh);
+        applyAnalysisMonthChipSelection(chipLast3, chipLast6, chipLast12, lastN[0]);
+        refresh.run();
+
+        MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(this);
+        builder.setTitle(R.string.dialog_analysis_title)
+                .setView(dialogView)
+                .setPositiveButton(R.string.save, null)
+                .setNegativeButton(android.R.string.cancel, null);
+        AlertDialog dialog = builder.create();
+        dialog.setOnShowListener(ignored -> applyIconMaterialDialogActions(dialog));
+        dialog.show();
+    }
+
+    private List<String> allAnalysisPondNames() {
+        List<String> names = new ArrayList<>();
+        if (envelopes == null) {
+            return names;
+        }
+        for (Envelope envelope : envelopes) {
+            if (envelope != null && envelope.getName() != null && !envelope.getName().trim().isEmpty()) {
+                names.add(envelope.getName());
+            }
+        }
+        return names;
+    }
+
+    private List<String> initialAnalysisPondNames() {
+        List<String> selected = new ArrayList<>();
+        if (envelopes == null) {
+            return selected;
+        }
+        for (Envelope envelope : envelopes) {
+            if (envelope != null && envelope.isSelected() && envelope.getName() != null) {
+                selected.add(envelope.getName());
+            }
+        }
+        if (selected.isEmpty()) {
+            selected.addAll(allAnalysisPondNames());
+        }
+        return selected;
+    }
+
+    private void applyAnalysisMonthChipSelection(TextView last3, TextView last6, TextView last12, int lastN) {
+        styleAnalysisFilterChip(last3, lastN == 3);
+        styleAnalysisFilterChip(last6, lastN == 6);
+        styleAnalysisFilterChip(last12, lastN == 12);
+    }
+
+    private void styleAnalysisFilterChip(TextView chip, boolean selected) {
+        chip.setBackgroundResource(selected
+                ? R.drawable.recurring_option_selected_ripple
+                : R.drawable.recurring_option_unselected_ripple);
+        chip.setTextColor(selected
+                ? ContextCompat.getColor(this, R.color.mountain_primary)
+                : resolveThemeColor(android.R.attr.textColorPrimary));
+    }
+
+    private void populateAnalysisPondChips(ChipGroup group,
+                                           List<String> allPondNames,
+                                           LinkedHashSet<String> selectedNames,
+                                           Runnable onChange) {
+        group.removeAllViews();
+        boolean allSelected = !allPondNames.isEmpty() && selectedNames.containsAll(allPondNames);
+        Chip allChip = createAnalysisPondChip(getString(R.string.analysis_all_ponds), allSelected);
+        allChip.setOnClickListener(v -> {
+            selectedNames.clear();
+            selectedNames.addAll(allPondNames);
+            populateAnalysisPondChips(group, allPondNames, selectedNames, onChange);
+            onChange.run();
+        });
+        group.addView(allChip);
+        for (final String name : allPondNames) {
+            Chip chip = createAnalysisPondChip(name, selectedNames.contains(name));
+            chip.setOnClickListener(v -> {
+                if (selectedNames.contains(name)) {
+                    if (selectedNames.size() == 1) {
+                        populateAnalysisPondChips(group, allPondNames, selectedNames, onChange);
+                        return;
+                    }
+                    selectedNames.remove(name);
+                } else {
+                    selectedNames.add(name);
+                }
+                populateAnalysisPondChips(group, allPondNames, selectedNames, onChange);
+                onChange.run();
+            });
+            group.addView(chip);
+        }
+    }
+
+    private Chip createAnalysisPondChip(String label, boolean checked) {
+        Chip chip = new Chip(this);
+        chip.setText(label);
+        chip.setCheckable(true);
+        chip.setChecked(checked);
+        chip.setCheckedIconVisible(false);
+        chip.setClickable(true);
+        chip.setChipStrokeWidth(dp(1));
+        int stroke = ContextCompat.getColor(this, R.color.recurring_chip_stroke);
+        chip.setChipStrokeColor(ColorStateList.valueOf(stroke));
+        int selectedFill = ContextCompat.getColor(this, R.color.recurring_chip_fill_selected);
+        int unselectedFill = ContextCompat.getColor(this, R.color.recurring_chip_fill_unselected);
+        chip.setChipBackgroundColor(new ColorStateList(
+                new int[][]{
+                        new int[]{android.R.attr.state_checked},
+                        new int[]{}
+                },
+                new int[]{selectedFill, unselectedFill}
+        ));
+        int selectedText = ContextCompat.getColor(this, R.color.mountain_primary);
+        int unselectedText = resolveThemeColor(android.R.attr.textColorPrimary);
+        chip.setTextColor(checked ? selectedText : unselectedText);
+        return chip;
+    }
+
+    private void bindAnalysisDialog(int lastN,
+                                    List<String> pondNames,
+                                    boolean includeTransfers,
+                                    TextView tvThisMonthTitle,
+                                    LinearLayout layoutSnapshot,
+                                    SpendBarChartView chartMonths,
+                                    TextView tvOverTitle,
+                                    LinearLayout layoutOver,
+                                    TextView tvNoSpending,
+                                    TextView tvByPondTitle,
+                                    SpendBarChartView chartPonds) {
+        String endMonth = currentMonth != null ? currentMonth : MonthTracker.getCurrentMonth(this);
+        SpendAnalysisHelper.SpendAnalysisResult result = SpendAnalysisHelper.analyze(
+                envelopes,
+                new SpendAnalysisHelper.SpendAnalysisQuery(endMonth, lastN, pondNames, includeTransfers));
+
+        tvThisMonthTitle.setText(getString(R.string.analysis_this_month, formatDisplayMonth(endMonth)));
+        layoutSnapshot.removeAllViews();
+        boolean hidePondName = result.thisMonth.size() == 1;
+        for (SpendAnalysisHelper.SnapshotRow row : result.thisMonth) {
+            layoutSnapshot.addView(createAnalysisSnapshotRow(row, hidePondName));
+        }
+
+        List<String> monthLabels = new ArrayList<>();
+        List<Double> monthValues = new ArrayList<>();
+        StringBuilder monthDescription = new StringBuilder();
+        for (SpendAnalysisHelper.MonthSpend monthSpend : result.months) {
+            monthLabels.add(SpendAnalysisHelper.shortMonthLabel(monthSpend.month));
+            monthValues.add(monthSpend.totalSpend);
+            if (monthDescription.length() > 0) {
+                monthDescription.append(". ");
+            }
+            monthDescription.append(getString(R.string.analysis_month_bar_description,
+                    SpendAnalysisHelper.fullMonthLabel(monthSpend.month),
+                    formatCurrency(monthSpend.totalSpend)));
+        }
+        chartMonths.setVerticalBars(monthLabels, monthValues, monthDescription.toString());
+
+        tvOverTitle.setText(getString(R.string.analysis_over_budget_count, result.overBudget.size()));
+        layoutOver.removeAllViews();
+        for (SpendAnalysisHelper.OverBudgetRow row : result.overBudget) {
+            TextView line = new TextView(this);
+            line.setTextColor(resolveThemeColor(android.R.attr.textColorPrimary));
+            line.setText(getString(R.string.analysis_over_budget_row,
+                    SpendAnalysisHelper.shortMonthLabel(row.month),
+                    row.pondName,
+                    formatCurrency(row.spend),
+                    formatCurrency(row.limit),
+                    formatCurrency(row.overBy)));
+            line.setPadding(0, dp(4), 0, dp(4));
+            layoutOver.addView(line);
+        }
+        tvNoSpending.setVisibility(result.hasSpendInRange ? View.GONE : View.VISIBLE);
+
+        String rangeStart = result.months.isEmpty()
+                ? ""
+                : SpendAnalysisHelper.shortMonthLabel(result.months.get(0).month);
+        String rangeEnd = result.months.isEmpty()
+                ? ""
+                : SpendAnalysisHelper.shortMonthLabel(result.months.get(result.months.size() - 1).month);
+        tvByPondTitle.setText(getString(R.string.analysis_by_pond, rangeStart, rangeEnd));
+        List<String> pondLabels = new ArrayList<>();
+        List<Double> pondValues = new ArrayList<>();
+        StringBuilder pondDescription = new StringBuilder();
+        for (SpendAnalysisHelper.PondSpend pondSpend : result.byPond) {
+            pondLabels.add(pondSpend.pondName);
+            pondValues.add(pondSpend.spend);
+            if (pondDescription.length() > 0) {
+                pondDescription.append(". ");
+            }
+            pondDescription.append(pondSpend.pondName)
+                    .append(" ")
+                    .append(formatCurrency(pondSpend.spend));
+        }
+        chartPonds.setHorizontalBars(pondLabels, pondValues, pondDescription.toString());
+    }
+
+    private TextView createAnalysisSnapshotRow(SpendAnalysisHelper.SnapshotRow row, boolean hidePondName) {
+        TextView line = new TextView(this);
+        line.setTextColor(resolveThemeColor(android.R.attr.textColorPrimary));
+        line.setPadding(0, dp(4), 0, dp(4));
+        String status = getString(row.overBudget ? R.string.analysis_over : R.string.analysis_ok);
+        String text = hidePondName
+                ? getString(R.string.analysis_snapshot_line_single,
+                formatCurrency(row.spend),
+                formatCurrency(row.limit),
+                formatCurrency(row.remaining),
+                status)
+                : getString(R.string.analysis_snapshot_line,
+                row.pondName,
+                formatCurrency(row.spend),
+                formatCurrency(row.limit),
+                formatCurrency(row.remaining),
+                status);
+        SpannableString spannable = new SpannableString(text);
+        if (row.overBudget) {
+            int start = text.lastIndexOf(status);
+            if (start >= 0) {
+                spannable.setSpan(
+                        new ForegroundColorSpan(ContextCompat.getColor(this, R.color.mountain_primary)),
+                        start,
+                        text.length(),
+                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            }
+        }
+        line.setText(spannable);
+        return line;
     }
 
     private void showBillsPaydaysSettingsDialog() {

@@ -20,6 +20,12 @@
   ],
   "completed_tasks": [
     {
+      "id": "spend-analysis-2026-08",
+      "title": "Spend analysis charts for last-N months vs Limit",
+      "status": "completed",
+      "intent": "Add a filterable Analysis dialog/sheet (Last 3/6/12, pond chips, include-transfers) showing spend-over-time bars, over-Limit pond-months, by-pond bars, and this-month snapshot. Pure SpendAnalysisHelper + JS port; Canvas/CSS bars; no new Gson/SQLite keys. Top-bar chart icon between bills calendar and recalc. History Start/End and bills filter unchanged. Over budget uses Envelope.limit only (not payday Remaining or MonthData.limit). Systems: SpendAnalysisHelper, MainActivity Analysis dialog, web top bar + sheet. Expected files: helper + tests, dialog_analysis.xml, SpendBarChartView, app_bar_main, MainActivity, web domain/app/css/i18n, features user-flows ARCHITECTURE README TASK_STATE. Impact: new screen only."
+    },
+    {
       "id": "comment-ocr-learning-2026-08",
       "title": "Comment typeahead and OCR amount learning sidecar SQLite",
       "status": "completed",

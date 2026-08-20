@@ -26,6 +26,7 @@ import { isIsoDateOutsideFilterRange } from '/domain/receiptDateFilter.js';
 import { randomUUID } from '/domain/id.js';
 import { footerTotals, pondReconciliation, refreshBalances, recalculateBalances } from '/domain/profileEngine.js';
 import { ensureRecurringTransactions } from '/domain/recurring.js';
+import { analyze, barScaleMax, fullMonthLabel, shortMonthLabel } from '/domain/spendAnalysis.js';
 
 const state = {
   user: null,
@@ -905,6 +906,130 @@ function closePreview() {
   $('preview').classList.add('hidden');
 }
 
+function monthYearLabel(yyyyMm) {
+  const short = shortMonthLabel(yyyyMm);
+  const full = fullMonthLabel(yyyyMm);
+  const year = full.split(' ').pop();
+  return `${short} ${year}`;
+}
+
+function initialAnalysisPondNames() {
+  const envelopes = state.profile.envelopes || [];
+  const selected = envelopes.filter((e) => e.selected).map((e) => e.name);
+  if (selected.length === 0) return envelopes.map((e) => e.name);
+  return selected;
+}
+
+function openAnalysisSheet() {
+  let lastN = 3;
+  let includeTransfers = false;
+  const pondNames = new Set(initialAnalysisPondNames());
+  const allNames = (state.profile.envelopes || []).map((e) => e.name).filter(Boolean);
+
+  const draw = () => {
+    const endMonth = displayedMonth();
+    const result = analyze(state.profile.envelopes, {
+      endMonth,
+      lastNMonths: lastN,
+      pondNames: [...pondNames],
+      includeTransfers,
+    });
+    const monthMax = barScaleMax(result.months.map((m) => Math.max(0, m.totalSpend)));
+    const pondMax = barScaleMax(result.byPond.map((p) => Math.max(0, p.spend)));
+    const hidePondName = result.thisMonth.length === 1;
+    const monthDesc = result.months
+      .map((m) => `${fullMonthLabel(m.month)} ${money(m.totalSpend)}`)
+      .join('. ');
+    const pondDesc = result.byPond.map((p) => `${p.pondName} ${money(p.spend)}`).join('. ');
+    const allSelected = allNames.length > 0 && allNames.every((name) => pondNames.has(name));
+    const rangeStart = result.months.length ? shortMonthLabel(result.months[0].month) : '';
+    const rangeEnd = result.months.length ? shortMonthLabel(result.months[result.months.length - 1].month) : '';
+
+    openSheet(`
+      <h3>${S.analysis}</h3>
+      <p class="muted">${S.analysisSubtitle}</p>
+      <div class="muted">${S.analysisMonths}</div>
+      <div class="tabs">
+        <button type="button" class="tab ${lastN === 3 ? 'on' : ''}" data-n="3">${S.analysisLast3}</button>
+        <button type="button" class="tab ${lastN === 6 ? 'on' : ''}" data-n="6">${S.analysisLast6}</button>
+        <button type="button" class="tab ${lastN === 12 ? 'on' : ''}" data-n="12">${S.analysisLast12}</button>
+      </div>
+      <div class="muted">${S.analysisPonds}</div>
+      <div class="tabs" id="analysisPondChips">
+        <button type="button" class="tab ${allSelected ? 'on' : ''}" data-pond="ALL">${S.analysisAll}</button>
+        ${allNames.map((name) => `<button type="button" class="tab ${pondNames.has(name) ? 'on' : ''}" data-pond="${escapeHtml(name)}">${escapeHtml(name)}</button>`).join('')}
+      </div>
+      <label class="analysis-check">
+        <input type="checkbox" id="analysisIncludeTransfers" ${includeTransfers ? 'checked' : ''}>
+        ${S.analysisIncludeTransfers}
+      </label>
+      <h4>${S.analysisThisMonth(monthYearLabel(endMonth))}</h4>
+      <div id="analysisSnapshot">
+        ${result.thisMonth.map((row) => {
+          const status = row.overBudget ? S.analysisOver : S.analysisOk;
+          const body = hidePondName
+            ? `${money(row.spend)} / ${money(row.limit)}  Remaining ${money(row.remaining)}`
+            : `${escapeHtml(row.pondName)}  ${money(row.spend)} / ${money(row.limit)}  Remaining ${money(row.remaining)}`;
+          return `<div class="analysis-snapshot">${body} <span class="${row.overBudget ? 'analysis-over' : ''}">${status}</span></div>`;
+        }).join('')}
+      </div>
+      <h4>${S.analysisSpendByMonth}</h4>
+      <div class="analysis-month-chart" role="img" aria-label="${escapeHtml(monthDesc)}">
+        ${result.months.map((m) => {
+          const pct = Math.round((Math.max(0, m.totalSpend) / monthMax) * 100);
+          return `<div class="analysis-month-col">
+            <div class="analysis-month-track"><div class="analysis-month-fill" style="height:${pct}%"></div></div>
+            <div class="analysis-month-label">${escapeHtml(shortMonthLabel(m.month))}</div>
+          </div>`;
+        }).join('')}
+      </div>
+      <h4>${S.analysisOverCount(result.overBudget.length)}</h4>
+      ${result.overBudget.map((row) => `<div class="analysis-over-row">${escapeHtml(shortMonthLabel(row.month))} · ${escapeHtml(row.pondName)} · ${money(row.spend)} / ${money(row.limit)} · +${money(row.overBy)}</div>`).join('')}
+      ${result.hasSpendInRange ? '' : `<p class="muted">${S.analysisNoSpending}</p>`}
+      <h4>${S.analysisByPond(rangeStart, rangeEnd)}</h4>
+      <div class="analysis-pond-chart" role="img" aria-label="${escapeHtml(pondDesc)}">
+        ${result.byPond.map((p) => {
+          const pct = Math.round((Math.max(0, p.spend) / pondMax) * 100);
+          return `<div class="analysis-pond-row">
+            <div class="analysis-pond-name">${escapeHtml(p.pondName)}</div>
+            <div class="analysis-pond-track"><div class="analysis-pond-fill" style="width:${pct}%"></div></div>
+            <div>${money(p.spend)}</div>
+          </div>`;
+        }).join('')}
+      </div>
+      <div class="sheet-actions">
+        <button type="button" class="btn-secondary" id="sheetClose">${S.close}</button>
+      </div>`);
+
+    $('sheetCard').querySelectorAll('[data-n]').forEach((btn) => {
+      btn.onclick = () => {
+        lastN = Number(btn.dataset.n);
+        draw();
+      };
+    });
+    $('sheetCard').querySelectorAll('[data-pond]').forEach((btn) => {
+      btn.onclick = () => {
+        const name = btn.dataset.pond;
+        if (name === 'ALL') {
+          pondNames.clear();
+          allNames.forEach((pond) => pondNames.add(pond));
+        } else if (pondNames.has(name)) {
+          if (pondNames.size > 1) pondNames.delete(name);
+        } else {
+          pondNames.add(name);
+        }
+        draw();
+      };
+    });
+    $('analysisIncludeTransfers').onchange = (e) => {
+      includeTransfers = e.target.checked;
+      draw();
+    };
+    $('sheetClose').onclick = closeSheet;
+  };
+  draw();
+}
+
 function openBillsDialog() {
   const bills = new Set(state.profile.billsDays || []);
   const pays = new Set(state.profile.paydays || []);
@@ -1119,6 +1244,7 @@ function bindUi() {
     await saveProfile();
   };
   $('btnBillsSetup').onclick = openBillsDialog;
+  $('btnAnalysis').onclick = openAnalysisSheet;
   $('btnBillsFilter').onclick = applyBillsFilter;
   $('btnToggleTransfers').onclick = async () => {
     state.profile.transfersVisible = !state.profile.transfersVisible;

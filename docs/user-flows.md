@@ -68,3 +68,10 @@
 1. User taps **Recalculate balances** on the custom top bar.
 2. For each pond, the app runs **`reset(false)`** (syncs `limit`/`remaining` to the stored monthly budget and clears manual remainder override) then **`calculateRemaining`** for the active month so remaining matches transactions.
 3. State is saved and lists refresh. This is **Option A** behavior: it does not implement carry in this step; it realigns math to the user’s budget and current activity.
+
+## Analysis (top bar)
+1. User taps the **chart** icon on the custom top bar (between bills calendar and recalculate).
+2. Analysis opens as a Material dialog (Android check/X close) or web sheet (**Close**). Home month, Start/End, and bills-period filter stay as they were.
+3. Defaults: Last 3 months ending on the displayed month; pond chips copy home selection (all ponds if none selected); Include transfers off.
+4. Changing Last 3/6/12, pond chips, or Include transfers redraws snapshot, month bars, over-budget list, and by-pond bars. Empty qualifying spend still shows $0 bars and **No spending in this range**.
+5. Closing Analysis does not persist filters and does not change home pond selection.

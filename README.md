@@ -53,9 +53,11 @@ CommentHistoryTest
 OcrAmountWeightsTest
 OcrAmountLearnerTest
 ReceiptFieldParserTest
+SpendAnalysisHelperTest
 ```
 
 ## Change Log
+- 2026-08-20: **Spend analysis charts:** Top-bar chart icon opens Analysis (Last 3/6/12, pond chips, include-transfers) with spend-by-month bars, over-Limit pond-months, by-pond bars, and this-month snapshot. Over budget uses `Envelope.limit` only. Default spend excludes transfer rows. No new persistence. Tests: `SpendAnalysisHelperTest`, `web/test/spendAnalysis.test.js`. Local full Gradle still needs JDK **8–15**; helper unit tests verified via JUnit on JDK 21.
 - 2026-08-20: **Comment typeahead + OCR amount learning:** Add/edit dialogs remember comments in sidecar SQLite (`mountain_money_learning.db`) with an inline 3-row suggestion list; OCR amount corrections nudge a float32 weight vector used by `ReceiptFieldParser` fallback scoring. Web demo uses the same file schema per user (`web/data/learning/<userId>.db`). Envelope Gson/Mongo unchanged. Tests: `CommentHistoryTest`, `OcrAmountWeightsTest`, `OcrAmountLearnerTest`, parser goldens, `web/test` comment/learning suites.
 - 2026-08-19: **Web demo seed + empty list:** Five ponds and 13 months of spending, transfers, and split purchases for empty accounts and `alice-demo`; transaction list shows **No transactions to display** when a month/filter has no rows.
 - 2026-08-18: **Web demo (localhost + MongoDB):** `web/` Node/Express + Mongo per registered account; mobile HTML/CSS matching ponds, payday Remaining, bills filter, transfers/splits, receipts + Tesseract/`ReceiptFieldParser`. Domain JS tests ported from JUnit. Android unchanged. See `docs/WEB_DEMO.md`.
