@@ -3,10 +3,14 @@
 ## Application Shape
 Mountain Money (package `com.example.envelopemoney`) is a single-activity Android application with state persisted through SharedPreferences using Gson serialization for envelope and transaction data.
 
+A sibling **web demo** lives in `web/`: Node/Express + MongoDB + mobile HTML/CSS. It mirrors the same pond/transaction models and helper math, with one Mongo `profiles` document per registered account. It does not share storage with the Android app. See [WEB_DEMO.md](WEB_DEMO.md).
+
+Comment typeahead and OCR amount-correction weights live in a **sidecar SQLite** file (`LearningDb` / `mountain_money_learning.db`), not in Envelope Gson.
+
 ## Core Components
 - `MainActivity`
   - Owns screen initialization, custom top bar (`app_bar_main` outlined bar: theme-driven title and icon tints; DayNight bar fill/stroke via color resources), pond list (single-row header: title + selected count + icon actions), transactions list, month navigation, transfer totals spinner (destination ponds only), dialogs, bills-period filter, and rollover triggering.
-  - Add/edit transaction dialogs use **TabLayout** rows for **Spending / Transfer / Split purchase** (time tabs **One-time / Recurring** only on Spending), placed **below the comment** field so core fields are entered before mode. `expandedSplitGroupIds` toggles synchronized inline split breakdown rows in the transaction list.
+  - Add/edit transaction dialogs use **TabLayout** rows for **Spending / Transfer / Split purchase** (time tabs **One-time / Recurring** only on Spending), placed **below the comment** field so core fields are entered before mode. Comment typeahead is an **inline 3-row list** under the comment field (not a floating popup). `expandedSplitGroupIds` toggles synchronized inline split breakdown rows in the transaction list.
   - Uses **`MaterialAlertDialogBuilder`** for modal dialogs; add/edit transaction layouts use **`BoundedNestedScrollView`** + receipt **icon toolbar** (`wireReceiptRow`, `syncReceiptActionUi`, `receiptDialogHostView`) with **`applyIconMaterialDialogActions`** for icon-only confirm/dismiss on the shell and recurring sub-pickers.
 - `MonthRolloverHelper`
   - Sanitizes persisted envelope state, repairs legacy month data, and computes a safe launch month on a deep copy before the activity adopts it. On rollover, **carry increases the available pool** (`remaining`, baselines, `MonthData`) while **`Envelope.limit` stays the user’s base monthly budget** (`originalLimit`).
@@ -30,17 +34,22 @@ Mountain Money (package `com.example.envelopemoney`) is a single-activity Androi
   - Stores the current persisted month, normalizes month values, and determines whether rollover is required.
 - `PrefManager`
   - Serializes/deserializes envelope state, UI preference state, bills days JSON, paydays JSON, and bills-filter state.
+- `LearningDb`
+  - Sidecar SQLite (`mountain_money_learning.db`) for remembered comments and the OCR amount weight vector. Envelope Gson is unchanged. Corrupt files fall back to default weights.
+- `CommentHistory` / `OcrAmountLearner` / `OcrAmountWeights`
+  - Pure helpers for typeahead ranking, float32 weight encoding, and one-pass amount-correction updates.
 - Receipt capture (`com.example.envelopemoney.receipt`)
   - `ReceiptCaptureActivity` — CameraX preview, capture mode, shutter; persists upright JPEG via EXIF-aware decode + `MediaStoreReceiptSaver` (`Pictures/Mountain Money`).
   - `ReceiptExifBitmapLoader` — applies EXIF orientation when decoding capture/picker JPEGs.
   - `ReceiptPickerUriNormalizer` / `ReceiptSourceDeleter` — import gallery URIs into **Pictures/Mountain Money** once before OCR (move when delete succeeds); Context-aware ownership via MediaStore metadata; preview opens the stored URI without re-import.
-  - `ReceiptOcrPipeline` — preprocess bitmap, `OcrEngine` (default: on-device Latin text recognition; slot for PaddleOCR), `ReceiptFieldParser` heuristics (merchant junk filters incl. order/receipt/invoice headers + title case for ALL CAPS OCR; bottom-up “amount due” / last labeled total, then bottom-most money fallback for restaurant/receipt modes).
+  - `ReceiptOcrPipeline` — preprocess bitmap, `OcrEngine` (default: on-device Latin text recognition; slot for PaddleOCR), `ReceiptFieldParser` heuristics (merchant junk filters incl. order/receipt/invoice headers + title case for ALL CAPS OCR; bottom-up “amount due” / last labeled total, then bottom-most money fallback for restaurant/receipt modes). Fallback money scoring can use the sidecar weight vector; defaults match the original constants.
   - `ReceiptRowUi` — pure helper for when to show the list-row receipt thumbnail.
   - Wired from `MainActivity` add/edit transaction dialogs (`ActivityResultContracts`); `receiptDialogHostView` selects the active dialog for OCR results. Fullscreen image preview: `ReceiptPreviewActivity` (view-only 90° until **Save rotation**; `ReceiptRotatedJpegWriter` decodes, **Matrix**-rotates, overwrites same `content://` URI at JPEG **92**; reload bitmap; `MaterialAlertDialogBuilder` for replace + discard-when-dirty), `ReceiptZoomImageView`, `ReceiptBitmapLoader`.
 
 ## State Boundaries
 - UI state lives primarily in `MainActivity`.
 - Persisted business state lives in the serialized `Envelope` and `Transaction` models.
+- Comment history and OCR amount weights live in the learning sidecar, not Envelope JSON.
 - Month rollover is a business-state transition and must be deterministic, validated, and idempotent.
 
 ## Startup Month Flow

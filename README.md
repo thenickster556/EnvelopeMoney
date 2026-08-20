@@ -33,6 +33,8 @@ EnvelopeMoney/
 +-- prompts/
 +-- README.md
 +-- app/
++-- web/          Node + Mongo + HTML demo
+
 ```
 
 ### Month Rollover Flow
@@ -47,9 +49,16 @@ MonthTrackerTest
 BillsDayAnchorTest
 MoneyMathTest
 PondBankReconciliationHelperTest
+CommentHistoryTest
+OcrAmountWeightsTest
+OcrAmountLearnerTest
+ReceiptFieldParserTest
 ```
 
 ## Change Log
+- 2026-08-20: **Comment typeahead + OCR amount learning:** Add/edit dialogs remember comments in sidecar SQLite (`mountain_money_learning.db`) with an inline 3-row suggestion list; OCR amount corrections nudge a float32 weight vector used by `ReceiptFieldParser` fallback scoring. Web demo uses the same file schema per user (`web/data/learning/<userId>.db`). Envelope Gson/Mongo unchanged. Tests: `CommentHistoryTest`, `OcrAmountWeightsTest`, `OcrAmountLearnerTest`, parser goldens, `web/test` comment/learning suites.
+- 2026-08-19: **Web demo seed + empty list:** Five ponds and 13 months of spending, transfers, and split purchases for empty accounts and `alice-demo`; transaction list shows **No transactions to display** when a month/filter has no rows.
+- 2026-08-18: **Web demo (localhost + MongoDB):** `web/` Node/Express + Mongo per registered account; mobile HTML/CSS matching ponds, payday Remaining, bills filter, transfers/splits, receipts + Tesseract/`ReceiptFieldParser`. Domain JS tests ported from JUnit. Android unchanged. See `docs/WEB_DEMO.md`.
 - 2026-07-21: **Gallery receipt preview reopen:** Context-aware Mountain Money ownership (`DISPLAY_NAME` / `RELATIVE_PATH` / path markers); Preview and list photo open the stored URI without re-import/move (avoids deleting the MediaStore row). Tests: `ReceiptPickerUriNormalizerTest`. Docs updated.
 - 2026-07-14: **Payday Remaining / Still-to-deposit formula:** With paydays + Account, Remaining = Account checkpoint + unlocked payday Limit slices − month spend; Still to deposit = unpassed payday slices; paydays count on/after their day and reset each month. `PondBankReconciliationHelper` + `MainActivity` wiring + `PondBankReconciliationHelperTest`. Docs updated. Local full Gradle still needs JDK **8–15**; helper unit tests verified via JUnit on JDK 21.
 - 2026-07-14: **Intent (in progress):** Fix payday Remaining / Still-to-deposit — Remaining = Account checkpoint + unlocked payday slices − month spend; Still to deposit = unpassed payday slices of Limit; count paydays only on/after their day; reset each month. Helper + MainActivity + tests + docs.

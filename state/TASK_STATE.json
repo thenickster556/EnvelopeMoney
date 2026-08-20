@@ -20,6 +20,24 @@
   ],
   "completed_tasks": [
     {
+      "id": "comment-ocr-learning-2026-08",
+      "title": "Comment typeahead and OCR amount learning sidecar SQLite",
+      "status": "completed",
+      "intent": "Add comments-only typeahead (3 visible rows) on Android and web add/edit transaction dialogs. Persist remembered comments and OCR amount-correction weights in sidecar mountain_money_learning.db (float32 vector), not Envelope Gson or Mongo profiles. OCR still fills comment only when empty; amount learning is silent when the saved amount is a receipt money candidate. Systems: CommentHistory, OcrAmountLearner, LearningDb, ReceiptFieldParser weights, MainActivity dialogs, web sheet, /api/learning. Expected files: Java helpers + tests, web/domain + tests, dialog layouts, MainActivity, web server/app/css, DATA_SCHEMA ARCHITECTURE features user-flows receipt-ocr WEB_DEMO PROJECT_INDEX README TASK_STATE. Impact: add/edit transaction only; ponds/history unchanged."
+    },
+    {
+      "id": "web-demo-seed-2026-08",
+      "title": "Demo seed data and empty transaction list",
+      "status": "completed",
+      "intent": "Seed 5 ponds and 12 prior months plus current of spending/transfers/splits; auto-fill empty accounts and alice-demo; show No transactions to display when the list is empty."
+    },
+    {
+      "id": "web-mongo-demo-2026-08",
+      "title": "Mountain Money web demo (localhost + MongoDB)",
+      "status": "completed",
+      "intent": "Add web/ Node+Express+Mongo demo: register/login per profile, mobile-first HTML/CSS matching Android ponds/transactions/transfers/splits/receipts/OCR, JS ports of domain helpers + tests. Android unchanged. Localhost now; GoDaddy shared hosting later is out of scope."
+    },
+    {
       "id": "receipt-preview-reopen-2026-07",
       "title": "Fix gallery receipt preview reopen after move",
       "status": "completed",
@@ -204,5 +222,5 @@
       "title": "Fullscreen zoomable rotatable ReceiptPreviewActivity; ReceiptZoomImageView; ReceiptBitmapLoader"
     }
   ],
-  "last_updated": "2026-07-21"
+  "last_updated": "2026-08-20"
 }

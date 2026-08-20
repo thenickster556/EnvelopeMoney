@@ -120,5 +120,5 @@
     <string name="split_breakdown_total_line">Split breakdown — total spent $%.2f</string>
     <string name="dialog_delete_split_purchase_message">Delete this entire split purchase from all ponds?</string>
     <string name="content_desc_split_expand">Show split breakdown</string>
-    <string name="content_desc_split_collapse">Hide split breakdown</string>
+    <string name="content_desc_comment_suggestions">Comment suggestions</string>
 </resources>

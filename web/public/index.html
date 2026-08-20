@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#2E7D6E">
+  <title>Mountain Money</title>
+  <link rel="stylesheet" href="/css/mountain.css">
+</head>
+<body>
+  <div id="authScreen" class="auth-screen hidden">
+    <div class="auth-card">
+      <h1>Mountain Money</h1>
+      <p class="auth-lead">Sign in to your ponds. Each account is saved separately.</p>
+      <label>Username or email
+        <input id="authLogin" type="text" autocomplete="username" inputmode="email">
+      </label>
+      <label>Password
+        <input id="authPassword" type="password" autocomplete="current-password">
+      </label>
+      <p id="authError" class="error" hidden></p>
+      <div class="auth-actions">
+        <button type="button" id="btnLogin" class="btn-primary">Sign in</button>
+        <button type="button" id="btnRegister" class="btn-secondary">Register</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="appScreen" class="app-screen hidden">
+    <header class="top-bar">
+      <h1>Mountain Money</h1>
+      <button type="button" id="btnBillsSetup" class="icon-btn" aria-label="Choose which days of the month are bills days">📅</button>
+      <button type="button" id="btnRecalculate" class="icon-btn" aria-label="Recalculate pond balances from transactions">↻</button>
+      <button type="button" id="btnSignOut" class="text-btn">Sign out</button>
+    </header>
+
+    <div class="month-nav">
+      <button type="button" id="btnPrevMonth" class="icon-btn" aria-label="Previous month">‹</button>
+      <div id="tvCurrentMonth" class="month-title"></div>
+      <button type="button" id="btnNextMonth" class="icon-btn" aria-label="Next month">›</button>
+    </div>
+    <div class="date-row">
+      <button type="button" id="btnStartDate" class="date-chip">Start</button>
+      <button type="button" id="btnEndDate" class="date-chip">End</button>
+      <input id="hiddenStart" type="date" class="visually-hidden">
+      <input id="hiddenEnd" type="date" class="visually-hidden">
+    </div>
+
+    <section class="history-section">
+      <div class="section-header">
+        <h2>Transaction History</h2>
+        <button type="button" id="btnBillsFilter" class="icon-btn" aria-label="Filter from last bills day through today">🧾</button>
+        <button type="button" id="btnToggleTransfers" class="icon-btn" aria-label="Toggle transfers">⇄</button>
+        <button type="button" id="btnAddTransaction" class="icon-btn" aria-label="Add transaction">＋</button>
+      </div>
+      <ul id="transactionList" class="card-list"></ul>
+      <div class="totals-row">
+        <div id="tvTransactionsTotal">Total: $0.00</div>
+        <div id="transferTotalsWrap" class="transfer-totals hidden">
+          <select id="spinnerTransferTotals"></select>
+          <div id="tvTransferTotalsSummary">Transfers: $0.00</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="ponds-section">
+      <div class="section-header">
+        <h2>Ponds</h2>
+        <span id="tvPondSelectedCount" class="muted"></span>
+        <span class="spacer"></span>
+        <button type="button" id="btnPondSelectToggle" class="icon-btn" aria-label="Select or unselect all ponds">☑</button>
+        <button type="button" id="btnPondReorder" class="icon-btn" aria-label="Reorder ponds">↕</button>
+        <button type="button" id="btnToggleEnvelopes" class="icon-btn" aria-label="Collapse ponds">▾</button>
+        <button type="button" id="btnAddEnvelope" class="icon-btn" aria-label="Add pond">＋</button>
+      </div>
+      <ul id="pondList" class="card-list"></ul>
+      <p id="tvPondTotalsFooter" class="footer-line"></p>
+    </section>
+  </div>
+
+  <div id="sheet" class="sheet hidden" role="dialog" aria-modal="true">
+    <div class="sheet-card" id="sheetCard"></div>
+  </div>
+
+  <div id="preview" class="preview hidden" role="dialog" aria-modal="true">
+    <div class="preview-toolbar">
+      <button type="button" id="previewClose" class="icon-btn" aria-label="Close receipt preview">✕</button>
+      <span class="preview-title">Receipt image</span>
+      <button type="button" id="previewRotLeft" class="icon-btn" aria-label="Rotate left">↶</button>
+      <button type="button" id="previewRotRight" class="icon-btn" aria-label="Rotate right">↷</button>
+      <button type="button" id="previewSaveRot" class="text-btn" disabled>Save rotation</button>
+    </div>
+    <p class="preview-hint">Pinch to zoom · drag to pan · double-tap to refit</p>
+    <div id="previewStage" class="preview-stage">
+      <img id="previewImage" alt="Receipt image">
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>

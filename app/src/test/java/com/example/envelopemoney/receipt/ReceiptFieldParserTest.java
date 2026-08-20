@@ -279,4 +279,33 @@ public class ReceiptFieldParserTest {
         ReceiptDraft d = ReceiptFieldParser.parse(ocr, ReceiptCaptureMode.RECEIPT);
         assertEquals(24.31, d.totalAmount, 0.001);
     }
+
+    @Test
+    public void fallbackTwoTotals_defaultWeightsPreferDollarLine() {
+        OcrResult ocr = twoTotalReceipt();
+        ReceiptDraft d = ReceiptFieldParser.parse(ocr, ReceiptCaptureMode.RECEIPT, null);
+        assertEquals(45.12, d.totalAmount, 0.001);
+    }
+
+    @Test
+    public void fallbackTwoTotals_learnedWeightsPreferCorrectedAmount() {
+        OcrResult ocr = twoTotalReceipt();
+        float[] learned = OcrAmountLearner.learn(
+                Arrays.asList("Store", "$45.12", "misc", "42.00"),
+                45.12,
+                42.00,
+                OcrAmountWeights.defaults(),
+                ReceiptCaptureMode.RECEIPT);
+        ReceiptDraft d = ReceiptFieldParser.parse(ocr, ReceiptCaptureMode.RECEIPT, learned);
+        assertEquals(42.00, d.totalAmount, 0.001);
+    }
+
+    private static OcrResult twoTotalReceipt() {
+        return new OcrResult(Arrays.asList(
+                new OcrLine("Store", 0.9f),
+                new OcrLine("$45.12", 0.9f),
+                new OcrLine("misc", 0.9f),
+                new OcrLine("42.00", 0.9f)
+        ));
+    }
 }

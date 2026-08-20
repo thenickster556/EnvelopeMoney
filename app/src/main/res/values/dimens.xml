@@ -7,4 +7,6 @@
     <dimen name="fab_margin">16dp</dimen>
     <!-- MaterialAlertDialog body; caps nested scroll height so recurring + transfer stay reachable -->
     <dimen name="dialog_transaction_scroll_max_height">460dp</dimen>
+    <dimen name="comment_suggestion_row_height">44dp</dimen>
+    <dimen name="comment_suggestion_list_max_height">132dp</dimen>
 </resources>

@@ -9,8 +9,9 @@
 - **OCR slot:** `OcrEngine` + `PaddleOcrAdapter.createDefaultEngine()` — currently **on-device ML Kit Latin** text recognition (offline after model init). Swap in **PaddleOCR JNI** + models when packaged without changing `ReceiptFieldParser` tests.
 - **Parsing:** `ReceiptFieldParser` (pure Java) + `ReceiptFieldParserTest` golden cases.
   - **Merchant (comment):** ML Kit lines sorted top-to-bottom; brand capped to **one–two words** after junk filters (phone, URL, order/points lines, survey boilerplate). ALL CAPS title-cased; comment prefilled only when empty.
-  - **Total:** labeled **`$` totals** preferred bottom-up; restaurant tip composition unchanged; fallback scoring deprioritizes order/points lines without total labels.
-- **Persistence:** Optional `Transaction.receiptImageUri` (Gson) for the saved JPEG URI.
+  - **Total:** labeled **`$` totals** preferred bottom-up; restaurant tip composition unchanged; fallback scoring uses a 5-slot weight vector (defaults `50/80/60/25/-100`). When the user saves a different amount that appears on the OCR lines, `OcrAmountLearner` nudges those weights in sidecar SQLite.
+- **Persistence:** Optional `Transaction.receiptImageUri` (Gson) for the saved JPEG URI. Learning weights/comments are **not** Gson envelopes — see [DATA_SCHEMA.md](DATA_SCHEMA.md) sidecar.
+- **Web demo:** Browser Tesseract.js produces line boxes; the JS port of `ReceiptFieldParser` prefills amount/date/merchant using the per-user learning `.db`. Images store in Mongo GridFS (`/api/receipts/:id`). Preview rotate writes JPEG 92 over the same id. `GET/POST /api/learning` reads/writes that `.db`.
 - **Tests:** `ReceiptRowUiTest` for list thumbnail visibility rules (placeholder row excluded).
 
 ## Protocol

@@ -1,9 +1,22 @@
 # Data Schema
 
-> **Note:** There is no separate SQL database in this app. This document is the **persistence schema**: SharedPreferences keys and Gson-serialized models. In protocol terms, “tables” = **preference keys and model types**.
+> **Note:** Pond/transaction **business state** is still SharedPreferences + Gson (no SQL for envelopes). In protocol terms those “tables” = **preference keys and model types**. A **sidecar SQLite** file `mountain_money_learning.db` stores comment typeahead and OCR amount weights only. The **web demo** stores Envelope/Transaction JSON per user in MongoDB and the same learning schema in `web/data/learning/<userId>.db`.
 
 ## Persistence Store
 The app persists most business state via SharedPreferences.
+
+## Learning sidecar (SQLite)
+
+File: `mountain_money_learning.db` (Android `getFilesDir()`; web `web/data/learning/<userId>.db`). Not part of `envelopes` JSON. Copyable between Mountain Money clients.
+
+```text
+meta(key TEXT PRIMARY KEY, value TEXT)           -- version = 1
+comments(text TEXT PRIMARY KEY, last_used_ms INTEGER NOT NULL)
+ocr_weight_vec(id INTEGER PRIMARY KEY CHECK (id = 1), n INTEGER, floats BLOB)
+```
+
+- **comments:** unique notes, most-recent first, cap 50. Case-insensitive merge keeps the latest casing. Empty/whitespace is not stored. Cancel does not write.
+- **ocr_weight_vec:** one row, `n = 5`, `floats` = little-endian float32 vector `[dollarSign, strongTotalLabel, totalLabel, bottomHalf, orderOrPointsPenalty]`. Defaults `50, 80, 60, 25, -100`. Corrupt or missing blob falls back to those defaults.
 
 ## SharedPreferences Areas
 - `app_prefs`
@@ -85,3 +98,14 @@ When `paydays_json` is non-empty **and** a pond has `accountBalance` set:
 ## Pond totals footer
 - **Reconciliation mode** (paydays configured + at least one Account): one line, two values — **In bank** (sum of accounts), **Still to deposit** (sum of unpassed payday Limit slices per pond with Account). Monthly **limit** is shown separately on each pond row / edit dialog (not repeated as Target). All amounts cent-rounded.
 - **Legacy** (otherwise): **Account (entered)** sum, **Remaining** sum, **Difference** when any Account exists; or Remaining only when none.
+
+## Web demo (MongoDB)
+
+Database `mountain_money` (localhost). One profile per registered account; Envelope/Transaction JSON matches the Gson models above.
+
+- `users`: `_id`, `login` (normalized username or email), `passwordHash` (bcrypt), `createdAt`
+- `profiles`: `userId`, `currentMonth`, `displayedMonth`, `envelopes`, `envelopesCollapsed`, `billsDays`, `paydays`, `billsFilterActive`, `billsFilterSavedStartDisplay`, `billsFilterSavedEndDisplay`, `dateFilterStartDisplay`, `dateFilterEndDisplay`, `transfersVisible`, last-add pond prefs
+- `sessions`: express-session store
+- `receipts` GridFS: JPEG files tagged with `metadata.userId`; transaction `receiptImageUri` is `/api/receipts/:id`
+
+Web and Android stores are independent (no SharedPreferences sync). Learning `.db` files are also independent per platform/user unless the user copies the file.

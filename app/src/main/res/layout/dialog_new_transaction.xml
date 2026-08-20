@@ -160,12 +160,37 @@
                 android:layout_marginTop="8dp"
                 android:text="Comment" />
 
-            <EditText
-                android:id="@+id/etEditTransactionComment"
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:hint="Comment"
-                android:inputType="text" />
+                android:layout_marginTop="4dp">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/etEditTransactionComment"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="Comment"
+                    android:importantForAutofill="no"
+                    android:inputType="text"
+                    android:maxLines="1" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <ScrollView
+                android:id="@+id/scrollCommentSuggestions"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:contentDescription="@string/content_desc_comment_suggestions"
+                android:fillViewport="false"
+                android:nestedScrollingEnabled="true"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:id="@+id/layoutCommentSuggestions"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+            </ScrollView>
 
             <com.google.android.material.tabs.TabLayout
                 android:id="@+id/tabTransactionType"

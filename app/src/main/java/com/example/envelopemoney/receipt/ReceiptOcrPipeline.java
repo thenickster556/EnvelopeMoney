@@ -19,7 +19,7 @@ public final class ReceiptOcrPipeline {
         this.ocrEngine = ocrEngine != null ? ocrEngine : PaddleOcrAdapter.createDefaultEngine();
     }
 
-    public void runAsync(Context context, Bitmap bitmap, ReceiptCaptureMode mode, PipelineCallback callback) {
+    public void runAsync(Context context, Bitmap bitmap, ReceiptCaptureMode mode, float[] amountWeights, PipelineCallback callback) {
         if (bitmap == null) {
             callback.onError(new IllegalArgumentException("bitmap null"));
             return;
@@ -32,7 +32,7 @@ public final class ReceiptOcrPipeline {
                 if (forOcr != source) {
                     forOcr.recycle();
                 }
-                callback.onResult(ReceiptFieldParser.parse(result, mode));
+                callback.onResult(ReceiptFieldParser.parse(result, mode, amountWeights));
             }
 
             @Override

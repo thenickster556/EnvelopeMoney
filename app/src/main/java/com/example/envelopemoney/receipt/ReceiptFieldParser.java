@@ -67,6 +67,13 @@ public final class ReceiptFieldParser {
     }
 
     public static ReceiptDraft parse(OcrResult ocr, ReceiptCaptureMode mode) {
+        return parse(ocr, mode, null);
+    }
+
+    /**
+     * @param amountWeights optional 5-slot fallback vector; null uses built-in defaults
+     */
+    public static ReceiptDraft parse(OcrResult ocr, ReceiptCaptureMode mode, @Nullable float[] amountWeights) {
         if (ocr == null) {
             return new ReceiptDraft(null, null, null, 0f, null);
         }
@@ -86,7 +93,7 @@ public final class ReceiptFieldParser {
         }
 
         String merchant = extractMerchant(ocr.getLines());
-        AmountPick pick = pickTotal(lines, m);
+        AmountPick pick = pickTotal(lines, m, amountWeights);
 
         Double amount = pick.amount;
         float conf = pick.confidence;
@@ -97,7 +104,7 @@ public final class ReceiptFieldParser {
             merchant = "Gas";
         }
 
-        return new ReceiptDraft(merchant, amount, date, conf, sample);
+        return new ReceiptDraft(merchant, amount, date, conf, sample, lines);
     }
 
     private static ReceiptCaptureMode inferMode(List<String> lines) {
@@ -266,6 +273,12 @@ public final class ReceiptFieldParser {
             return false;
         }
         if (mostlyNumeric(line)) {
+            return false;
+        }
+        if (MONEY.matcher(line).find()) {
+            return false;
+        }
+        if (GAS_GALLON.matcher(line).find()) {
             return false;
         }
         return !isJunkMerchantLine(line);
@@ -447,6 +460,10 @@ public final class ReceiptFieldParser {
     }
 
     private static AmountPick pickTotal(List<String> lines, ReceiptCaptureMode mode) {
+        return pickTotal(lines, mode, null);
+    }
+
+    private static AmountPick pickTotal(List<String> lines, ReceiptCaptureMode mode, @Nullable float[] amountWeights) {
         if (lines.isEmpty()) {
             return new AmountPick(null, 0.2f);
         }
@@ -468,17 +485,43 @@ public final class ReceiptFieldParser {
             }
         }
 
-        List<Double> candidates = new ArrayList<>();
-        List<Integer> candidateScores = new ArrayList<>();
+        List<OcrMoneyCandidate> candidates = listMoneyCandidates(lines, mode);
+        if (candidates.isEmpty()) {
+            return new AmountPick(null, 0.2f);
+        }
+
+        int bestIndex = 0;
+        float bestScore = Float.NEGATIVE_INFINITY;
+        for (int i = 0; i < candidates.size(); i++) {
+            float score = scoreCandidate(candidates.get(i), mode, amountWeights);
+            if (score > bestScore) {
+                bestScore = score;
+                bestIndex = i;
+            }
+        }
+        double best = candidates.get(bestIndex).amount;
+        float conf = bestScore >= 40 ? 0.72f : 0.55f;
+        return new AmountPick(best, conf);
+    }
+
+    /**
+     * Money amounts on the receipt that fallback scoring can see (same skip rules as pickTotal).
+     */
+    public static List<OcrMoneyCandidate> listMoneyCandidates(List<String> lines, ReceiptCaptureMode mode) {
+        List<OcrMoneyCandidate> candidates = new ArrayList<>();
+        if (lines == null || lines.isEmpty()) {
+            return candidates;
+        }
+        ReceiptCaptureMode resolved = mode == null ? ReceiptCaptureMode.RECEIPT : mode;
         for (int i = 0; i < lines.size(); i++) {
             String line = lines.get(i);
-            if (mode == ReceiptCaptureMode.GAS && GAS_GALLON.matcher(line).find()) {
+            if (resolved == ReceiptCaptureMode.GAS && GAS_GALLON.matcher(line).find()) {
                 continue;
             }
-            if (shouldSkipFallbackMoneyLine(line, mode)) {
+            if (shouldSkipFallbackMoneyLine(line, resolved)) {
                 continue;
             }
-            if (mode == ReceiptCaptureMode.RESTAURANT && SUBTOTAL_OR_TAX.matcher(line).find()
+            if (resolved == ReceiptCaptureMode.RESTAURANT && SUBTOTAL_OR_TAX.matcher(line).find()
                     && !TOTAL_LABEL.matcher(line).find()) {
                 continue;
             }
@@ -486,25 +529,41 @@ public final class ReceiptFieldParser {
             while (m.find()) {
                 Double v = parseMoneyGroup(m);
                 if (v != null && v > 0 && v < 100_000) {
-                    candidates.add(v);
-                    candidateScores.add(scoreFallbackMoneyLine(line, m, i, lines.size(), mode));
+                    boolean dollar = m.group(1) != null && !m.group(1).isEmpty();
+                    boolean strong = TOTAL_LINE_STRONG.matcher(line).find();
+                    boolean total = TOTAL_LABEL.matcher(line).find();
+                    boolean bottom = i >= lines.size() / 2;
+                    boolean orderOrPoints = ORDER_OR_POINTS_LINE.matcher(line).find();
+                    candidates.add(new OcrMoneyCandidate(
+                            v, dollar, strong, total, bottom, orderOrPoints, i, line));
                 }
             }
         }
+        return candidates;
+    }
 
-        if (candidates.isEmpty()) {
-            return new AmountPick(null, 0.2f);
+    private static float scoreCandidate(OcrMoneyCandidate candidate, ReceiptCaptureMode mode,
+                                        @Nullable float[] amountWeights) {
+        float[] w = OcrAmountWeights.copyOrDefault(amountWeights);
+        float score = candidate.lineIndex;
+        if (candidate.dollarSign) {
+            score += w[OcrAmountWeights.DOLLAR_SIGN];
         }
-
-        int bestIndex = 0;
-        for (int i = 1; i < candidates.size(); i++) {
-            if (candidateScores.get(i) > candidateScores.get(bestIndex)) {
-                bestIndex = i;
-            }
+        if (candidate.strongTotalLabel) {
+            score += w[OcrAmountWeights.STRONG_TOTAL_LABEL];
+        } else if (candidate.totalLabel) {
+            score += w[OcrAmountWeights.TOTAL_LABEL];
         }
-        double best = candidates.get(bestIndex);
-        float conf = candidateScores.get(bestIndex) >= 40 ? 0.72f : 0.55f;
-        return new AmountPick(best, conf);
+        if (candidate.bottomHalf) {
+            score += w[OcrAmountWeights.BOTTOM_HALF];
+        }
+        if (candidate.orderOrPoints) {
+            score += w[OcrAmountWeights.ORDER_OR_POINTS_PENALTY];
+        }
+        if (mode == ReceiptCaptureMode.RESTAURANT && isExplicitTipLine(candidate.line)) {
+            score -= 10;
+        }
+        return score;
     }
 
     private static boolean shouldSkipFallbackMoneyLine(String line, ReceiptCaptureMode mode) {
@@ -517,30 +576,7 @@ public final class ReceiptFieldParser {
         return ISO_DATE.matcher(line).find() || US_DATE.matcher(line).find();
     }
 
-    private static int scoreFallbackMoneyLine(String line, Matcher moneyMatch, int lineIndex, int lineCount,
-                                              ReceiptCaptureMode mode) {
-        int score = lineIndex;
-        if (moneyMatch.group(1) != null && !moneyMatch.group(1).isEmpty()) {
-            score += 50;
-        }
-        if (TOTAL_LINE_STRONG.matcher(line).find()) {
-            score += 80;
-        } else if (TOTAL_LABEL.matcher(line).find()) {
-            score += 60;
-        }
-        if (lineIndex >= lineCount / 2) {
-            score += 25;
-        }
-        if (ORDER_OR_POINTS_LINE.matcher(line).find()) {
-            score -= 100;
-        }
-        if (mode == ReceiptCaptureMode.RESTAURANT && isExplicitTipLine(line)) {
-            score -= 10;
-        }
-        return score;
-    }
-
-  /** Strong / weak total labels scanned from the bottom (final charge is usually last). */
+    /** Strong / weak total labels scanned from the bottom (final charge is usually last). */
     private static AmountPick pickLabeledTotalFromBottom(List<String> lines, ReceiptCaptureMode mode) {
         for (int i = lines.size() - 1; i >= 0; i--) {
             String line = lines.get(i);

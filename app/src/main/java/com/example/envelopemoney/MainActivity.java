@@ -56,6 +56,8 @@ import com.example.envelopemoney.receipt.ReceiptCaptureMode;
 import com.example.envelopemoney.receipt.ReceiptDateFilterHelper;
 import com.example.envelopemoney.receipt.ReceiptDraft;
 import com.example.envelopemoney.receipt.ReceiptOcrPipeline;
+import com.example.envelopemoney.receipt.OcrAmountLearner;
+import com.example.envelopemoney.receipt.OcrAmountWeights;
 import com.example.envelopemoney.receipt.ReceiptRowUi;
 import com.example.envelopemoney.ui.BoundedNestedScrollView;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
@@ -155,6 +157,12 @@ public class MainActivity extends AppCompatActivity {
     private boolean receiptImportInProgress;
     private ActivityResultLauncher<Intent> receiptCaptureLauncher;
     private ActivityResultLauncher<String> galleryPickLauncher;
+    private LearningDb learningDb;
+    @Nullable
+    private List<String> lastOcrLines;
+    @Nullable
+    private Double lastOcrAmount;
+    private ReceiptCaptureMode lastOcrMode = ReceiptCaptureMode.AUTO;
 
     private static class TransferTotalsOption {
         final String optionKey;
@@ -768,6 +776,7 @@ public class MainActivity extends AppCompatActivity {
                 });
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        learningDb = new LearningDb(this);
 
         // Initialize views
         ImageButton btnAddTransaction = findViewById(R.id.btnAddTransaction);
@@ -1140,6 +1149,7 @@ public class MainActivity extends AppCompatActivity {
         MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(this);
         View dialogView = getLayoutInflater().inflate(R.layout.dialog_new_transaction, null);
         receiptDialogHostView = dialogView;
+        clearOcrLearningSession();
 
         MaterialAutoCompleteTextView spinnerEnvelope = dialogView.findViewById(R.id.spinnerEditEnvelope);
         EditText etDate = dialogView.findViewById(R.id.etEditTransactionDate);
@@ -1275,7 +1285,8 @@ public class MainActivity extends AppCompatActivity {
         String savedDestination = PrefManager.getLastAddTransferDestination(this, initialSource);
         initializeTransferDialogSection(transferViews, etAmount, spinnerEnvelope, savedDestination, null, false);
         initializeSplitDialogSection(splitViews, etSplitTotal, null, false);
-        attachTransactionDialogScrollDismiss(transferViews, splitViews);
+        attachTransactionDialogScrollDismiss(transferViews, splitViews, dialogView);
+        wireCommentTypeahead(dialogView);
 
         tabTransactionTime.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
             @Override
@@ -1367,6 +1378,7 @@ public class MainActivity extends AppCompatActivity {
                 activeSplitDialogViews = null;
                 activeSplitTotalInput = null;
             }
+            clearOcrLearningSession();
         });
         dialog.setOnShowListener(ignored -> {
             applyIconMaterialDialogActions(dialog);
@@ -1406,6 +1418,7 @@ public class MainActivity extends AppCompatActivity {
                         synchronizeAllEnvelopesForMonth(m);
                     }
                     PrefManager.saveEnvelopes(MainActivity.this, envelopes);
+                    persistLearningOnSave(comment, total);
                     ensureDateFilterIncludes(date);
                     updateDisplay();
                     dialog.dismiss();
@@ -1436,6 +1449,7 @@ public class MainActivity extends AppCompatActivity {
                     TransferSyncHelper.applyTransferGroup(envelopes, newTransaction, envelopeName, allocations);
                     synchronizeAllEnvelopesForMonth(resolveTransactionMonth(newTransaction));
                     PrefManager.saveEnvelopes(MainActivity.this, envelopes);
+                    persistLearningOnSave(comment, amount);
                     ensureDateFilterIncludes(date);
                     updateDisplay();
                     dialog.dismiss();
@@ -1474,6 +1488,7 @@ public class MainActivity extends AppCompatActivity {
                 env.addTransaction(newTransaction, currentMonth);
                 synchronizeAllEnvelopesForMonth(resolveTransactionMonth(newTransaction));
                 PrefManager.saveEnvelopes(MainActivity.this, envelopes);
+                persistLearningOnSave(comment, amount);
                 ensureDateFilterIncludes(date);
                 updateDisplay();
                 dialog.dismiss();
@@ -1659,14 +1674,14 @@ public class MainActivity extends AppCompatActivity {
             }
             final Bitmap bitmap = bmp;
             ReceiptOcrPipeline pipeline = new ReceiptOcrPipeline(PaddleOcrAdapter.createDefaultEngine());
-            pipeline.runAsync(this, bitmap, mode, new ReceiptOcrPipeline.PipelineCallback() {
+            pipeline.runAsync(this, bitmap, mode, currentOcrWeights(), new ReceiptOcrPipeline.PipelineCallback() {
                 @Override
                 public void onResult(ReceiptDraft draft) {
                     bitmap.recycle();
                     runOnUiThread(() -> {
                         receiptImportInProgress = false;
                         setReceiptDialogSaveEnabled(true);
-                        applyReceiptDraft(draft, status);
+                        applyReceiptDraft(draft, status, mode);
                     });
                 }
 
@@ -1708,14 +1723,14 @@ public class MainActivity extends AppCompatActivity {
             }
             final Bitmap bitmap = bmp;
             ReceiptOcrPipeline pipeline = new ReceiptOcrPipeline(PaddleOcrAdapter.createDefaultEngine());
-            pipeline.runAsync(this, bitmap, mode, new ReceiptOcrPipeline.PipelineCallback() {
+            pipeline.runAsync(this, bitmap, mode, currentOcrWeights(), new ReceiptOcrPipeline.PipelineCallback() {
                 @Override
                 public void onResult(ReceiptDraft draft) {
                     bitmap.recycle();
                     runOnUiThread(() -> {
                         receiptImportInProgress = false;
                         setReceiptDialogSaveEnabled(true);
-                        applyReceiptDraft(draft, status);
+                        applyReceiptDraft(draft, status, mode);
                     });
                 }
 
@@ -1735,10 +1750,13 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    private void applyReceiptDraft(ReceiptDraft draft, TextView status) {
+    private void applyReceiptDraft(ReceiptDraft draft, TextView status, ReceiptCaptureMode mode) {
         if (receiptDialogHostView == null || draft == null) {
             return;
         }
+        lastOcrAmount = draft.totalAmount;
+        lastOcrLines = new ArrayList<>(draft.sourceLines);
+        lastOcrMode = mode != null ? mode : ReceiptCaptureMode.AUTO;
         EditText etAmount = receiptDialogHostView.findViewById(R.id.etEditTransactionAmount);
         EditText etSplitTotal = receiptDialogHostView.findViewById(R.id.etSplitPurchaseTotal);
         EditText etComment = receiptDialogHostView.findViewById(R.id.etEditTransactionComment);
@@ -2623,6 +2641,7 @@ public class MainActivity extends AppCompatActivity {
         final boolean wasRecurringBefore = editTransaction.isRecurring();
         MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(this);
         View dialogView = getLayoutInflater().inflate(R.layout.dialog_transaction, null);
+        clearOcrLearningSession();
 
         MaterialAutoCompleteTextView spinnerEnvelope = dialogView.findViewById(R.id.spinnerEditEnvelope);
         EditText etDate = dialogView.findViewById(R.id.etEditTransactionDate);
@@ -2785,7 +2804,8 @@ public class MainActivity extends AppCompatActivity {
                 existingAllocations,
                 isTransfer);
         initializeSplitDialogSection(splitViews, etSplitTotal, initialSplitSlices, isSplitPurchase);
-        attachTransactionDialogScrollDismiss(transferViews, splitViews);
+        attachTransactionDialogScrollDismiss(transferViews, splitViews, dialogView);
+        wireCommentTypeahead(dialogView);
 
         tabTransactionTime.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
             @Override
@@ -2886,6 +2906,7 @@ public class MainActivity extends AppCompatActivity {
                 activeSplitDialogViews = null;
                 activeSplitTotalInput = null;
             }
+            clearOcrLearningSession();
         });
         dialog.setOnShowListener(ignored -> {
             applyIconMaterialDialogActions(dialog);
@@ -2940,6 +2961,7 @@ public class MainActivity extends AppCompatActivity {
                         synchronizeAllEnvelopesForMonth(m);
                     }
                     PrefManager.saveEnvelopes(MainActivity.this, envelopes);
+                    persistLearningOnSave(newComment, total);
                     ensureDateFilterIncludes(newDate);
                     updateDisplay();
                     dialog.dismiss();
@@ -3030,6 +3052,7 @@ public class MainActivity extends AppCompatActivity {
                 synchronizeAllEnvelopesForMonth(resolveTransactionMonth(editTransaction));
 
                 PrefManager.saveEnvelopes(MainActivity.this, envelopes);
+                persistLearningOnSave(newComment, newAmount);
                 ensureDateFilterIncludes(newDate);
                 updateDisplay();
                 dialog.dismiss();
@@ -3160,11 +3183,128 @@ public class MainActivity extends AppCompatActivity {
         );
     }
 
-    private void attachTransactionDialogScrollDismiss(TransferDialogViews transferViews, SplitDialogViews splitViews) {
+    private void attachTransactionDialogScrollDismiss(TransferDialogViews transferViews,
+                                                      SplitDialogViews splitViews,
+                                                      View dialogView) {
         transferViews.scrollView.setOnScrollChangeListener((View.OnScrollChangeListener) (scrollView, scrollX, scrollY, oldScrollX, oldScrollY) -> {
             dismissTransferDropdowns(transferViews);
             dismissSplitDropdowns(splitViews);
+            hideCommentSuggestions(
+                    (ScrollView) dialogView.findViewById(R.id.scrollCommentSuggestions),
+                    (LinearLayout) dialogView.findViewById(R.id.layoutCommentSuggestions));
         });
+    }
+
+    private void wireCommentTypeahead(View dialogView) {
+        final EditText etComment = dialogView.findViewById(R.id.etEditTransactionComment);
+        final ScrollView scroll = dialogView.findViewById(R.id.scrollCommentSuggestions);
+        final LinearLayout list = dialogView.findViewById(R.id.layoutCommentSuggestions);
+        if (etComment == null || scroll == null || list == null) {
+            return;
+        }
+        final List<String> remembered = learningDb != null
+                ? learningDb.loadComments()
+                : new ArrayList<String>();
+        final Runnable refresh = new Runnable() {
+            @Override
+            public void run() {
+                refreshCommentSuggestions(etComment, scroll, list, remembered);
+            }
+        };
+        etComment.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                refresh.run();
+            }
+        });
+        etComment.setOnFocusChangeListener((v, hasFocus) -> {
+            if (hasFocus) {
+                refresh.run();
+            } else {
+                etComment.postDelayed(() -> {
+                    if (!etComment.hasFocus()) {
+                        hideCommentSuggestions(scroll, list);
+                    }
+                }, 160);
+            }
+        });
+    }
+
+    private void refreshCommentSuggestions(EditText etComment,
+                                           ScrollView scroll,
+                                           LinearLayout list,
+                                           List<String> remembered) {
+        List<String> matches = CommentHistory.suggestions(remembered, etComment.getText().toString());
+        if (!etComment.hasFocus() || matches.isEmpty()) {
+            hideCommentSuggestions(scroll, list);
+            return;
+        }
+        list.removeAllViews();
+        int rowHeight = getResources().getDimensionPixelSize(R.dimen.comment_suggestion_row_height);
+        int visibleRows = Math.min(3, matches.size());
+        ViewGroup.LayoutParams layoutParams = scroll.getLayoutParams();
+        layoutParams.height = visibleRows * rowHeight;
+        scroll.setLayoutParams(layoutParams);
+        int textColor = resolveThemeColor(android.R.attr.textColorPrimary);
+        TypedValue selectable = new TypedValue();
+        getTheme().resolveAttribute(android.R.attr.selectableItemBackground, selectable, true);
+        for (final String match : matches) {
+            TextView row = new TextView(this);
+            row.setText(match);
+            row.setMinHeight(rowHeight);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(dp(12), dp(8), dp(12), dp(8));
+            row.setTextColor(textColor);
+            if (selectable.resourceId != 0) {
+                row.setBackgroundResource(selectable.resourceId);
+            }
+            row.setOnClickListener(v -> {
+                etComment.setText(match);
+                etComment.setSelection(match.length());
+                hideCommentSuggestions(scroll, list);
+            });
+            list.addView(row);
+        }
+        scroll.setVisibility(View.VISIBLE);
+    }
+
+    private void hideCommentSuggestions(@Nullable ScrollView scroll, @Nullable LinearLayout list) {
+        if (list != null) {
+            list.removeAllViews();
+        }
+        if (scroll != null) {
+            scroll.setVisibility(View.GONE);
+        }
+    }
+
+    private void persistLearningOnSave(String comment, double savedAmount) {
+        if (learningDb == null) {
+            return;
+        }
+        learningDb.rememberComment(comment);
+        if (lastOcrLines != null && lastOcrAmount != null) {
+            float[] next = OcrAmountLearner.learn(
+                    lastOcrLines, lastOcrAmount, savedAmount, learningDb.getWeights(), lastOcrMode);
+            learningDb.saveWeights(next);
+        }
+    }
+
+    private void clearOcrLearningSession() {
+        lastOcrLines = null;
+        lastOcrAmount = null;
+        lastOcrMode = ReceiptCaptureMode.AUTO;
+    }
+
+    private float[] currentOcrWeights() {
+        return learningDb != null ? learningDb.getWeights() : OcrAmountWeights.defaults();
     }
 
     private void markSplitInteraction(@Nullable SplitDialogViews splitViews) {
