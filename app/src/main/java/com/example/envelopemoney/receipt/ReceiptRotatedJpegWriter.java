@@ -4,6 +4,7 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Matrix;
 import android.net.Uri;
+import android.os.Build;
 
 import androidx.annotation.NonNull;
 
@@ -53,7 +54,8 @@ public final class ReceiptRotatedJpegWriter {
                 src = null;
             }
             try {
-                try (OutputStream out = context.getContentResolver().openOutputStream(uri, "w")) {
+                Uri writeUri = ReceiptFolderOpener.resolveForWrite(context, uri);
+                try (OutputStream out = openWriteStream(context, writeUri)) {
                     if (out == null) {
                         throw new IOException("openOutputStream null");
                     }
@@ -72,5 +74,22 @@ public final class ReceiptRotatedJpegWriter {
                 toEncode.recycle();
             }
         }
+    }
+
+    private static OutputStream openWriteStream(Context context, Uri writeUri) throws IOException {
+        if ("file".equalsIgnoreCase(writeUri.getScheme()) && writeUri.getPath() != null) {
+            return new java.io.FileOutputStream(writeUri.getPath(), false);
+        }
+        if (Build.VERSION.SDK_INT >= 26) {
+            OutputStream out = context.getContentResolver().openOutputStream(writeUri, "w");
+            if (out != null) {
+                return out;
+            }
+        }
+        OutputStream out = context.getContentResolver().openOutputStream(writeUri);
+        if (out == null) {
+            throw new IOException("openOutputStream null");
+        }
+        return out;
     }
 }

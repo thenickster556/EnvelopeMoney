@@ -19,7 +19,8 @@ import java.util.Locale;
  * External and photo-picker URIs are imported into {@link MediaStoreReceiptSaver}'s Mountain Money
  * album so preview, OCR, and persisted {@code receiptImageUri} use a stable app-owned URI (same as camera).
  * When the platform allows, the original picker file is deleted after import (move semantics).
- * If delete is denied, the new copy is removed and the original URI is kept (no duplicate).
+ * If delete is denied, the album copy is still persisted so preview does not depend on an
+ * ephemeral picker grant (a gallery duplicate is acceptable).
  *
  * <p>App-owned detection cannot rely on MediaStore ID strings alone (they do not contain
  * "Mountain Money"). Prefer {@link #isAppOwnedReceiptUri(Context, Uri)} which also checks
@@ -142,27 +143,22 @@ public final class ReceiptPickerUriNormalizer {
     }
 
     /**
-     * Try to delete the picker source after saving to the app album. If delete fails, remove the
-     * new copy and keep the original URI so only one file remains.
-     * Never treats an app-owned Mountain Money URI as a deletable picker source.
+     * Keep the album copy as the persisted URI. Best-effort delete of a non–app-owned source.
+     * Never deletes a Mountain Money file, and never rolls back to a picker URI.
      */
     @NonNull
     static ImportResult finishImportMoveOrRollback(Context context, Uri saved, Uri originalUri) {
-        if (originalUri == null) {
-            return new ImportResult(saved, false);
+        Uri persist = ReceiptFolderOpener.persistUriAfterImport(saved, originalUri);
+        if (persist == null) {
+            throw new IllegalArgumentException("saved uri null");
         }
-        if (isAppOwnedReceiptUri(context, originalUri)) {
-            // Original is already app-owned; keep saved if different, else keep original.
-            if (saved != null && !originalUri.equals(saved)) {
-                return new ImportResult(saved, false);
-            }
-            return new ImportResult(originalUri, false);
+        boolean deleted = false;
+        if (originalUri != null
+                && !originalUri.equals(persist)
+                && !isAppOwnedReceiptUri(context, originalUri)) {
+            deleted = ReceiptSourceDeleter.tryDeleteSource(context, originalUri);
         }
-        if (ReceiptSourceDeleter.tryDeleteSource(context, originalUri)) {
-            return new ImportResult(saved, true);
-        }
-        ReceiptSourceDeleter.tryDeleteSource(context, saved);
-        return new ImportResult(originalUri, false);
+        return new ImportResult(persist, deleted);
     }
 
     /**
@@ -174,8 +170,9 @@ public final class ReceiptPickerUriNormalizer {
         if (data == null || data.length == 0) {
             throw new IOException("empty image bytes");
         }
-        if (originalUri != null && !shouldImportToAppGallery(context, originalUri)) {
-            return new ImportResult(originalUri, false);
+        Uri alreadyInAlbum = folderUriIfAlreadyInAlbum(context, originalUri);
+        if (alreadyInAlbum != null) {
+            return new ImportResult(alreadyInAlbum, false);
         }
         if (canStreamCopyBytesInPlace(data)) {
             try (InputStream in = new ByteArrayInputStream(data)) {
@@ -200,8 +197,9 @@ public final class ReceiptPickerUriNormalizer {
         if (uri == null) {
             throw new IOException("uri null");
         }
-        if (!shouldImportToAppGallery(context, uri)) {
-            return new ImportResult(uri, false);
+        Uri alreadyInAlbum = folderUriIfAlreadyInAlbum(context, uri);
+        if (alreadyInAlbum != null) {
+            return new ImportResult(alreadyInAlbum, false);
         }
         Uri original = uri;
         try {
@@ -235,6 +233,28 @@ public final class ReceiptPickerUriNormalizer {
      */
     public static Uri normalize(Context context, Uri uri) throws IOException {
         return normalizeImport(context, uri).uri;
+    }
+
+    /**
+     * When the URI already names a Mountain Money JPEG, persist the folder file URI instead of
+     * copying again. Picker grants never skip import.
+     */
+    @Nullable
+    private static Uri folderUriIfAlreadyInAlbum(@Nullable Context context, @Nullable Uri uri) {
+        if (uri == null || ReceiptFolderOpener.isEphemeralPickerUri(uri)) {
+            return null;
+        }
+        String name = ReceiptFolderOpener.albumDisplayName(uri);
+        if (name != null) {
+            return ReceiptFolderOpener.folderFileUri(name);
+        }
+        if (context != null && isAppOwnedReceiptUri(context, uri)) {
+            name = ReceiptFolderOpener.albumDisplayName(uri);
+            if (name != null) {
+                return ReceiptFolderOpener.folderFileUri(name);
+            }
+        }
+        return null;
     }
 
     @Nullable

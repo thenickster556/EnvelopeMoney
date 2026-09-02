@@ -854,15 +854,38 @@ async function runOcr(file, mode, weights) {
   }
 }
 
-function openPreview(uri) {
+async function openPreview(uri) {
+  if (!uri) {
+    toast(S.previewFailed);
+    return;
+  }
   state.previewUri = uri;
   state.previewRotation = 0;
   state.previewScale = 1;
   state.previewX = 0;
   state.previewY = 0;
   const img = $('previewImage');
-  img.src = uri;
   img.onerror = () => toast(S.previewFailed);
+  try {
+    if (String(uri).startsWith('/api/receipts/')) {
+      const res = await fetch(uri, { credentials: 'include' });
+      if (!res.ok) {
+        throw new Error('preview');
+      }
+      const blob = await res.blob();
+      if (img.dataset.blobUrl) {
+        URL.revokeObjectURL(img.dataset.blobUrl);
+      }
+      const blobUrl = URL.createObjectURL(blob);
+      img.dataset.blobUrl = blobUrl;
+      img.src = blobUrl;
+    } else {
+      img.src = uri;
+    }
+  } catch {
+    toast(S.previewFailed);
+    return;
+  }
   applyPreviewTransform();
   $('previewSaveRot').disabled = true;
   $('preview').classList.remove('hidden');
@@ -892,7 +915,15 @@ async function savePreviewRotation() {
   try {
     await api(`/api/receipts/${id}`, { method: 'PUT', body: form });
     state.previewRotation = 0;
-    img.src = `${state.previewUri}?t=${Date.now()}`;
+    const res = await fetch(`${state.previewUri}?t=${Date.now()}`, { credentials: 'include' });
+    if (!res.ok) throw new Error('preview');
+    const next = await res.blob();
+    if (img.dataset.blobUrl) {
+      URL.revokeObjectURL(img.dataset.blobUrl);
+    }
+    const blobUrl = URL.createObjectURL(next);
+    img.dataset.blobUrl = blobUrl;
+    img.src = blobUrl;
     $('previewSaveRot').disabled = true;
   } catch {
     toast(S.saveFailed);

@@ -219,7 +219,7 @@ app.get('/api/receipts/:id', requireAuth, async (req, res) => {
     const id = new ObjectId(req.params.id);
     const db = getDb();
     const file = await db.collection('receipts.files').findOne({ _id: id });
-    if (!file || file.metadata?.userId !== req.session.userId) {
+    if (!file || String(file.metadata?.userId) !== String(req.session.userId)) {
       res.status(404).json({ error: 'Could not open this image.' });
       return;
     }
@@ -239,7 +239,7 @@ app.put('/api/receipts/:id', requireAuth, upload.single('image'), async (req, re
     const id = new ObjectId(req.params.id);
     const db = getDb();
     const file = await db.collection('receipts.files').findOne({ _id: id });
-    if (!file || file.metadata?.userId !== req.session.userId) {
+    if (!file || String(file.metadata?.userId) !== String(req.session.userId)) {
       res.status(404).json({ error: 'Could not open this image.' });
       return;
     }

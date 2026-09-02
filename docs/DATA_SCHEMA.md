@@ -75,7 +75,7 @@ When `paydays_json` is non-empty **and** a pond has `accountBalance` set:
 - `recurringDays: List<Integer>`
 - `recurringSeriesId: String?`
 - `recurringTemplate: boolean`
-- `receiptImageUri: String?` — optional `content://` URI for a JPEG under **Pictures/Mountain Money** (camera capture or gallery pick after `ReceiptPickerUriNormalizer` import). MediaStore IDs are recognized as app-owned via `DISPLAY_NAME` / `RELATIVE_PATH`, not URI substring alone. Preview opens this stored URI without re-import. Not an ephemeral picker URI.
+- `receiptImageUri: String?` — optional URI for a JPEG under **Pictures/Mountain Money**. After camera/gallery import, this is a **name-bearing folder file URI** (`file://…/Pictures/Mountain Money/MountainMoney_*.jpg`), not an ephemeral picker grant. Preview locates that filename in the album (folder path or a fresh MediaStore query by `DISPLAY_NAME`) without re-import.
 
 ## TransferData Model
 - `id: String`

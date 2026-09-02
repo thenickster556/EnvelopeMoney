@@ -20,6 +20,24 @@
   ],
   "completed_tasks": [
     {
+      "id": "receipt-folder-open-2026-09",
+      "title": "Open receipt preview from Pictures/Mountain Money by filename",
+      "status": "completed",
+      "intent": "Preview finds and decodes the JPEG already in Pictures/Mountain Money instead of a dead picker/MediaStore id. Persist file://…/MountainMoney_*.jpg. Reverted ReceiptAlbumUris. Tests: ReceiptFolderOpenerTest. Local ./gradlew blocked on Java 25 / Gradle 6.7.1 (unsupported class file major version 65)."
+    },
+    {
+      "id": "receipt-album-uri-after-move-2026-09",
+      "title": "Keep receiptImageUri pointed at Pictures/Mountain Money after move",
+      "status": "completed",
+      "intent": "After import/move into Pictures/Mountain Money, persist the album MediaStore URI for that MountainMoney_*.jpg file (not the picker grant). Preview looks up the file in that folder by display name if the stored id is stale."
+    },
+    {
+      "id": "receipt-preview-open-2026-08",
+      "title": "Fix Could not open this image on receipt preview",
+      "status": "completed",
+      "intent": "Persist the Mountain Money album URI after gallery import even when the picker source cannot be deleted; open preview from the stored URI with grants and no re-import; decode via ReceiptUriStreams; request READ_MEDIA_IMAGES on API 33+; web preview fetch with credentials."
+    },
+    {
       "id": "spend-analysis-2026-08",
       "title": "Spend analysis charts for last-N months vs Limit",
       "status": "completed",

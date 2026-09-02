@@ -1,8 +1,10 @@
 package com.example.envelopemoney;
 
+import android.Manifest;
 import android.app.DatePickerDialog;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
@@ -53,6 +55,7 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import com.example.envelopemoney.receipt.PaddleOcrAdapter;
 import com.example.envelopemoney.receipt.ReceiptCaptureActivity;
+import com.example.envelopemoney.receipt.ReceiptFolderOpener;
 import com.example.envelopemoney.receipt.ReceiptExifBitmapLoader;
 import com.example.envelopemoney.receipt.ReceiptPickerUriNormalizer;
 import com.example.envelopemoney.receipt.ReceiptPreviewActivity;
@@ -63,6 +66,7 @@ import com.example.envelopemoney.receipt.ReceiptOcrPipeline;
 import com.example.envelopemoney.receipt.OcrAmountLearner;
 import com.example.envelopemoney.receipt.OcrAmountWeights;
 import com.example.envelopemoney.receipt.ReceiptRowUi;
+import com.example.envelopemoney.receipt.ReceiptUriStreams;
 import com.example.envelopemoney.ui.BoundedNestedScrollView;
 import com.example.envelopemoney.ui.SpendBarChartView;
 import com.google.android.material.chip.Chip;
@@ -87,9 +91,7 @@ import com.example.envelopemoney.Transaction;
 
 import java.lang.reflect.Field;
 import java.text.ParseException;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -165,6 +167,9 @@ public class MainActivity extends AppCompatActivity {
     private boolean receiptImportInProgress;
     private ActivityResultLauncher<Intent> receiptCaptureLauncher;
     private ActivityResultLauncher<String> galleryPickLauncher;
+    private ActivityResultLauncher<String> receiptReadPermissionLauncher;
+    @Nullable
+    private Uri pendingReceiptPreviewUri;
     private LearningDb learningDb;
     @Nullable
     private List<String> lastOcrLines;
@@ -762,6 +767,15 @@ public class MainActivity extends AppCompatActivity {
                         if (host != null) {
                             startReceiptImportAndOcr(Uri.parse(uriStr), mode);
                         }
+                    }
+                });
+        receiptReadPermissionLauncher = registerForActivityResult(
+                new ActivityResultContracts.RequestPermission(),
+                granted -> {
+                    Uri pending = pendingReceiptPreviewUri;
+                    pendingReceiptPreviewUri = null;
+                    if (pending != null) {
+                        launchReceiptPreviewActivity(pending);
                     }
                 });
         galleryPickLauncher = registerForActivityResult(
@@ -1413,7 +1427,8 @@ public class MainActivity extends AppCompatActivity {
                 String date = etDate.getText().toString();
                 View receiptHost = receiptDialogHostView != null ? receiptDialogHostView : dialogView;
                 Object uriTag = receiptHost.getTag(R.id.tag_receipt_image_uri);
-                String receiptUri = uriTag instanceof String ? (String) uriTag : null;
+                String receiptUri = persistableReceiptUri(
+                        uriTag instanceof String ? (String) uriTag : null);
 
                 if (typeTab == TAB_TYPE_SPLIT) {
                     double total = parseAmountOrZero(etSplitTotal);
@@ -1562,21 +1577,20 @@ public class MainActivity extends AppCompatActivity {
         return receiptImportHostView;
     }
 
-    private byte[] readUriBytes(Uri uri) throws IOException {
-        try (InputStream in = getContentResolver().openInputStream(uri)) {
-            if (in == null) {
-                throw new IOException("openInputStream null");
-            }
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-            byte[] buffer = new byte[8192];
-            int read;
-            while ((read = in.read(buffer)) != -1) {
-                out.write(buffer, 0, read);
-            }
-            return out.toByteArray();
-        } catch (SecurityException e) {
-            throw new IOException("uri permission denied", e);
+    @Nullable
+    private String persistableReceiptUri(@Nullable String stored) {
+        if (stored == null || stored.isEmpty()) {
+            return stored;
         }
+        String name = ReceiptFolderOpener.albumDisplayName(Uri.parse(stored));
+        if (name != null) {
+            return ReceiptFolderOpener.folderFileUri(name).toString();
+        }
+        return stored;
+    }
+
+    private byte[] readUriBytes(Uri uri) throws IOException {
+        return ReceiptUriStreams.readAllBytes(this, uri);
     }
 
     private void handleReceiptImportFailure(@Nullable View host, @Nullable TextView status, IOException e) {
@@ -1615,10 +1629,12 @@ public class MainActivity extends AppCompatActivity {
             status.setText(R.string.receipt_ocr_reading);
         }
 
-        if (ReceiptPickerUriNormalizer.isAppOwnedReceiptUri(this, imageUri)) {
-            host.setTag(R.id.tag_receipt_image_uri, imageUri.toString());
+        String alreadyNamed = ReceiptFolderOpener.albumDisplayName(imageUri);
+        if (alreadyNamed != null) {
+            Uri persist = ReceiptFolderOpener.folderFileUri(alreadyNamed);
+            host.setTag(R.id.tag_receipt_image_uri, persist.toString());
             syncReceiptActionUi(host);
-            runReceiptOcrBackground(imageUri, mode, status);
+            runReceiptOcrBackground(persist, mode, status);
             return;
         }
 
@@ -1631,7 +1647,6 @@ public class MainActivity extends AppCompatActivity {
         }
 
         final Uri originalUri = imageUri;
-        final byte[] bytesForOcr = pickedBytes;
         Executors.newSingleThreadExecutor().execute(() -> {
             try {
                 ReceiptPickerUriNormalizer.ImportResult result =
@@ -1647,13 +1662,14 @@ public class MainActivity extends AppCompatActivity {
                         return;
                     }
                     ensureReceiptTransactionDialogVisible();
-                    activeHost.setTag(R.id.tag_receipt_image_uri, result.uri.toString());
-                    syncReceiptActionUi(activeHost);
-                    if (ReceiptPickerUriNormalizer.isAppOwnedReceiptUri(MainActivity.this, result.uri)) {
-                        runReceiptOcrBackground(result.uri, mode, status);
-                    } else {
-                        runReceiptOcrBackgroundFromBytes(bytesForOcr, mode, status);
+                    Uri persistUri = result.uri;
+                    String named = ReceiptFolderOpener.albumDisplayName(persistUri);
+                    if (named != null) {
+                        persistUri = ReceiptFolderOpener.folderFileUri(named);
                     }
+                    activeHost.setTag(R.id.tag_receipt_image_uri, persistUri.toString());
+                    syncReceiptActionUi(activeHost);
+                    runReceiptOcrBackground(persistUri, mode, status);
                 });
             } catch (IOException e) {
                 runOnUiThread(() -> handleReceiptImportFailure(
@@ -1912,42 +1928,50 @@ public class MainActivity extends AppCompatActivity {
         if (uri == null) {
             return;
         }
+        String permission = receiptReadPermissionName();
+        if (permission != null
+                && ContextCompat.checkSelfPermission(this, permission)
+                != PackageManager.PERMISSION_GRANTED) {
+            pendingReceiptPreviewUri = uri;
+            receiptReadPermissionLauncher.launch(permission);
+            return;
+        }
+        launchReceiptPreviewActivity(uri);
+    }
+
+    @Nullable
+    private static String receiptReadPermissionName() {
+        if (Build.VERSION.SDK_INT >= 33) {
+            return Manifest.permission.READ_MEDIA_IMAGES;
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            return Manifest.permission.READ_EXTERNAL_STORAGE;
+        }
+        return null;
+    }
+
+    private void launchReceiptPreviewActivity(Uri uri) {
+        if (uri == null) {
+            return;
+        }
         // Preview is read-only: open the stored URI. Do not re-run normalizeImport/move — that can
-        // delete the only Mountain Money MediaStore row while the tag still points at it.
-        Executors.newSingleThreadExecutor().execute(() -> {
-            Uri openUri = uri;
-            try {
-                if (ReceiptPickerUriNormalizer.shouldImportToAppGallery(MainActivity.this, uri)) {
-                    // Legacy tag still holds a picker URI: import once and update the dialog tag.
-                    ReceiptPickerUriNormalizer.ImportResult imported =
-                            ReceiptPickerUriNormalizer.normalizeImport(MainActivity.this, uri);
-                    openUri = imported.uri;
-                    final Uri tagUri = openUri;
-                    runOnUiThread(() -> {
-                        View host = resolveReceiptDialogHost();
-                        if (host != null && tagUri != null) {
-                            host.setTag(R.id.tag_receipt_image_uri, tagUri.toString());
-                            syncReceiptActionUi(host);
-                        }
-                    });
-                }
-                // Smoke-check the URI is readable before launching preview.
-                try (java.io.InputStream probe =
-                             getContentResolver().openInputStream(openUri)) {
-                    if (probe == null) {
-                        throw new IOException("openInputStream null");
-                    }
-                }
-            } catch (IOException | SecurityException e) {
-                Log.e("EnvelopeMoney", "receipt preview uri", e);
-                runOnUiThread(() -> Toast.makeText(MainActivity.this,
-                        R.string.receipt_preview_load_failed, Toast.LENGTH_LONG).show());
-                return;
-            }
-            final Uri out = openUri;
-            runOnUiThread(() -> startActivity(new Intent(MainActivity.this, ReceiptPreviewActivity.class)
-                    .putExtra(ReceiptPreviewActivity.EXTRA_IMAGE_URI, out.toString())));
-        });
+        // delete the only Mountain Money MediaStore row while the transaction still points at it.
+        Intent preview = new Intent(this, ReceiptPreviewActivity.class);
+        Uri openUri = uri;
+        String named = ReceiptFolderOpener.albumDisplayName(uri);
+        if (named != null) {
+            openUri = ReceiptFolderOpener.folderFileUri(named);
+        }
+        preview.setDataAndType(openUri, "image/*");
+        preview.putExtra(ReceiptPreviewActivity.EXTRA_IMAGE_URI, openUri.toString());
+        preview.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
+                | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+        try {
+            startActivity(preview);
+        } catch (RuntimeException e) {
+            Log.e("EnvelopeMoney", "receipt preview launch", e);
+            Toast.makeText(this, R.string.receipt_preview_load_failed, Toast.LENGTH_LONG).show();
+        }
     }
 
     private void updateTransactionHistory() {
@@ -2950,7 +2974,8 @@ public class MainActivity extends AppCompatActivity {
                 String previousMonth = resolveTransactionMonth(editTransaction);
                 View receiptHost = receiptDialogHostView != null ? receiptDialogHostView : dialogView;
                 Object receiptUriTag = receiptHost.getTag(R.id.tag_receipt_image_uri);
-                String receiptUri = receiptUriTag instanceof String ? (String) receiptUriTag : null;
+                String receiptUri = persistableReceiptUri(
+                        receiptUriTag instanceof String ? (String) receiptUriTag : null);
 
                 if (typeTab == TAB_TYPE_SPLIT) {
                     double total = parseAmountOrZero(etSplitTotal);

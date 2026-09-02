@@ -69,12 +69,16 @@ public class ReceiptPreviewActivity extends AppCompatActivity {
         btnRotRight.setOnClickListener(v -> applyViewRotation(90f));
         btnSaveRotation.setOnClickListener(v -> confirmReplaceThenSave());
 
+        Uri fromData = getIntent() != null ? getIntent().getData() : null;
         String uriStr = getIntent() != null ? getIntent().getStringExtra(EXTRA_IMAGE_URI) : null;
-        if (uriStr == null || uriStr.isEmpty()) {
+        if (fromData != null) {
+            imageUri = fromData;
+        } else if (uriStr != null && !uriStr.isEmpty()) {
+            imageUri = Uri.parse(uriStr);
+        } else {
             showError();
             return;
         }
-        imageUri = Uri.parse(uriStr);
         int maxDim = computeDecodeMaxDimension();
         Bitmap bmp;
         try {

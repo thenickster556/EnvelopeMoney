@@ -18,6 +18,7 @@ import java.io.OutputStream;
 
 /**
  * Writes receipt JPEGs to the device gallery under {@code Pictures/Mountain Money}.
+ * The returned URI is the folder file ({@code file://…/MountainMoney_*.jpg}) used for preview.
  */
 public final class MediaStoreReceiptSaver {
 
@@ -32,64 +33,30 @@ public final class MediaStoreReceiptSaver {
             throw new IllegalArgumentException("bitmap null");
         }
         String name = "MountainMoney_" + System.currentTimeMillis() + ".jpg";
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            ContentValues values = new ContentValues();
-            values.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
-            values.put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg");
-            values.put(MediaStore.MediaColumns.RELATIVE_PATH, ALBUM_RELATIVE);
-            values.put(MediaStore.MediaColumns.IS_PENDING, 1);
-            Uri uri = context.getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
-            if (uri == null) {
-                throw new IOException("MediaStore insert failed");
-            }
-            try (OutputStream out = context.getContentResolver().openOutputStream(uri)) {
-                if (out == null) {
-                    throw new IOException("openOutputStream null");
-                }
-                if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 92, out)) {
-                    throw new IOException("compress failed");
-                }
-            }
-            values.clear();
-            values.put(MediaStore.MediaColumns.IS_PENDING, 0);
-            context.getContentResolver().update(uri, values, null, null);
-            return uri;
-        }
-        File pictures = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
-        File album = new File(pictures, "Mountain Money");
-        if (!album.exists() && !album.mkdirs()) {
-            throw new IOException("mkdir Mountain Money failed");
-        }
-        File file = new File(album, name);
-        try (FileOutputStream fos = new FileOutputStream(file)) {
-            if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 92, fos)) {
-                throw new IOException("compress failed");
-            }
-        }
-        android.media.MediaScannerConnection.scanFile(
-                context,
-                new String[]{file.getAbsolutePath()},
-                new String[]{"image/jpeg"},
-                null);
-        return Uri.fromFile(file);
+        writeJpeg(context, name, bitmap, null);
+        return ReceiptFolderOpener.folderFileUri(name);
     }
 
-    /**
-     * Copies JPEG bytes from {@code input} into the Mountain Money album without re-encoding.
-     */
     @NonNull
     public static Uri saveJpegStream(Context context, InputStream input) throws IOException {
         if (input == null) {
             throw new IllegalArgumentException("input null");
         }
         String name = "MountainMoney_" + System.currentTimeMillis() + ".jpg";
+        writeJpeg(context, name, null, input);
+        return ReceiptFolderOpener.folderFileUri(name);
+    }
+
+    private static void writeJpeg(Context context, String name, Bitmap bitmap, InputStream input)
+            throws IOException {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             ContentValues values = new ContentValues();
             values.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
             values.put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg");
             values.put(MediaStore.MediaColumns.RELATIVE_PATH, ALBUM_RELATIVE);
             values.put(MediaStore.MediaColumns.IS_PENDING, 1);
-            Uri uri = context.getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
+            Uri uri = context.getContentResolver().insert(
+                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
             if (uri == null) {
                 throw new IOException("MediaStore insert failed");
             }
@@ -97,34 +64,39 @@ public final class MediaStoreReceiptSaver {
                 if (out == null) {
                     throw new IOException("openOutputStream null");
                 }
-                copyStream(input, out);
+                writeBytes(bitmap, input, out);
             }
             values.clear();
             values.put(MediaStore.MediaColumns.IS_PENDING, 0);
             context.getContentResolver().update(uri, values, null, null);
-            return uri;
+            return;
         }
-        File pictures = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
-        File album = new File(pictures, "Mountain Money");
+        File album = ReceiptFolderOpener.albumDirectory();
         if (!album.exists() && !album.mkdirs()) {
             throw new IOException("mkdir Mountain Money failed");
         }
         File file = new File(album, name);
         try (FileOutputStream fos = new FileOutputStream(file)) {
-            copyStream(input, fos);
+            writeBytes(bitmap, input, fos);
         }
         android.media.MediaScannerConnection.scanFile(
                 context,
                 new String[]{file.getAbsolutePath()},
                 new String[]{"image/jpeg"},
                 null);
-        return Uri.fromFile(file);
     }
 
-    private static void copyStream(InputStream in, OutputStream out) throws IOException {
+    private static void writeBytes(Bitmap bitmap, InputStream input, OutputStream out)
+            throws IOException {
+        if (bitmap != null) {
+            if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 92, out)) {
+                throw new IOException("compress failed");
+            }
+            return;
+        }
         byte[] buffer = new byte[8192];
         int read;
-        while ((read = in.read(buffer)) != -1) {
+        while ((read = input.read(buffer)) != -1) {
             out.write(buffer, 0, read);
         }
     }

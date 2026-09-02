@@ -1,7 +1,10 @@
 package com.example.envelopemoney.receipt;
 
+import android.net.Uri;
+
 import org.junit.Test;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -68,6 +71,17 @@ public class ReceiptPickerUriNormalizerTest {
     public void shouldImportToAppGallery_falseForAppAlbumPath() {
         assertFalse(ReceiptPickerUriNormalizer.shouldImportToAppGallery(
                 "file:///storage/emulated/0/Pictures/Mountain Money/MountainMoney_1.jpg"));
+    }
+
+    @Test
+    public void persistUriAfterImport_keepsAlbumCopyWhenPickerSourceRemains() {
+        Uri saved = Uri.parse(
+                "file:///storage/emulated/0/Pictures/Mountain Money/MountainMoney_1.jpg");
+        Uri picker = Uri.parse(
+                "content://media/picker_get_content/0/com.android.providers.media.photopicker/media/1");
+        assertEquals(saved, ReceiptFolderOpener.persistUriAfterImport(saved, picker));
+        assertEquals(saved, ReceiptFolderOpener.persistUriAfterImport(saved, null));
+        assertEquals(picker, ReceiptFolderOpener.persistUriAfterImport(null, picker));
     }
 
     @Test
