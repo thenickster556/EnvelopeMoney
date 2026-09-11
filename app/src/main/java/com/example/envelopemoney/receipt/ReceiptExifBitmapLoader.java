@@ -11,6 +11,7 @@ import androidx.exifinterface.media.ExifInterface;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 
 /**
  * Decodes JPEG bitmaps applying EXIF orientation so saved pixels are upright.
@@ -25,12 +26,19 @@ public final class ReceiptExifBitmapLoader {
         if (context == null || uri == null) {
             return null;
         }
-        byte[] data = ReceiptUriStreams.readAllBytes(context, uri);
-        Bitmap bitmap = BitmapFactory.decodeByteArray(data, 0, data.length);
+        Bitmap bitmap;
+        try (InputStream is = ReceiptBitmapLoader.openInputStream(context, uri)) {
+            if (is == null) {
+                return null;
+            }
+            bitmap = BitmapFactory.decodeStream(is);
+        } catch (SecurityException e) {
+            throw new IOException("uri permission denied", e);
+        }
         if (bitmap == null) {
             return null;
         }
-        int rotation = readExifRotationDegreesFromBytes(data);
+        int rotation = readExifRotationDegrees(context, uri);
         if (rotation == 0) {
             return bitmap;
         }
@@ -101,10 +109,15 @@ public final class ReceiptExifBitmapLoader {
     }
 
     static int readExifRotationDegrees(Context context, Uri uri) throws IOException {
-        if (context == null || uri == null) {
-            return 0;
+        try (InputStream is = ReceiptBitmapLoader.openInputStream(context, uri)) {
+            if (is == null) {
+                return 0;
+            }
+            ExifInterface exif = new ExifInterface(is);
+            return exifToDegrees(exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL));
+        } catch (SecurityException e) {
+            throw new IOException("uri permission denied", e);
         }
-        return readExifRotationDegreesFromBytes(ReceiptUriStreams.readAllBytes(context, uri));
     }
 
     static int exifToDegrees(int orientation) {

@@ -42,6 +42,9 @@ public class Transaction {
     /** Optional content URI string for a receipt image (e.g. MediaStore after camera capture). */
     @SerializedName("receiptImageUri")
     private String receiptImageUri;
+    /** Optional recovery identity. Older Gson records omit it and remain readable. */
+    @SerializedName("receiptImageFileName")
+    private String receiptImageFileName;
 
     public Transaction(String envelopeName, double amount, String date, String comment) {
         this.envelopeName = envelopeName != null ? envelopeName : "Uncategorized";
@@ -84,6 +87,8 @@ public class Transaction {
     public String getRecurringSeriesId() { return recurringSeriesId; }
     public boolean isRecurringTemplate() { return recurringTemplate; }
     public String getReceiptImageUri() { return receiptImageUri; }
+    public String getReceiptImageFileName() { return receiptImageFileName; }
+    public void setReceiptImageFileName(String fileName) { this.receiptImageFileName = fileName; }
 
     public void setAmount(double amount) { this.amount = amount; }
     public void setComment(String comment) { this.comment = comment; }
@@ -104,7 +109,14 @@ public class Transaction {
     }
     public void setRecurringSeriesId(String recurringSeriesId) { this.recurringSeriesId = recurringSeriesId; }
     public void setRecurringTemplate(boolean recurringTemplate) { this.recurringTemplate = recurringTemplate; }
-    public void setReceiptImageUri(String receiptImageUri) { this.receiptImageUri = receiptImageUri; }
+    public void setReceiptImageUri(String receiptImageUri) {
+        if (!java.util.Objects.equals(this.receiptImageUri, receiptImageUri)) {
+            // Replacement/removal must never keep a filename belonging to the previous picture.
+            receiptImageFileName = com.example.envelopemoney.receipt.ReceiptReferenceResolver
+                    .fileNameFromReference(receiptImageUri);
+        }
+        this.receiptImageUri = receiptImageUri;
+    }
 
     public void setDate(String date) {
         this.date = date;

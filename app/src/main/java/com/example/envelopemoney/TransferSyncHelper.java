@@ -156,6 +156,7 @@ public final class TransferSyncHelper {
             mirror.setTransferId(transferId);
             mirror.setTransferBucketId(allocation.getBucketId());
             mirror.setReceiptImageUri(sourceTransaction.getReceiptImageUri());
+            mirror.setReceiptImageFileName(sourceTransaction.getReceiptImageFileName());
             destination.getTransactions().add(mirror);
         }
     }

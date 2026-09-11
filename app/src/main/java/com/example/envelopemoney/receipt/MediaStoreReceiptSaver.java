@@ -18,7 +18,6 @@ import java.io.OutputStream;
 
 /**
  * Writes receipt JPEGs to the device gallery under {@code Pictures/Mountain Money}.
- * The returned URI is the folder file ({@code file://…/MountainMoney_*.jpg}) used for preview.
  */
 public final class MediaStoreReceiptSaver {
 
@@ -33,30 +32,13 @@ public final class MediaStoreReceiptSaver {
             throw new IllegalArgumentException("bitmap null");
         }
         String name = "MountainMoney_" + System.currentTimeMillis() + ".jpg";
-        writeJpeg(context, name, bitmap, null);
-        return ReceiptFolderOpener.folderFileUri(name);
-    }
-
-    @NonNull
-    public static Uri saveJpegStream(Context context, InputStream input) throws IOException {
-        if (input == null) {
-            throw new IllegalArgumentException("input null");
-        }
-        String name = "MountainMoney_" + System.currentTimeMillis() + ".jpg";
-        writeJpeg(context, name, null, input);
-        return ReceiptFolderOpener.folderFileUri(name);
-    }
-
-    private static void writeJpeg(Context context, String name, Bitmap bitmap, InputStream input)
-            throws IOException {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             ContentValues values = new ContentValues();
             values.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
             values.put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg");
             values.put(MediaStore.MediaColumns.RELATIVE_PATH, ALBUM_RELATIVE);
             values.put(MediaStore.MediaColumns.IS_PENDING, 1);
-            Uri uri = context.getContentResolver().insert(
-                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
+            Uri uri = context.getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
             if (uri == null) {
                 throw new IOException("MediaStore insert failed");
             }
@@ -64,39 +46,94 @@ public final class MediaStoreReceiptSaver {
                 if (out == null) {
                     throw new IOException("openOutputStream null");
                 }
-                writeBytes(bitmap, input, out);
+                if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 92, out)) {
+                    throw new IOException("compress failed");
+                }
             }
             values.clear();
             values.put(MediaStore.MediaColumns.IS_PENDING, 0);
             context.getContentResolver().update(uri, values, null, null);
-            return;
+            return withAlbumDisplayName(uri, name);
         }
-        File album = ReceiptFolderOpener.albumDirectory();
+        File pictures = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
+        File album = new File(pictures, "Mountain Money");
         if (!album.exists() && !album.mkdirs()) {
             throw new IOException("mkdir Mountain Money failed");
         }
         File file = new File(album, name);
         try (FileOutputStream fos = new FileOutputStream(file)) {
-            writeBytes(bitmap, input, fos);
+            if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 92, fos)) {
+                throw new IOException("compress failed");
+            }
         }
         android.media.MediaScannerConnection.scanFile(
                 context,
                 new String[]{file.getAbsolutePath()},
                 new String[]{"image/jpeg"},
                 null);
+        return Uri.fromFile(file);
     }
 
-    private static void writeBytes(Bitmap bitmap, InputStream input, OutputStream out)
-            throws IOException {
-        if (bitmap != null) {
-            if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 92, out)) {
-                throw new IOException("compress failed");
-            }
-            return;
+    /**
+     * Copies JPEG bytes from {@code input} into the Mountain Money album without re-encoding.
+     */
+    @NonNull
+    public static Uri saveJpegStream(Context context, InputStream input) throws IOException {
+        if (input == null) {
+            throw new IllegalArgumentException("input null");
         }
+        String name = "MountainMoney_" + System.currentTimeMillis() + ".jpg";
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
+            values.put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg");
+            values.put(MediaStore.MediaColumns.RELATIVE_PATH, ALBUM_RELATIVE);
+            values.put(MediaStore.MediaColumns.IS_PENDING, 1);
+            Uri uri = context.getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
+            if (uri == null) {
+                throw new IOException("MediaStore insert failed");
+            }
+            try (OutputStream out = context.getContentResolver().openOutputStream(uri)) {
+                if (out == null) {
+                    throw new IOException("openOutputStream null");
+                }
+                copyStream(input, out);
+            }
+            values.clear();
+            values.put(MediaStore.MediaColumns.IS_PENDING, 0);
+            context.getContentResolver().update(uri, values, null, null);
+            return withAlbumDisplayName(uri, name);
+        }
+        File pictures = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
+        File album = new File(pictures, "Mountain Money");
+        if (!album.exists() && !album.mkdirs()) {
+            throw new IOException("mkdir Mountain Money failed");
+        }
+        File file = new File(album, name);
+        try (FileOutputStream fos = new FileOutputStream(file)) {
+            copyStream(input, fos);
+        }
+        android.media.MediaScannerConnection.scanFile(
+                context,
+                new String[]{file.getAbsolutePath()},
+                new String[]{"image/jpeg"},
+                null);
+        return Uri.fromFile(file);
+    }
+
+    /**
+     * Keeps {@code MountainMoney_*.jpg} on the MediaStore URI so preview can re-query by name
+     * if the numeric id later changes. Does not switch the scheme to {@code file://}.
+     */
+    @NonNull
+    static Uri withAlbumDisplayName(@NonNull Uri uri, @NonNull String name) {
+        return uri.buildUpon().encodedFragment(name).build();
+    }
+
+    private static void copyStream(InputStream in, OutputStream out) throws IOException {
         byte[] buffer = new byte[8192];
         int read;
-        while ((read = input.read(buffer)) != -1) {
+        while ((read = in.read(buffer)) != -1) {
             out.write(buffer, 0, read);
         }
     }

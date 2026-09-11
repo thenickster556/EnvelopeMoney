@@ -4,7 +4,6 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Matrix;
 import android.net.Uri;
-import android.os.Build;
 
 import androidx.annotation.NonNull;
 
@@ -29,6 +28,7 @@ public final class ReceiptRotatedJpegWriter {
      */
     public static void writeRotatedJpegOverwrite(@NonNull Context context, @NonNull Uri uri, float degrees)
             throws IOException {
+        uri = ReceiptBitmapLoader.requireResolvedUri(context, uri);
         float d = degrees % 360f;
         if (d < -0.01f) {
             d += 360f;
@@ -54,8 +54,8 @@ public final class ReceiptRotatedJpegWriter {
                 src = null;
             }
             try {
-                Uri writeUri = ReceiptFolderOpener.resolveForWrite(context, uri);
-                try (OutputStream out = openWriteStream(context, writeUri)) {
+                Uri writeUri = uri;
+                try (OutputStream out = context.getContentResolver().openOutputStream(writeUri, "w")) {
                     if (out == null) {
                         throw new IOException("openOutputStream null");
                     }
@@ -74,22 +74,5 @@ public final class ReceiptRotatedJpegWriter {
                 toEncode.recycle();
             }
         }
-    }
-
-    private static OutputStream openWriteStream(Context context, Uri writeUri) throws IOException {
-        if ("file".equalsIgnoreCase(writeUri.getScheme()) && writeUri.getPath() != null) {
-            return new java.io.FileOutputStream(writeUri.getPath(), false);
-        }
-        if (Build.VERSION.SDK_INT >= 26) {
-            OutputStream out = context.getContentResolver().openOutputStream(writeUri, "w");
-            if (out != null) {
-                return out;
-            }
-        }
-        OutputStream out = context.getContentResolver().openOutputStream(writeUri);
-        if (out == null) {
-            throw new IOException("openOutputStream null");
-        }
-        return out;
     }
 }

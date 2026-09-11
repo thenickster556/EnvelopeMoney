@@ -19,8 +19,7 @@ import java.util.Locale;
  * External and photo-picker URIs are imported into {@link MediaStoreReceiptSaver}'s Mountain Money
  * album so preview, OCR, and persisted {@code receiptImageUri} use a stable app-owned URI (same as camera).
  * When the platform allows, the original picker file is deleted after import (move semantics).
- * If delete is denied, the album copy is still persisted so preview does not depend on an
- * ephemeral picker grant (a gallery duplicate is acceptable).
+ * If delete of the picker source is denied, the album copy is still persisted (never a picker grant).
  *
  * <p>App-owned detection cannot rely on MediaStore ID strings alone (they do not contain
  * "Mountain Money"). Prefer {@link #isAppOwnedReceiptUri(Context, Uri)} which also checks
@@ -54,10 +53,56 @@ public final class ReceiptPickerUriNormalizer {
         if (uriString == null || uriString.trim().isEmpty()) {
             return false;
         }
+        if (albumDisplayName(Uri.parse(uriString)) != null) {
+            return true;
+        }
         String lower = uriString.toLowerCase(Locale.US);
         // Path may be plain ("Mountain Money") or URI-encoded ("Mountain%20Money").
         return lower.contains(MOUNTAIN_MONEY_ALBUM_MARKER)
                 || lower.contains("mountain%20money");
+    }
+
+    public static boolean isAlbumDisplayName(@Nullable String name) {
+        if (name == null || name.isEmpty()) {
+            return false;
+        }
+        return name.startsWith(APP_OWNED_DISPLAY_NAME_PREFIX)
+                && name.toLowerCase(Locale.US).endsWith(".jpg");
+    }
+
+    /**
+     * {@code MountainMoney_*.jpg} from a URI fragment, last path segment, or file path.
+     */
+    @Nullable
+    public static String albumDisplayName(@Nullable Uri uri) {
+        if (uri == null) {
+            return null;
+        }
+        if (isAlbumDisplayName(uri.getFragment())) {
+            return uri.getFragment();
+        }
+        String last = decodeSegment(uri.getLastPathSegment());
+        if (isAlbumDisplayName(last)) {
+            return last;
+        }
+        String path = uri.getPath();
+        if (path != null) {
+            int slash = path.lastIndexOf('/');
+            String fromPath = slash >= 0 ? path.substring(slash + 1) : path;
+            fromPath = decodeSegment(fromPath);
+            if (isAlbumDisplayName(fromPath)) {
+                return fromPath;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Always keep the album MediaStore URI. Never persist a picker grant.
+     */
+    @Nullable
+    static Uri persistUriAfterImport(@Nullable Uri saved, @Nullable Uri originalUri) {
+        return saved != null ? saved : originalUri;
     }
 
     /**
@@ -143,12 +188,12 @@ public final class ReceiptPickerUriNormalizer {
     }
 
     /**
-     * Keep the album copy as the persisted URI. Best-effort delete of a non–app-owned source.
+     * Persist the album copy. Best-effort delete of a non–app-owned picker source.
      * Never deletes a Mountain Money file, and never rolls back to a picker URI.
      */
     @NonNull
     static ImportResult finishImportMoveOrRollback(Context context, Uri saved, Uri originalUri) {
-        Uri persist = ReceiptFolderOpener.persistUriAfterImport(saved, originalUri);
+        Uri persist = persistUriAfterImport(saved, originalUri);
         if (persist == null) {
             throw new IllegalArgumentException("saved uri null");
         }
@@ -170,9 +215,8 @@ public final class ReceiptPickerUriNormalizer {
         if (data == null || data.length == 0) {
             throw new IOException("empty image bytes");
         }
-        Uri alreadyInAlbum = folderUriIfAlreadyInAlbum(context, originalUri);
-        if (alreadyInAlbum != null) {
-            return new ImportResult(alreadyInAlbum, false);
+        if (originalUri != null && !shouldImportToAppGallery(context, originalUri)) {
+            return new ImportResult(originalUri, false);
         }
         if (canStreamCopyBytesInPlace(data)) {
             try (InputStream in = new ByteArrayInputStream(data)) {
@@ -197,9 +241,8 @@ public final class ReceiptPickerUriNormalizer {
         if (uri == null) {
             throw new IOException("uri null");
         }
-        Uri alreadyInAlbum = folderUriIfAlreadyInAlbum(context, uri);
-        if (alreadyInAlbum != null) {
-            return new ImportResult(alreadyInAlbum, false);
+        if (!shouldImportToAppGallery(context, uri)) {
+            return new ImportResult(uri, false);
         }
         Uri original = uri;
         try {
@@ -235,28 +278,6 @@ public final class ReceiptPickerUriNormalizer {
         return normalizeImport(context, uri).uri;
     }
 
-    /**
-     * When the URI already names a Mountain Money JPEG, persist the folder file URI instead of
-     * copying again. Picker grants never skip import.
-     */
-    @Nullable
-    private static Uri folderUriIfAlreadyInAlbum(@Nullable Context context, @Nullable Uri uri) {
-        if (uri == null || ReceiptFolderOpener.isEphemeralPickerUri(uri)) {
-            return null;
-        }
-        String name = ReceiptFolderOpener.albumDisplayName(uri);
-        if (name != null) {
-            return ReceiptFolderOpener.folderFileUri(name);
-        }
-        if (context != null && isAppOwnedReceiptUri(context, uri)) {
-            name = ReceiptFolderOpener.albumDisplayName(uri);
-            if (name != null) {
-                return ReceiptFolderOpener.folderFileUri(name);
-            }
-        }
-        return null;
-    }
-
     @Nullable
     private static String queryRelativePath(Context context, Uri uri) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -271,7 +292,7 @@ public final class ReceiptPickerUriNormalizer {
             return null;
         }
         try (Cursor cursor = context.getContentResolver().query(
-                uri, new String[]{column}, null, null, null)) {
+                stripFragment(uri), new String[]{column}, null, null, null)) {
             if (cursor != null && cursor.moveToFirst()) {
                 int index = cursor.getColumnIndex(column);
                 if (index >= 0 && !cursor.isNull(index)) {
@@ -284,5 +305,26 @@ public final class ReceiptPickerUriNormalizer {
             return null;
         }
         return null;
+    }
+
+    @NonNull
+    static Uri stripFragment(@NonNull Uri uri) {
+        if (uri.getFragment() == null) {
+            return uri;
+        }
+        return uri.buildUpon().fragment(null).build();
+    }
+
+    @Nullable
+    private static String decodeSegment(@Nullable String segment) {
+        if (segment == null || segment.isEmpty()) {
+            return segment;
+        }
+        try {
+            String decoded = Uri.decode(segment);
+            return decoded != null ? decoded : segment;
+        } catch (RuntimeException e) {
+            return segment;
+        }
     }
 }

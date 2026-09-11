@@ -40,6 +40,8 @@ public class ReceiptPreviewActivity extends AppCompatActivity {
     @Nullable
     private Bitmap displayBitmap;
     private boolean loadOk;
+    private boolean pictureOperationInProgress;
+    private final java.util.concurrent.ExecutorService pictureExecutor = java.util.concurrent.Executors.newSingleThreadExecutor();
     /** Multiple of 90° for {@link ReceiptZoomImageView#setRotation(float)}; 0 when aligned with file. */
     private int rotationQuarters;
 
@@ -69,39 +71,18 @@ public class ReceiptPreviewActivity extends AppCompatActivity {
         btnRotRight.setOnClickListener(v -> applyViewRotation(90f));
         btnSaveRotation.setOnClickListener(v -> confirmReplaceThenSave());
 
-        Uri fromData = getIntent() != null ? getIntent().getData() : null;
         String uriStr = getIntent() != null ? getIntent().getStringExtra(EXTRA_IMAGE_URI) : null;
-        if (fromData != null) {
-            imageUri = fromData;
-        } else if (uriStr != null && !uriStr.isEmpty()) {
-            imageUri = Uri.parse(uriStr);
-        } else {
+        if (uriStr == null || uriStr.isEmpty()) {
             showError();
             return;
         }
-        int maxDim = computeDecodeMaxDimension();
-        Bitmap bmp;
-        try {
-            bmp = ReceiptBitmapLoader.decodeSampled(this, imageUri, maxDim);
-        } catch (IOException e) {
-            Log.e(TAG, "receipt fullscreen decode", e);
-            bmp = null;
-        }
-        if (bmp == null) {
-            showError();
-            return;
-        }
-        loadOk = true;
-        displayBitmap = bmp;
-        tvError.setVisibility(View.GONE);
-        zoomImage.setImageBitmap(bmp);
-        rotationQuarters = 0;
-        zoomImage.setRotation(0f);
-        updateRotationDirtyUi();
+        imageUri = Uri.parse(uriStr);
+        loadPictureInBackground(false);
     }
 
     @Override
     protected void onDestroy() {
+        pictureExecutor.shutdownNow();
         recycleDisplayBitmap();
         super.onDestroy();
     }
@@ -136,49 +117,69 @@ public class ReceiptPreviewActivity extends AppCompatActivity {
     }
 
     private void saveRotationOverwrite() {
-        if (imageUri == null) {
-            return;
-        }
+        if (imageUri == null || pictureOperationInProgress) return;
         float degrees = rotationQuarters * 90f;
-        try {
-            ReceiptRotatedJpegWriter.writeRotatedJpegOverwrite(this, imageUri, degrees);
-        } catch (IOException e) {
-            Log.e(TAG, "receipt rotate save", e);
-            new MaterialAlertDialogBuilder(this)
-                    .setMessage(R.string.receipt_preview_save_failed)
-                    .setPositiveButton(android.R.string.ok, null)
-                    .show();
-            return;
-        }
-        rotationQuarters = 0;
-        zoomImage.setRotation(0f);
-        reloadBitmapAfterSave();
+        setPictureOperationInProgress(true);
+        pictureExecutor.execute(() -> {
+            try {
+                ReceiptRotatedJpegWriter.writeRotatedJpegOverwrite(this, imageUri, degrees);
+                runOnUiThread(() -> {
+                    if (isFinishing() || isDestroyed()) return;
+                    rotationQuarters = 0;
+                    zoomImage.setRotation(0f);
+                    loadPictureInBackground(true);
+                });
+            } catch (IOException failure) {
+                Log.e(TAG, "receipt rotate save", failure);
+                runOnUiThread(() -> {
+                    if (isFinishing() || isDestroyed()) return;
+                    setPictureOperationInProgress(false);
+                    new MaterialAlertDialogBuilder(this).setMessage(R.string.receipt_preview_save_failed)
+                            .setPositiveButton(android.R.string.ok, null).show();
+                });
+            }
+        });
+    }
+
+    /** Gallery lookup, EXIF reading and decoding never block gestures or the activity's main thread. */
+    private void loadPictureInBackground(boolean afterSave) {
+        int maximumDimension = computeDecodeMaxDimension();
+        setPictureOperationInProgress(true);
+        pictureExecutor.execute(() -> {
+            Bitmap decoded;
+            try {
+                decoded = ReceiptBitmapLoader.decodeSampled(this, imageUri, maximumDimension);
+            } catch (IOException failure) {
+                Log.e(TAG, "receipt picture decode", failure);
+                decoded = null;
+            }
+            final Bitmap picture = decoded;
+            runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed()) {
+                    if (picture != null) picture.recycle();
+                    return;
+                }
+                recycleDisplayBitmap();
+                if (picture == null) {
+                    if (afterSave) showErrorAfterSave(); else showError();
+                } else {
+                    displayBitmap = picture;
+                    loadOk = true;
+                    tvError.setVisibility(View.GONE);
+                    zoomImage.setVisibility(View.VISIBLE);
+                    zoomImage.setImageBitmap(picture);
+                }
+                setPictureOperationInProgress(false);
+            });
+        });
+    }
+
+    private void setPictureOperationInProgress(boolean inProgress) {
+        pictureOperationInProgress = inProgress;
+        btnRotLeft.setEnabled(!inProgress && loadOk);
+        btnRotRight.setEnabled(!inProgress && loadOk);
         updateRotationDirtyUi();
     }
-
-    private void reloadBitmapAfterSave() {
-        recycleDisplayBitmap();
-        if (imageUri == null) {
-            return;
-        }
-        int maxDim = computeDecodeMaxDimension();
-        try {
-            Bitmap bmp = ReceiptBitmapLoader.decodeSampled(this, imageUri, maxDim);
-            if (bmp == null) {
-                showErrorAfterSave();
-                return;
-            }
-            displayBitmap = bmp;
-            loadOk = true;
-            tvError.setVisibility(View.GONE);
-            zoomImage.setVisibility(View.VISIBLE);
-            zoomImage.setImageBitmap(bmp);
-        } catch (IOException e) {
-            Log.e(TAG, "receipt reload after save", e);
-            showErrorAfterSave();
-        }
-    }
-
     private void showErrorAfterSave() {
         tvError.setVisibility(View.VISIBLE);
         tvError.setText(R.string.receipt_preview_load_failed);
@@ -200,7 +201,7 @@ public class ReceiptPreviewActivity extends AppCompatActivity {
 
     private void updateRotationDirtyUi() {
         if (btnSaveRotation != null) {
-            btnSaveRotation.setEnabled(loadOk && isRotationDirty());
+            btnSaveRotation.setEnabled(loadOk && !pictureOperationInProgress && isRotationDirty());
         }
     }
 

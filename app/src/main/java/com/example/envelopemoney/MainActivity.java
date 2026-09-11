@@ -1,10 +1,8 @@
 package com.example.envelopemoney;
 
-import android.Manifest;
 import android.app.DatePickerDialog;
 import android.content.Context;
 import android.content.Intent;
-import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
@@ -54,8 +52,11 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.example.envelopemoney.receipt.PaddleOcrAdapter;
+import com.example.envelopemoney.receipt.ReceiptBitmapLoader;
+import com.example.envelopemoney.receipt.AndroidReceiptSource;
+import com.example.envelopemoney.receipt.ReceiptReferenceResolver;
+import com.example.envelopemoney.receipt.ReceiptReferenceRepair;
 import com.example.envelopemoney.receipt.ReceiptCaptureActivity;
-import com.example.envelopemoney.receipt.ReceiptFolderOpener;
 import com.example.envelopemoney.receipt.ReceiptExifBitmapLoader;
 import com.example.envelopemoney.receipt.ReceiptPickerUriNormalizer;
 import com.example.envelopemoney.receipt.ReceiptPreviewActivity;
@@ -66,7 +67,6 @@ import com.example.envelopemoney.receipt.ReceiptOcrPipeline;
 import com.example.envelopemoney.receipt.OcrAmountLearner;
 import com.example.envelopemoney.receipt.OcrAmountWeights;
 import com.example.envelopemoney.receipt.ReceiptRowUi;
-import com.example.envelopemoney.receipt.ReceiptUriStreams;
 import com.example.envelopemoney.ui.BoundedNestedScrollView;
 import com.example.envelopemoney.ui.SpendBarChartView;
 import com.google.android.material.chip.Chip;
@@ -91,7 +91,9 @@ import com.example.envelopemoney.Transaction;
 
 import java.lang.reflect.Field;
 import java.text.ParseException;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -168,8 +170,10 @@ public class MainActivity extends AppCompatActivity {
     private ActivityResultLauncher<Intent> receiptCaptureLauncher;
     private ActivityResultLauncher<String> galleryPickLauncher;
     private ActivityResultLauncher<String> receiptReadPermissionLauncher;
-    @Nullable
-    private Uri pendingReceiptPreviewUri;
+    private final java.util.concurrent.ExecutorService receiptRecoveryExecutor = Executors.newSingleThreadExecutor();
+    private boolean receiptRepairInProgress;
+    private boolean receiptRepairRequestedAgain;
+    private String pendingReceiptReference;
     private LearningDb learningDb;
     @Nullable
     private List<String> lastOcrLines;
@@ -745,6 +749,17 @@ public class MainActivity extends AppCompatActivity {
     @RequiresApi(api = Build.VERSION_CODES.N)
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        if (savedInstanceState != null) pendingReceiptReference = savedInstanceState.getString("pendingReceiptReference");
+        receiptReadPermissionLauncher = registerForActivityResult(
+                new ActivityResultContracts.RequestPermission(), granted -> {
+                    if (granted) startReceiptReferenceRepair();
+                    if (pendingReceiptReference != null) {
+                        String reference = pendingReceiptReference;
+                        pendingReceiptReference = null;
+                        if (granted) openReceiptWithRecovery(reference, false);
+                        else showReceiptRecoveryFailure(reference, ReceiptReferenceResolver.Status.PERMISSION_REQUIRED);
+                    }
+                });
         receiptCaptureLauncher = registerForActivityResult(
                 new ActivityResultContracts.StartActivityForResult(),
                 result -> {
@@ -767,15 +782,6 @@ public class MainActivity extends AppCompatActivity {
                         if (host != null) {
                             startReceiptImportAndOcr(Uri.parse(uriStr), mode);
                         }
-                    }
-                });
-        receiptReadPermissionLauncher = registerForActivityResult(
-                new ActivityResultContracts.RequestPermission(),
-                granted -> {
-                    Uri pending = pendingReceiptPreviewUri;
-                    pendingReceiptPreviewUri = null;
-                    if (pending != null) {
-                        launchReceiptPreviewActivity(pending);
                     }
                 });
         galleryPickLauncher = registerForActivityResult(
@@ -902,6 +908,17 @@ public class MainActivity extends AppCompatActivity {
 
         updateTransactionHistory();
         updatePondTotalsFooter();
+        startReceiptReferenceRepair();
+    }
+
+    @Override protected void onSaveInstanceState(Bundle state) {
+        state.putString("pendingReceiptReference", pendingReceiptReference);
+        super.onSaveInstanceState(state);
+    }
+
+    @Override protected void onDestroy() {
+        receiptRecoveryExecutor.shutdownNow();
+        super.onDestroy();
     }
 
     @Override
@@ -1427,8 +1444,7 @@ public class MainActivity extends AppCompatActivity {
                 String date = etDate.getText().toString();
                 View receiptHost = receiptDialogHostView != null ? receiptDialogHostView : dialogView;
                 Object uriTag = receiptHost.getTag(R.id.tag_receipt_image_uri);
-                String receiptUri = persistableReceiptUri(
-                        uriTag instanceof String ? (String) uriTag : null);
+                String receiptUri = uriTag instanceof String ? (String) uriTag : null;
 
                 if (typeTab == TAB_TYPE_SPLIT) {
                     double total = parseAmountOrZero(etSplitTotal);
@@ -1577,20 +1593,21 @@ public class MainActivity extends AppCompatActivity {
         return receiptImportHostView;
     }
 
-    @Nullable
-    private String persistableReceiptUri(@Nullable String stored) {
-        if (stored == null || stored.isEmpty()) {
-            return stored;
-        }
-        String name = ReceiptFolderOpener.albumDisplayName(Uri.parse(stored));
-        if (name != null) {
-            return ReceiptFolderOpener.folderFileUri(name).toString();
-        }
-        return stored;
-    }
-
     private byte[] readUriBytes(Uri uri) throws IOException {
-        return ReceiptUriStreams.readAllBytes(this, uri);
+        try (InputStream in = ReceiptBitmapLoader.openInputStream(this, uri)) {
+            if (in == null) {
+                throw new IOException("openInputStream null");
+            }
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = in.read(buffer)) != -1) {
+                out.write(buffer, 0, read);
+            }
+            return out.toByteArray();
+        } catch (SecurityException e) {
+            throw new IOException("uri permission denied", e);
+        }
     }
 
     private void handleReceiptImportFailure(@Nullable View host, @Nullable TextView status, IOException e) {
@@ -1629,12 +1646,10 @@ public class MainActivity extends AppCompatActivity {
             status.setText(R.string.receipt_ocr_reading);
         }
 
-        String alreadyNamed = ReceiptFolderOpener.albumDisplayName(imageUri);
-        if (alreadyNamed != null) {
-            Uri persist = ReceiptFolderOpener.folderFileUri(alreadyNamed);
-            host.setTag(R.id.tag_receipt_image_uri, persist.toString());
+        if (ReceiptPickerUriNormalizer.isAppOwnedReceiptUri(this, imageUri)) {
+            host.setTag(R.id.tag_receipt_image_uri, imageUri.toString());
             syncReceiptActionUi(host);
-            runReceiptOcrBackground(persist, mode, status);
+            runReceiptOcrBackground(imageUri, mode, status);
             return;
         }
 
@@ -1647,6 +1662,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         final Uri originalUri = imageUri;
+        final byte[] bytesForOcr = pickedBytes;
         Executors.newSingleThreadExecutor().execute(() -> {
             try {
                 ReceiptPickerUriNormalizer.ImportResult result =
@@ -1662,14 +1678,13 @@ public class MainActivity extends AppCompatActivity {
                         return;
                     }
                     ensureReceiptTransactionDialogVisible();
-                    Uri persistUri = result.uri;
-                    String named = ReceiptFolderOpener.albumDisplayName(persistUri);
-                    if (named != null) {
-                        persistUri = ReceiptFolderOpener.folderFileUri(named);
-                    }
-                    activeHost.setTag(R.id.tag_receipt_image_uri, persistUri.toString());
+                    activeHost.setTag(R.id.tag_receipt_image_uri, result.uri.toString());
                     syncReceiptActionUi(activeHost);
-                    runReceiptOcrBackground(persistUri, mode, status);
+                    if (ReceiptPickerUriNormalizer.isAppOwnedReceiptUri(MainActivity.this, result.uri)) {
+                        runReceiptOcrBackground(result.uri, mode, status);
+                    } else {
+                        runReceiptOcrBackgroundFromBytes(bytesForOcr, mode, status);
+                    }
                 });
             } catch (IOException e) {
                 runOnUiThread(() -> handleReceiptImportFailure(
@@ -1925,55 +1940,102 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showReceiptImagePreview(Uri uri) {
-        if (uri == null) {
-            return;
-        }
-        String permission = receiptReadPermissionName();
-        if (permission != null
-                && ContextCompat.checkSelfPermission(this, permission)
-                != PackageManager.PERMISSION_GRANTED) {
-            pendingReceiptPreviewUri = uri;
-            receiptReadPermissionLauncher.launch(permission);
-            return;
-        }
-        launchReceiptPreviewActivity(uri);
+        if (uri != null) openReceiptWithRecovery(uri.toString(), true);
     }
 
-    @Nullable
-    private static String receiptReadPermissionName() {
-        if (Build.VERSION.SDK_INT >= 33) {
-            return Manifest.permission.READ_MEDIA_IMAGES;
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            return Manifest.permission.READ_EXTERNAL_STORAGE;
-        }
-        return null;
+    /** Resolution is read-only; only verified associations are applied to unchanged live records. */
+    private void openReceiptWithRecovery(String reference, boolean requestPermission) {
+        List<ReceiptReferenceRepair.Entry> entries = receiptEntriesFor(reference);
+        String fileName = entries.isEmpty() ? null : entries.get(0).fileName;
+        receiptRecoveryExecutor.execute(() -> {
+            ReceiptReferenceResolver.Result result = AndroidReceiptSource.resolve(
+                    getApplicationContext(), reference, fileName);
+            runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                if (result.status == ReceiptReferenceResolver.Status.RESOLVED) {
+                    applyReceiptResolution(reference, entries, result);
+                    startActivity(new Intent(this, ReceiptPreviewActivity.class)
+                            .putExtra(ReceiptPreviewActivity.EXTRA_IMAGE_URI, namedReceiptReference(result)));
+                } else if (requestPermission && new AndroidReceiptSource(this).needsReadPermission()
+                        && result.status == ReceiptReferenceResolver.Status.PERMISSION_REQUIRED) {
+                    pendingReceiptReference = reference;
+                    receiptReadPermissionLauncher.launch(AndroidReceiptSource.readPermission());
+                } else {
+                    showReceiptRecoveryFailure(reference, result.status);
+                }
+            });
+        });
     }
 
-    private void launchReceiptPreviewActivity(Uri uri) {
-        if (uri == null) {
-            return;
+    /** Runs once after load and again after a photo-access grant; never filters by receipt age. */
+    private void startReceiptReferenceRepair() {
+        if (envelopes == null || isDestroyed()) return;
+        if (receiptRepairInProgress) { receiptRepairRequestedAgain = true; return; }
+        List<ReceiptReferenceRepair.Entry> entries = ReceiptReferenceRepair.snapshot(envelopes);
+        if (entries.isEmpty()) return;
+        receiptRepairInProgress = true;
+        receiptRecoveryExecutor.execute(() -> {
+            Map<String, ReceiptReferenceResolver.Result> results = new HashMap<>();
+            ReceiptReferenceResolver resolver = new ReceiptReferenceResolver(new AndroidReceiptSource(this));
+            for (ReceiptReferenceRepair.Entry entry : entries) {
+                if (Thread.currentThread().isInterrupted()) return;
+                if (!results.containsKey(entry.key())) {
+                    results.put(entry.key(), resolver.resolve(entry.reference, entry.fileName));
+                }
+            }
+            runOnUiThread(() -> {
+                receiptRepairInProgress = false;
+                if (isFinishing() || isDestroyed()) return;
+                if (ReceiptReferenceRepair.apply(envelopes, entries, results) > 0) {
+                    PrefManager.saveEnvelopes(this, envelopes);
+                    updateTransactionHistory();
+                }
+                if (receiptRepairRequestedAgain) {
+                    receiptRepairRequestedAgain = false;
+                    startReceiptReferenceRepair();
+                }
+            });
+        });
+    }
+
+    private List<ReceiptReferenceRepair.Entry> receiptEntriesFor(String reference) {
+        List<ReceiptReferenceRepair.Entry> matching = new ArrayList<>();
+        for (ReceiptReferenceRepair.Entry entry : ReceiptReferenceRepair.snapshot(envelopes)) {
+            if (reference.equals(entry.reference)) matching.add(entry);
         }
-        // Preview is read-only: open the stored URI. Do not re-run normalizeImport/move — that can
-        // delete the only Mountain Money MediaStore row while the transaction still points at it.
-        Intent preview = new Intent(this, ReceiptPreviewActivity.class);
-        Uri openUri = uri;
-        String named = ReceiptFolderOpener.albumDisplayName(uri);
-        if (named != null) {
-            openUri = ReceiptFolderOpener.folderFileUri(named);
+        return matching;
+    }
+
+    private String namedReceiptReference(ReceiptReferenceResolver.Result result) {
+        return Uri.parse(result.reference).buildUpon().fragment(result.fileName).build().toString();
+    }
+
+    private void applyReceiptResolution(String reference, List<ReceiptReferenceRepair.Entry> entries,
+                                        ReceiptReferenceResolver.Result result) {
+        Map<String, ReceiptReferenceResolver.Result> results = new HashMap<>();
+        for (ReceiptReferenceRepair.Entry entry : entries) results.put(entry.key(), result);
+        if (ReceiptReferenceRepair.apply(envelopes, entries, results) > 0) {
+            PrefManager.saveEnvelopes(this, envelopes);
+            updateTransactionHistory();
         }
-        preview.setDataAndType(openUri, "image/*");
-        preview.putExtra(ReceiptPreviewActivity.EXTRA_IMAGE_URI, openUri.toString());
-        preview.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
-                | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
-        try {
-            startActivity(preview);
-        } catch (RuntimeException e) {
-            Log.e("EnvelopeMoney", "receipt preview launch", e);
-            Toast.makeText(this, R.string.receipt_preview_load_failed, Toast.LENGTH_LONG).show();
+        View host = resolveReceiptDialogHost();
+        if (host != null && reference.equals(host.getTag(R.id.tag_receipt_image_uri))) {
+            host.setTag(R.id.tag_receipt_image_uri, namedReceiptReference(result));
+            syncReceiptActionUi(host);
         }
     }
 
+    /** Automatic folder discovery has already run. A retry can pick up new access or a restored file. */
+    private void showReceiptRecoveryFailure(String reference, ReceiptReferenceResolver.Status status) {
+        int message = R.string.receipt_recovery_missing;
+        if (status == ReceiptReferenceResolver.Status.PERMISSION_REQUIRED) message = R.string.receipt_recovery_permission;
+        else if (status == ReceiptReferenceResolver.Status.AMBIGUOUS) message = R.string.receipt_recovery_ambiguous;
+        else if (status == ReceiptReferenceResolver.Status.CORRUPT) message = R.string.receipt_recovery_corrupt;
+        new MaterialAlertDialogBuilder(this).setTitle(R.string.receipt_recovery_title).setMessage(message)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(R.string.receipt_recovery_retry,
+                        (dialog, which) -> openReceiptWithRecovery(reference, true)).show();
+    }
     private void updateTransactionHistory() {
         ensureRecurringTransactionsForCurrentMonth();
         ensureMirrorTransactionsForExistingTransfers();
@@ -2974,8 +3036,7 @@ public class MainActivity extends AppCompatActivity {
                 String previousMonth = resolveTransactionMonth(editTransaction);
                 View receiptHost = receiptDialogHostView != null ? receiptDialogHostView : dialogView;
                 Object receiptUriTag = receiptHost.getTag(R.id.tag_receipt_image_uri);
-                String receiptUri = persistableReceiptUri(
-                        receiptUriTag instanceof String ? (String) receiptUriTag : null);
+                String receiptUri = receiptUriTag instanceof String ? (String) receiptUriTag : null;
 
                 if (typeTab == TAB_TYPE_SPLIT) {
                     double total = parseAmountOrZero(etSplitTotal);

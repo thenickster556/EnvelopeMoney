@@ -43,10 +43,10 @@ Comment typeahead and OCR amount-correction weights live in a **sidecar SQLite**
 - Receipt capture (`com.example.envelopemoney.receipt`)
   - `ReceiptCaptureActivity` — CameraX preview, capture mode, shutter; persists upright JPEG via EXIF-aware decode + `MediaStoreReceiptSaver` (`Pictures/Mountain Money`).
   - `ReceiptExifBitmapLoader` — applies EXIF orientation when decoding capture/picker JPEGs.
-  - `ReceiptPickerUriNormalizer` / `ReceiptFolderOpener` / `ReceiptSourceDeleter` — import gallery URIs into **Pictures/Mountain Money** once; persist a `file://` URI that includes `MountainMoney_*.jpg`. Preview opens that folder file by filename (`ReceiptFolderOpener` / `ReceiptUriStreams`), not a leftover picker id.
+  - `ReceiptPickerUriNormalizer` / `ReceiptSourceDeleter` — import gallery URIs into **Pictures/Mountain Money** once before OCR; persist the MediaStore insert URI even when the picker source cannot be deleted; preview opens that stored URI (plus `DISPLAY_NAME` lookup) without re-import.
   - `ReceiptOcrPipeline` — preprocess bitmap, `OcrEngine` (default: on-device Latin text recognition; slot for PaddleOCR), `ReceiptFieldParser` heuristics (merchant junk filters incl. order/receipt/invoice headers + title case for ALL CAPS OCR; bottom-up “amount due” / last labeled total, then bottom-most money fallback for restaurant/receipt modes). Fallback money scoring can use the sidecar weight vector; defaults match the original constants.
   - `ReceiptRowUi` — pure helper for when to show the list-row receipt thumbnail.
-  - Wired from `MainActivity` add/edit transaction dialogs (`ActivityResultContracts`); `receiptDialogHostView` selects the active dialog for OCR results. Fullscreen image preview: `ReceiptPreviewActivity` (view-only 90° until **Save rotation**; `ReceiptRotatedJpegWriter` decodes, **Matrix**-rotates, overwrites same `content://` URI at JPEG **92**; reload bitmap; `MaterialAlertDialogBuilder` for replace + discard-when-dirty), `ReceiptZoomImageView`, `ReceiptBitmapLoader`.
+  - Wired from `MainActivity` add/edit transaction dialogs (`ActivityResultContracts`); `receiptDialogHostView` selects the active dialog for OCR results. Fullscreen image preview: `ReceiptPreviewActivity` via `EXTRA_IMAGE_URI` only (no `file://` on `Intent.setData`). View-only 90° until **Save rotation**; `ReceiptRotatedJpegWriter` decodes, **Matrix**-rotates, overwrites same `content://` URI at JPEG **92**; reload bitmap; `MaterialAlertDialogBuilder` for replace + discard-when-dirty; `ReceiptZoomImageView`, `ReceiptBitmapLoader`.
 
 ## State Boundaries
 - UI state lives primarily in `MainActivity`.
@@ -71,3 +71,9 @@ App launch
 
 ## Target Architecture Rule
 Month rollover logic must stay isolated in testable helpers and must not mutate live persisted state until rollover inputs are sanitized and the transition is valid.
+
+## Receipt reference recovery (2026-09-10)
+- `ReceiptReferenceResolver` owns read-only resolution outcomes: resolved, permission required, missing, ambiguous, or corrupt. `AndroidReceiptSource` preserves metadata even after a stream fails, understands media-image document IDs, and indexes the exact `Pictures/Mountain Money` folder through MediaStore plus accessible unindexed disk files. No age cutoff is applied.
+- `ReceiptReferenceRepair` snapshots current and monthly-history transactions, deduplicates shared references for worker resolution, then applies only verified results to still-live, unchanged records on the UI thread. `PrefManager` persists once per changed pass. Folder indexing and reference lookup target O(transactions + folder entries), with no gallery I/O on the UI thread.
+- Startup and permission grants schedule repair; preview retries use the same resolver. Preview, OCR and rotation share resolution, and rotation writes the verified image URI. Preview decode and rotation run on a lifecycle-owned worker.
+- Recovery never imports, deletes or moves images and never asks the user to locate a picture. Missing identity or duplicate matches leave the association intact and offer automatic retry. Gallery import remains a separate existing workflow.

@@ -1,5 +1,6 @@
 {
   "active_tasks": [
+    {"id":"receipt-reference-recovery-2026-09-08","title":"Automatic receipt-folder recovery implemented; final UI verification blocked","status":"verification_blocked","intent":"Automatic exact-folder discovery replaces manual selection. Implementation, history backfill, metadata copying and restart recovery are complete. Build and 80% recovery coverage gate pass (97.06% lines, 82.58% branches). Full suite: 185/188 passed; three failures reproduced in baseline. Lint: same 43 baseline errors. API 36 startup/restart/render test passes. Retry-dialog matcher corrected and APK rebuilt; final UI rerun/clean screenshot blocked by automatic approval review account usage limit. See docs/receipt-recovery-verification.md."},
     {
       "id": "transfer-dialog-ux-polish-2026-05",
       "title": "Polish grouped transfer dialog scrolling, dropdowns, and slider readability",
@@ -19,6 +20,24 @@
     }
   ],
   "completed_tasks": [
+    {
+      "id": "receipt-persist-album-uri-2026-09",
+      "title": "Always persist Mountain Money MediaStore URI after import",
+      "status": "completed",
+      "intent": "Never roll back to a picker grant when source delete fails. Persist MediaStore content:// insert URI with optional #MountainMoney_*.jpg fragment. Preview opens ContentResolver, leftover file://, then DISPLAY_NAME lookup. No re-import on preview. Tests: persistUriAfterImport_keepsAlbumCopyWhenPickerSourceRemains, albumDisplayName_fromFragmentAndFilePath."
+    },
+    {
+      "id": "restore-upstream-preview-2026-09",
+      "title": "Restore origin/transfer-patch MediaStore content:// receipt preview",
+      "status": "completed",
+      "intent": "Revert folder-open file:// persist. Restore MediaStore insert URI + EXTRA_IMAGE_URI-only preview from origin/transfer-patch. FileInputStream fallback only for leftover file:// MountainMoney URIs. Tests: ReceiptBitmapLoaderTest.usesFilePathFallback_onlyFileScheme."
+    },
+    {
+      "id": "receipt-preview-compile-launch-2026-09",
+      "title": "Fix MainActivity compile and file:// preview launch",
+      "status": "completed",
+      "intent": "Remove stray character causing compileDebugJavaWithJavac ';' expected. Do not put folder file:// on Intent.setData (FileUriExposedException). Pass EXTRA_IMAGE_URI; content:// may still be Intent data. Tests: ReceiptFolderOpenerTest.canPutOnIntentData_onlyContentScheme."
+    },
     {
       "id": "receipt-folder-open-2026-09",
       "title": "Open receipt preview from Pictures/Mountain Money by filename",
@@ -246,5 +265,5 @@
       "title": "Fullscreen zoomable rotatable ReceiptPreviewActivity; ReceiptZoomImageView; ReceiptBitmapLoader"
     }
   ],
-  "last_updated": "2026-08-20"
+  "last_updated": "2026-09-10"
 }

@@ -75,7 +75,7 @@ When `paydays_json` is non-empty **and** a pond has `accountBalance` set:
 - `recurringDays: List<Integer>`
 - `recurringSeriesId: String?`
 - `recurringTemplate: boolean`
-- `receiptImageUri: String?` — optional URI for a JPEG under **Pictures/Mountain Money**. After camera/gallery import, this is a **name-bearing folder file URI** (`file://…/Pictures/Mountain Money/MountainMoney_*.jpg`), not an ephemeral picker grant. Preview locates that filename in the album (folder path or a fresh MediaStore query by `DISPLAY_NAME`) without re-import.
+- `receiptImageUri: String?` — optional MediaStore `content://` URI for a JPEG under **Pictures/Mountain Money** after camera/gallery import. The insert URI is always persisted (never a picker grant). A `#MountainMoney_*.jpg` fragment may be present so preview can re-query by `DISPLAY_NAME` if the numeric id changes. Preview opens this stored URI without re-import.
 
 ## TransferData Model
 - `id: String`
@@ -109,3 +109,6 @@ Database `mountain_money` (localhost). One profile per registered account; Envel
 - `receipts` GridFS: JPEG files tagged with `metadata.userId`; transaction `receiptImageUri` is `/api/receipts/:id`
 
 Web and Android stores are independent (no SharedPreferences sync). Learning `.db` files are also independent per platform/user unless the user copies the file.
+
+### Receipt recovery compatibility
+`Transaction.receiptImageFileName: String?` is an optional Gson filename identity alongside the existing `receiptImageUri`. Legacy JSON without the field continues to load. New named saves and verified repairs populate it. URI replacement/removal clears obsolete filename metadata; unchanged URI assignments retain it. Transfer mirrors and split-group edits preserve the verified filename. Repair updates current transactions and `MonthData.transactions` without changing financial fields, preference keys, or the learning SQLite database. Failed or ambiguous recovery never clears the original association.

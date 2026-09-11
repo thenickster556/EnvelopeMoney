@@ -143,4 +143,10 @@
     <string name="analysis_by_pond">By pond (%1$s–%2$s)</string>
     <string name="analysis_no_spending">No spending in this range</string>
     <string name="analysis_month_bar_description">%1$s %2$s</string>
+    <string name="receipt_recovery_title">Open receipt picture</string>
+    <string name="receipt_recovery_retry">Retry automatic search</string>
+    <string name="receipt_recovery_missing">Automatic search could not identify this receipt in Pictures/Mountain Money. Its saved reference and transaction details have been kept.</string>
+    <string name="receipt_recovery_permission">Photo access is needed to search Pictures/Mountain Money. Allow photo access and retry the automatic search.</string>
+    <string name="receipt_recovery_ambiguous">More than one picture in Pictures/Mountain Money matches this receipt. The saved reference has been kept to avoid opening the wrong picture.</string>
+    <string name="receipt_recovery_corrupt">The matching picture in Pictures/Mountain Money could not be decoded. Its saved reference and transaction details have been kept.</string>
 </resources>

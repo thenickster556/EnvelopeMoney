@@ -37,7 +37,7 @@
 
 ## Receipt preview (list and dialogs)
 1. On the main transaction list, if a row has a stored receipt URI, a **photo** icon appears next to edit.
-2. **Preview** icon in add/edit dialogs, or the list **photo** icon, opens **ReceiptPreviewActivity** for the JPEG in **Pictures/Mountain Money** named in `receiptImageUri` (no second gallery import/move). The opener finds `MountainMoney_*.jpg` on disk or via MediaStore by display name. Fullscreen image, **pinch to zoom**, **drag** to pan when zoomed, **double-tap** to refit. **Rotate left / Rotate right** for 90° **view-only** steps. **Save rotation** is **enabled** (not merely visible) when the net angle mod 360° is non-zero; it prompts **Replace / Cancel**, then decodes from the folder file, **Matrix**-rotates pixels, overwrites that JPEG at quality **92**, **reloads** the image, and resets view rotation to **0°**. **Back** or **close** with unsaved rotation: **Keep editing** or **Discard**. Failed writes show a **Material** alert. Missing album files show **Could not open this image.**
+2. **Preview** icon in add/edit dialogs, or the list **photo** icon, opens **ReceiptPreviewActivity** using the **stored** `receiptImageUri` as `EXTRA_IMAGE_URI` only (no second gallery import/move). Fullscreen image, **pinch to zoom**, **drag** to pan when zoomed, **double-tap** to refit. **Rotate left / Rotate right** for 90° **view-only** steps. **Save rotation** is **enabled** (not merely visible) when the net angle mod 360° is non-zero; it prompts **Replace / Cancel**, then decodes from the same URI, **Matrix**-rotates pixels, overwrites the JPEG at quality **92**, **reloads** the image, and resets view rotation to **0°**. **Back** or **close** with unsaved rotation: **Keep editing** or **Discard**. Failed writes show a **Material** alert. Unreadable URIs show **Could not open this image.**
 
 ## Transfer Flow
 1. User selects the **Transfer** tab in the add or edit transaction dialog.
@@ -75,3 +75,11 @@
 3. Defaults: Last 3 months ending on the displayed month; pond chips copy home selection (all ponds if none selected); Include transfers off.
 4. Changing Last 3/6/12, pond chips, or Include transfers redraws snapshot, month bars, over-budget list, and by-pond bars. Empty qualifying spend still shows $0 bars and **No spending in this range**.
 5. Closing Analysis does not persist filters and does not change home pond selection.
+
+## Open an existing receipt (automatic recovery)
+1. Tap the transaction photo icon or dialog preview action.
+2. The app checks the original reference, available filename metadata and the exact receipt folder in the background.
+3. If Android photo access is required, allow it; the app retries and repairs other stored receipt references automatically.
+4. A uniquely identified, decoded picture opens in the existing zoom/rotation viewer. Its repaired association is persisted across current and historical records.
+5. If the file cannot be identified, is ambiguous or cannot be decoded, the app keeps the association and shows the specific failure with **Retry automatic search**. No recovery picture picker is shown.
+The existing gallery action still imports a new/replacement receipt when intentionally selected.

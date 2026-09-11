@@ -15,3 +15,5 @@ This file maps the **repository memory system**: what each document is for and w
 | [../prompts/codex_rules.md](../prompts/codex_rules.md) | Prompt discipline and **context-loading block** appended to AI instructions. |
 | [WEB_DEMO.md](WEB_DEMO.md) | Localhost HTML/CSS + Node/Express + MongoDB demo (per-account profiles). |
 | [../README.md](../README.md) | Project entry point, expectations, and **change log** (session log when context resets). |
+
+[Receipt recovery verification](receipt-recovery-verification.md) records automatic folder recovery, regression/coverage evidence, emulator checks and pre-existing verification limitations.

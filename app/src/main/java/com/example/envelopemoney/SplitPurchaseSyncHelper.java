@@ -106,6 +106,17 @@ public final class SplitPurchaseSyncHelper {
         String groupId = existingGroupId != null && !existingGroupId.isEmpty()
                 ? existingGroupId
                 : UUID.randomUUID().toString();
+        String receiptFileName = com.example.envelopemoney.receipt.ReceiptReferenceResolver
+                .fileNameFromReference(receiptUri);
+        // Group edits replace slice objects. Preserve the verified filename only for the same image.
+        if (receiptFileName == null && receiptUri != null && existingGroupId != null) {
+            for (Transaction previous : findTransactionsInGroup(envelopes, existingGroupId)) {
+                if (receiptUri.equals(previous.getReceiptImageUri()) && previous.getReceiptImageFileName() != null) {
+                    receiptFileName = previous.getReceiptImageFileName();
+                    break;
+                }
+            }
+        }
         months.addAll(removeGroup(envelopes, groupId));
 
         for (SplitPurchaseSliceAllocation slice : slices) {
@@ -121,6 +132,7 @@ public final class SplitPurchaseSyncHelper {
             t.setSplitPurchaseBucketId(slice.getBucketId());
             if (receiptUri != null && !receiptUri.isEmpty()) {
                 t.setReceiptImageUri(receiptUri);
+                t.setReceiptImageFileName(receiptFileName);
             }
             t.setTransferId(null);
             t.setTransferBucketId(null);

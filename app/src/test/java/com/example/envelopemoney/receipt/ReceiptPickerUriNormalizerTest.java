@@ -6,8 +6,11 @@ import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+@org.junit.runner.RunWith(org.robolectric.RobolectricTestRunner.class)
+@org.robolectric.annotation.Config(sdk = 28, manifest = org.robolectric.annotation.Config.NONE)
 public class ReceiptPickerUriNormalizerTest {
 
     @Test
@@ -74,22 +77,33 @@ public class ReceiptPickerUriNormalizerTest {
     }
 
     @Test
-    public void persistUriAfterImport_keepsAlbumCopyWhenPickerSourceRemains() {
-        Uri saved = Uri.parse(
-                "file:///storage/emulated/0/Pictures/Mountain Money/MountainMoney_1.jpg");
-        Uri picker = Uri.parse(
-                "content://media/picker_get_content/0/com.android.providers.media.photopicker/media/1");
-        assertEquals(saved, ReceiptFolderOpener.persistUriAfterImport(saved, picker));
-        assertEquals(saved, ReceiptFolderOpener.persistUriAfterImport(saved, null));
-        assertEquals(picker, ReceiptFolderOpener.persistUriAfterImport(null, picker));
-    }
-
-    @Test
     public void shouldCopyToAppGallery_aliasOfShouldImport() {
         assertTrue(ReceiptPickerUriNormalizer.shouldCopyToAppGallery(
                 "content://media/external/images/media/999"));
         assertFalse(ReceiptPickerUriNormalizer.shouldCopyToAppGallery(
                 "file:///storage/emulated/0/Pictures/Mountain Money/MountainMoney_1.jpg"));
+    }
+
+    @Test
+    public void persistUriAfterImport_keepsAlbumCopyWhenPickerSourceRemains() {
+        Uri album = Uri.parse("content://media/external/images/media/9#MountainMoney_1.jpg");
+        Uri picker = Uri.parse(
+                "content://media/picker_get_content/0/com.android.providers.media.photopicker/media/1");
+        assertEquals(album, ReceiptPickerUriNormalizer.persistUriAfterImport(album, picker));
+        assertEquals(album, ReceiptPickerUriNormalizer.persistUriAfterImport(album, null));
+        assertEquals(picker, ReceiptPickerUriNormalizer.persistUriAfterImport(null, picker));
+    }
+
+    @Test
+    public void albumDisplayName_fromFragmentAndFilePath() {
+        assertEquals("MountainMoney_1.jpg", ReceiptPickerUriNormalizer.albumDisplayName(
+                Uri.parse("content://media/external/images/media/9#MountainMoney_1.jpg")));
+        assertEquals("MountainMoney_1.jpg", ReceiptPickerUriNormalizer.albumDisplayName(
+                Uri.parse("file:///storage/emulated/0/Pictures/Mountain Money/MountainMoney_1.jpg")));
+        assertNull(ReceiptPickerUriNormalizer.albumDisplayName(
+                Uri.parse("content://media/external/images/media/9")));
+        assertTrue(ReceiptPickerUriNormalizer.isAppOwnedReceiptUri(
+                "content://media/external/images/media/9#MountainMoney_1.jpg"));
     }
 
     @Test
