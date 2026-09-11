@@ -16,6 +16,7 @@ public class ReceiptReferenceResolverTest {
         final List<ReceiptReferenceResolver.Result> album = new ArrayList<>();
         int scans;
         boolean denied;
+        boolean restricted;
         public ReceiptReferenceResolver.Result inspect(String reference) {
             return pictures.getOrDefault(reference, ReceiptReferenceResolver.Result.failure(
                     ReceiptReferenceResolver.Status.MISSING));
@@ -25,6 +26,7 @@ public class ReceiptReferenceResolverTest {
             if (denied) throw new SecurityException();
             return album;
         }
+        public boolean albumAccessRestricted() { return restricted; }
         void add(String reference, String name) {
             ReceiptReferenceResolver.Result picture = ReceiptReferenceResolver.Result.resolved(reference, name);
             pictures.put(reference, picture);
@@ -74,6 +76,30 @@ public class ReceiptReferenceResolverTest {
         ReceiptReferenceResolver resolver = new ReceiptReferenceResolver(gallery);
         resolver.resolve(OLD, TODAY); resolver.resolve(OLD, YESTERDAY);
         assertEquals(1, gallery.scans);
+    }
+
+    @Test public void unidentifiedRestrictedReferenceAsksForLibraryAccess() {
+        Gallery gallery = new Gallery();
+        gallery.restricted = true;
+        gallery.add(FRESH, TODAY);
+        assertEquals(ReceiptReferenceResolver.Status.PERMISSION_REQUIRED,
+                new ReceiptReferenceResolver(gallery).resolve(OLD, null).status);
+        assertEquals(1, gallery.scans);
+    }
+
+    @Test public void incompleteLibraryAccessAsksForPermissionInsteadOfMissing() {
+        Gallery gallery = new Gallery();
+        gallery.restricted = true;
+        gallery.add(FRESH, "owned-today.jpg");
+        assertEquals(ReceiptReferenceResolver.Status.PERMISSION_REQUIRED,
+                new ReceiptReferenceResolver(gallery).resolve(OLD, TODAY).status);
+    }
+
+    @Test public void uniqueOwnedMatchIsUsedEvenWhenLibraryAccessIsRestricted() {
+        Gallery gallery = new Gallery();
+        gallery.restricted = true;
+        gallery.add(FRESH, TODAY);
+        assertEquals(FRESH, new ReceiptReferenceResolver(gallery).resolve(OLD, TODAY).reference);
     }
 
     @Test public void deniedAccessCanBeRetriedAfterGrant() {

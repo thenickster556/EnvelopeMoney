@@ -31,6 +31,11 @@ public final class ReceiptReferenceResolver {
     public interface Source {
         Result inspect(String reference);
         List<Result> readAlbum();
+        /**
+         * True when {@link #readAlbum()} may omit photos until the user grants library access.
+         * Owned pictures can still appear; missing matches must not be treated as a full search.
+         */
+        default boolean albumAccessRestricted() { return false; }
     }
 
     private final Source source;
@@ -70,10 +75,20 @@ public final class ReceiptReferenceResolver {
             albumAccessDenied = true;
             return Result.failure(Status.PERMISSION_REQUIRED, expectedName);
         }
-        if (expectedName == null) return original;
+        if (expectedName == null) {
+            if (original.status == Status.MISSING && source.albumAccessRestricted()) {
+                return Result.failure(Status.PERMISSION_REQUIRED, expectedName);
+            }
+            return original;
+        }
         if (ambiguousNames.contains(expectedName)) return Result.failure(Status.AMBIGUOUS);
         Result candidate = albumByName.get(expectedName);
-        if (candidate == null) return original;
+        if (candidate == null) {
+            if (source.albumAccessRestricted()) {
+                return Result.failure(Status.PERMISSION_REQUIRED, expectedName);
+            }
+            return original;
+        }
         Result verified = source.inspect(candidate.reference);
         if (verified.status == Status.RESOLVED && !expectedName.equals(verified.fileName)) {
             // The row changed between inventory and decoding. Keep the old association for a retry.

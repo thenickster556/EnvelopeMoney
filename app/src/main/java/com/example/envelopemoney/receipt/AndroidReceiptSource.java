@@ -38,6 +38,13 @@ public final class AndroidReceiptSource implements ReceiptReferenceResolver.Sour
                 != PackageManager.PERMISSION_GRANTED;
     }
 
+    @Override public boolean albumAccessRestricted() { return needsReadPermission(); }
+
+    /** Startup repair must ask for library access whenever stored receipts exist and it is missing. */
+    public boolean shouldRequestLibraryAccess(boolean hasStoredReceipts) {
+        return hasStoredReceipts && needsReadPermission();
+    }
+
     /** Convert only documented media-image document IDs; arbitrary picker IDs are not MediaStore IDs. */
     public static Uri providerUri(String reference) {
         Uri parsed = Uri.parse(reference);
@@ -65,7 +72,7 @@ public final class AndroidReceiptSource implements ReceiptReferenceResolver.Sour
             BitmapFactory.Options options = new BitmapFactory.Options();
             options.inJustDecodeBounds = true;
             try (InputStream stream = context.getContentResolver().openInputStream(uri)) {
-                if (stream == null) return failure(ReceiptReferenceResolver.Status.MISSING, name);
+                if (stream == null) return failure(unavailableStatus(), name);
                 BitmapFactory.decodeStream(stream, null, options);
             }
             if (options.outWidth <= 0 || options.outHeight <= 0) return failure(ReceiptReferenceResolver.Status.CORRUPT, name);
@@ -81,8 +88,7 @@ public final class AndroidReceiptSource implements ReceiptReferenceResolver.Sour
         } catch (SecurityException denied) {
             return failure(ReceiptReferenceResolver.Status.PERMISSION_REQUIRED, name);
         } catch (IOException | RuntimeException unavailable) {
-            return failure(needsReadPermission() ? ReceiptReferenceResolver.Status.PERMISSION_REQUIRED
-                    : ReceiptReferenceResolver.Status.MISSING, name);
+            return failure(unavailableStatus(), name);
         }
     }
 
@@ -112,18 +118,18 @@ public final class AndroidReceiptSource implements ReceiptReferenceResolver.Sour
         boolean scopedStorage = Build.VERSION.SDK_INT >= 29;
         String locationColumn = scopedStorage ? MediaStore.MediaColumns.RELATIVE_PATH : MediaStore.MediaColumns.DATA;
         File folder = albumDirectory();
-        String albumPath = scopedStorage ? MediaStoreReceiptSaver.ALBUM_RELATIVE + "/" : folder.getAbsolutePath() + File.separator;
+        String albumQuery = scopedStorage ? MediaStoreReceiptSaver.ALBUM_RELATIVE + "%" : folder.getAbsolutePath() + File.separator + "%";
         try (Cursor cursor = context.getContentResolver().query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
                 new String[]{MediaStore.Images.Media._ID, MediaStore.MediaColumns.DISPLAY_NAME, locationColumn},
-                scopedStorage ? locationColumn + "=?" : locationColumn + " LIKE ?",
-                new String[]{scopedStorage ? albumPath : albumPath + "%"}, null)) {
+                locationColumn + " LIKE ?",
+                new String[]{albumQuery}, null)) {
             if (cursor != null) {
                 while (cursor.moveToNext()) {
                     String name = cursor.getString(1);
                     String location = cursor.getString(2);
                     if (name == null || location == null) continue;
-                    // Check again locally: LIKE on legacy storage also returns nested directories.
-                    if (scopedStorage ? !albumPath.equals(location) : !folder.equals(new File(location).getParentFile())) continue;
+                    // LIKE also returns nested directories; persist only the exact receipt folder.
+                    if (!isExactAlbumLocation(location, scopedStorage, folder)) continue;
                     Uri uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, cursor.getLong(0));
                     pictures.add(ReceiptReferenceResolver.Result.resolved(uri.toString(), name));
                     indexedNames.add(name);
@@ -156,8 +162,26 @@ public final class AndroidReceiptSource implements ReceiptReferenceResolver.Sour
         return new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "Mountain Money");
     }
 
+    /** MediaStore may store {@code Pictures/Mountain Money} with or without a trailing slash. */
+    static boolean isExactAlbumLocation(String location, boolean scopedStorage, File folder) {
+        if (location == null) return false;
+        if (!scopedStorage) {
+            return folder.equals(new File(location).getParentFile());
+        }
+        String normalized = location.replace('\\', '/').trim();
+        if (normalized.endsWith("/")) {
+            normalized = normalized.substring(0, normalized.length() - 1);
+        }
+        return MediaStoreReceiptSaver.ALBUM_RELATIVE.replace('\\', '/').equals(normalized);
+    }
+
     public static ReceiptReferenceResolver.Result resolve(Context context, String reference, String fileName) {
         return new ReceiptReferenceResolver(new AndroidReceiptSource(context)).resolve(reference, fileName);
+    }
+
+    private ReceiptReferenceResolver.Status unavailableStatus() {
+        return needsReadPermission() ? ReceiptReferenceResolver.Status.PERMISSION_REQUIRED
+                : ReceiptReferenceResolver.Status.MISSING;
     }
 
     private static ReceiptReferenceResolver.Result failure(ReceiptReferenceResolver.Status status, String name) {

@@ -75,7 +75,7 @@ When `paydays_json` is non-empty **and** a pond has `accountBalance` set:
 - `recurringDays: List<Integer>`
 - `recurringSeriesId: String?`
 - `recurringTemplate: boolean`
-- `receiptImageUri: String?` — optional MediaStore `content://` URI for a JPEG under **Pictures/Mountain Money** after camera/gallery import. The insert URI is always persisted (never a picker grant). A `#MountainMoney_*.jpg` fragment may be present so preview can re-query by `DISPLAY_NAME` if the numeric id changes. Preview opens this stored URI without re-import.
+- `receiptImageUri: String?` — optional MediaStore `content://` URI for a JPEG under **Pictures/Mountain Money** after camera/gallery import. The insert URI is always persisted (never a picker grant). A `#MountainMoney_*.jpg` fragment may be present so preview can re-query by `DISPLAY_NAME` if the numeric id changes. Preview opens this stored URI without re-import. Automatic folder recovery of older files needs runtime `READ_MEDIA_IMAGES` (API 33+) or `READ_EXTERNAL_STORAGE` (API 23–32); the Photo Picker / `GetContent` grant used to import a new picture does not replace that library permission.
 
 ## TransferData Model
 - `id: String`

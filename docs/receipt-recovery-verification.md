@@ -1,7 +1,7 @@
 # Receipt recovery verification — 2026-09-10
 
 ## Delivered behavior
-Existing receipt references automatically recover from the exact `Pictures/Mountain Money` folder, without an age cutoff or recovery picture picker. The resolver reads metadata even if the original stream fails, normalizes media-image document IDs, and supplements the MediaStore inventory with accessible unindexed files. Only unique, decoded matches are persisted. Current/history records are repaired together, with concurrent-edit checks; filename metadata survives transfer mirroring and split edits. Preview/OCR/rotation share resolution and gallery I/O runs off the main thread.
+Existing receipt references automatically recover from the exact `Pictures/Mountain Money` folder, without an age cutoff or recovery picture picker. The resolver reads metadata even if the original stream fails, normalizes media-image document IDs, and supplements the MediaStore inventory with accessible unindexed files. Opening an app-owned picture does not imply library access: a partial owned-only MediaStore list is treated as restricted, and launch/resume requests `READ_MEDIA_IMAGES` / `READ_EXTERNAL_STORAGE` when stored receipts exist so yesterday and older album files can be found. Folder matching accepts `RELATIVE_PATH` with or without a trailing slash. Only unique, decoded matches are persisted. Current/history records are repaired together, with concurrent-edit checks; filename metadata survives transfer mirroring and split edits. Preview/OCR/rotation share resolution and gallery I/O runs off the main thread.
 
 A receipt whose original identifier and filename are both lost cannot be safely associated by transaction date alone. Missing, ambiguous, inaccessible and corrupt outcomes preserve the original reference and expose automatic retry. Recovery never deletes, moves, imports or overwrites an image; explicit rotation saving retains its existing write behavior.
 
@@ -13,8 +13,8 @@ A receipt whose original identifier and filename are both lost cannot be safely 
 
 ## Automated results
 - `:app:assembleDebug` and `:app:assembleDebugAndroidTest`: passed.
-- Full `:app:testDebugUnitTest`: **188 tests, 185 passed, 3 pre-existing failures**. All new recovery tests pass.
-- Shared recovery JaCoCo scope: `ReceiptReferenceResolver`, `ReceiptReferenceRepair`, and `AndroidReceiptSource`, including their nested types. **165/170 lines (97.06%) and 147/178 branches (82.58%)**. `:app:verifyReceiptRecoveryCoverage` passes both 80% gates. This is recovery-code coverage, not a claim of whole-app coverage.
+- Full `:app:testDebugUnitTest`: **195 tests, 192 passed, 3 pre-existing failures**. All new recovery and photo-access tests pass.
+- Shared recovery JaCoCo scope: `ReceiptReferenceResolver`, `ReceiptReferenceRepair`, and `AndroidReceiptSource`, including their nested types. **179/185 lines (96.76%) and 156/186 branches (83.87%)**. `:app:verifyReceiptRecoveryCoverage` passes both 80% gates. This is recovery-code coverage, not a claim of whole-app coverage.
 - Android-provider tests cover API 28 and 33, plus an API 22 runtime-permission check. They verify preview decoding and rotation targeting as well as folder matching.
 - `:app:lintDebug`: **43 existing errors**, with identical error IDs/messages in the pre-change snapshot. The old Android plugin also reports incompatible dependency lint/Kotlin metadata; no new lint errors were introduced.
 - `git diff --check`: passed.

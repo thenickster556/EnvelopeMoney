@@ -174,6 +174,8 @@ public class MainActivity extends AppCompatActivity {
     private boolean receiptRepairInProgress;
     private boolean receiptRepairRequestedAgain;
     private String pendingReceiptReference;
+    private boolean receiptLibraryAccessMissing;
+    private boolean receiptPhotoAccessPromptPending;
     private LearningDb learningDb;
     @Nullable
     private List<String> lastOcrLines;
@@ -908,6 +910,10 @@ public class MainActivity extends AppCompatActivity {
 
         updateTransactionHistory();
         updatePondTotalsFooter();
+        AndroidReceiptSource receiptSource = new AndroidReceiptSource(this);
+        receiptLibraryAccessMissing = receiptSource.needsReadPermission();
+        receiptPhotoAccessPromptPending = receiptSource.shouldRequestLibraryAccess(
+                !ReceiptReferenceRepair.snapshot(envelopes).isEmpty());
         startReceiptReferenceRepair();
     }
 
@@ -924,6 +930,8 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        promptReceiptPhotoAccessIfNeeded();
+        retryReceiptRepairAfterPhotoAccessGranted();
         // Re-apply payday unlock math when returning (e.g. after a payday day passed in the background).
         if (envelopes == null || envelopes.isEmpty()) {
             return;
@@ -1965,6 +1973,24 @@ public class MainActivity extends AppCompatActivity {
                 }
             });
         });
+    }
+
+    /** Ask once after resume so the system permission sheet is not launched from onCreate. */
+    private void promptReceiptPhotoAccessIfNeeded() {
+        if (!receiptPhotoAccessPromptPending || isFinishing() || isDestroyed()) return;
+        receiptPhotoAccessPromptPending = false;
+        AndroidReceiptSource receiptSource = new AndroidReceiptSource(this);
+        String permission = AndroidReceiptSource.readPermission();
+        if (permission == null || !receiptSource.needsReadPermission()) return;
+        receiptReadPermissionLauncher.launch(permission);
+    }
+
+    /** Settings grants do not go through the permission launcher; resume re-runs folder recovery. */
+    private void retryReceiptRepairAfterPhotoAccessGranted() {
+        AndroidReceiptSource receiptSource = new AndroidReceiptSource(this);
+        boolean missingAccess = receiptSource.needsReadPermission();
+        if (receiptLibraryAccessMissing && !missingAccess) startReceiptReferenceRepair();
+        receiptLibraryAccessMissing = missingAccess;
     }
 
     /** Runs once after load and again after a photo-access grant; never filters by receipt age. */

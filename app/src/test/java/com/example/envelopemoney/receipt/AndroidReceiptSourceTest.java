@@ -52,7 +52,7 @@ public class AndroidReceiptSourceTest {
         assertEquals(ReceiptReferenceResolver.Status.RESOLVED, result.status);
         assertEquals(FRESH, result.reference);
         assertTrue(gallery.selection.contains(android.os.Build.VERSION.SDK_INT >= 29 ? "relative_path" : "_data"));
-        assertTrue(gallery.selectionArguments[0].replace('\\', '/').contains("Pictures/Mountain Money/"));
+        assertTrue(gallery.selectionArguments[0].replace('\\', '/').contains("Pictures/Mountain Money"));
         Bitmap preview = ReceiptBitmapLoader.decodeSampled(context, Uri.parse(OLD + "#" + NAME), 128);
         assertNotNull(preview); preview.recycle();
         assertEquals(0, gallery.deletes);
@@ -79,6 +79,33 @@ public class AndroidReceiptSourceTest {
         assertTrue(source.needsReadPermission());
         assertEquals(ReceiptReferenceResolver.Status.PERMISSION_REQUIRED, source.inspect(OLD).status);
         try { source.readAlbum(); fail("Expected access request"); } catch (SecurityException expected) { }
+        assertTrue(source.shouldRequestLibraryAccess(true));
+        assertFalse(source.shouldRequestLibraryAccess(false));
+    }
+
+    @Test public void ownedPicturesWithoutLibraryPermissionStillRequireAccessToFindLegacyFiles() throws Exception {
+        gallery.file = picture();
+        gallery.displayName = "MountainMoney_owned.jpg";
+        shadowOf(RuntimeEnvironment.getApplication()).denyPermissions(
+                Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.READ_MEDIA_IMAGES);
+        assertEquals(ReceiptReferenceResolver.Status.PERMISSION_REQUIRED,
+                AndroidReceiptSource.resolve(context, OLD, NAME).status);
+    }
+
+    @Test @Config(sdk = 33) public void exactAlbumLocationRejectsNestedFoldersAndAcceptsOptionalSlash() {
+        File folder = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "Mountain Money");
+        assertTrue(AndroidReceiptSource.isExactAlbumLocation("Pictures/Mountain Money", true, folder));
+        assertTrue(AndroidReceiptSource.isExactAlbumLocation("Pictures/Mountain Money/", true, folder));
+        assertFalse(AndroidReceiptSource.isExactAlbumLocation("Pictures/Mountain Money/nested", true, folder));
+        assertFalse(AndroidReceiptSource.isExactAlbumLocation(null, true, folder));
+    }
+
+    @Test @Config(sdk = 33) public void albumRowsWithoutTrailingSlashStillMatchExactFolder() throws Exception {
+        gallery.file = picture();
+        gallery.relativePath = "Pictures/Mountain Money";
+        ReceiptReferenceResolver.Result result = AndroidReceiptSource.resolve(context, OLD, NAME);
+        assertEquals(ReceiptReferenceResolver.Status.RESOLVED, result.status);
+        assertEquals(FRESH, result.reference);
     }
 
     @Test public void plainAndFilePathsRemainReadableAndFragmentsNeverReachProvider() throws Exception {
@@ -116,6 +143,7 @@ public class AndroidReceiptSourceTest {
     @Test @Config(sdk = 22) public void oldAndroidDoesNotRequestRuntimePhotoPermission() {
         assertNull(AndroidReceiptSource.readPermission());
         assertFalse(new AndroidReceiptSource(context).needsReadPermission());
+        assertFalse(new AndroidReceiptSource(context).shouldRequestLibraryAccess(true));
     }
 
     @Test public void failedOriginalStreamRetainsMetadataForAutomaticFolderMatch() throws Exception {
@@ -161,6 +189,8 @@ public class AndroidReceiptSourceTest {
         boolean denied;
         boolean duplicate;
         boolean metadataUnavailable;
+        String displayName = NAME;
+        String relativePath;
         String selection;
         String[] selectionArguments;
         int writes;
@@ -178,12 +208,13 @@ public class AndroidReceiptSourceTest {
             if (file == null) return cursor;
             if (projection.length == 1) {
                 if (metadataUnavailable) throw new UnsupportedOperationException();
-                cursor.addRow(new Object[]{NAME}); return cursor;
+                cursor.addRow(new Object[]{displayName}); return cursor;
             }
             this.selection = selection; selectionArguments = arguments;
-            String location = android.os.Build.VERSION.SDK_INT >= 29 ? "Pictures/Mountain Money/"
-                    : new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "Mountain Money/" + NAME).getAbsolutePath();
-            cursor.addRow(new Object[]{2L, NAME, location});
+            String location = android.os.Build.VERSION.SDK_INT >= 29
+                    ? (relativePath != null ? relativePath : "Pictures/Mountain Money/")
+                    : new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "Mountain Money/" + displayName).getAbsolutePath();
+            cursor.addRow(new Object[]{2L, displayName, location});
             if (duplicate) cursor.addRow(new Object[]{3L, NAME, location});
             return cursor;
         }

@@ -1,6 +1,6 @@
 {
   "active_tasks": [
-    {"id":"receipt-reference-recovery-2026-09-08","title":"Automatic receipt-folder recovery implemented; final UI verification blocked","status":"verification_blocked","intent":"Automatic exact-folder discovery replaces manual selection. Implementation, history backfill, metadata copying and restart recovery are complete. Build and 80% recovery coverage gate pass (97.06% lines, 82.58% branches). Full suite: 185/188 passed; three failures reproduced in baseline. Lint: same 43 baseline errors. API 36 startup/restart/render test passes. Retry-dialog matcher corrected and APK rebuilt; final UI rerun/clean screenshot blocked by automatic approval review account usage limit. See docs/receipt-recovery-verification.md."},
+    {"id":"receipt-reference-recovery-2026-09-08","title":"Automatic receipt-folder recovery implemented; final UI verification blocked","status":"verification_blocked","intent":"Automatic exact-folder discovery replaces manual selection. Implementation, history backfill, metadata copying and restart recovery are complete. Photo-library prompt for legacy search is included (launch/resume). Build and 80% recovery coverage gate pass (96.76% lines, 83.87% branches). Full suite: 192/195 passed; three failures reproduced in baseline. Lint: same 43 baseline errors. API 36 startup/restart/render test passes from prior work. Permission-dialog UI on a device was not re-run in this patch. See docs/receipt-recovery-verification.md."},
     {
       "id": "transfer-dialog-ux-polish-2026-05",
       "title": "Polish grouped transfer dialog scrolling, dropdowns, and slider readability",
@@ -20,6 +20,12 @@
     }
   ],
   "completed_tasks": [
+    {
+      "id": "receipt-gallery-access-legacy-2026-09-10",
+      "title": "Request photo access so automatic recovery can find legacy Pictures/Mountain Money files",
+      "status": "completed",
+      "intent": "Launch/resume requests READ_MEDIA_IMAGES or READ_EXTERNAL_STORAGE when stored receipts exist. Partial owned-only MediaStore lists are restricted: unique owned matches still resolve, missing names are permission-required. RELATIVE_PATH matches with or without a trailing slash. Tests: ReceiptReferenceResolverTest, AndroidReceiptSourceTest. JVM: 192/195 passed (3 baseline). Recovery coverage 96.76% lines / 83.87% branches. Device permission-sheet UI not re-run."
+    },
     {
       "id": "receipt-persist-album-uri-2026-09",
       "title": "Always persist Mountain Money MediaStore URI after import",
