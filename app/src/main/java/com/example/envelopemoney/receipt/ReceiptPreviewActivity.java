@@ -1,5 +1,6 @@
 package com.example.envelopemoney.receipt;
 
+import android.content.Intent;
 import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Bundle;
@@ -22,10 +23,20 @@ import java.io.IOException;
 /**
  * Full-screen receipt: pinch-zoom, pan, double-tap refit; 90° rotation is view-only until saved.
  * Save decodes from the URI, applies cumulative rotation to pixels via {@link android.graphics.Matrix}, overwrites the same URI as JPEG.
+ * Candidate mode is the read-only check before attaching: transaction header, arrows between
+ * candidates, and a "use this picture" result; rotate/save stay hidden there.
  */
 public class ReceiptPreviewActivity extends AppCompatActivity {
 
     public static final String EXTRA_IMAGE_URI = "receipt_image_uri";
+    public static final String EXTRA_CANDIDATE_REFERENCES = "receipt_candidate_references";
+    public static final String EXTRA_CANDIDATE_INDEX = "receipt_candidate_index";
+    public static final String EXTRA_CANDIDATE_TITLE = "receipt_candidate_title";
+    public static final String EXTRA_CANDIDATE_DETAIL = "receipt_candidate_detail";
+    public static final String EXTRA_PICKED_REFERENCE = "receipt_picked_reference";
+    public static final String EXTRA_REQUEST_SWAP = "receipt_request_swap";
+    public static final String EXTRA_SWAP_REFERENCE = "receipt_swap_reference";
+    private static final String STATE_CANDIDATE_INDEX = "receipt_candidate_index_state";
 
     /**
      * URI permission grants follow {@link android.content.Intent#setData}, not extras.
@@ -39,12 +50,37 @@ public class ReceiptPreviewActivity extends AppCompatActivity {
         return uri.getFragment() == null ? uri : uri.buildUpon().fragment(null).build();
     }
 
+    /** True when this launch is the candidate check rather than the attached-receipt viewer. */
+    static boolean isCandidateIntent(@Nullable Intent intent) {
+        return intent != null && intent.getStringArrayExtra(EXTRA_CANDIDATE_REFERENCES) != null;
+    }
+
+    static String[] candidateReferences(@Nullable Intent intent) {
+        if (!isCandidateIntent(intent)) return new String[0];
+        return intent.getStringArrayExtra(EXTRA_CANDIDATE_REFERENCES);
+    }
+
+    /** Start index clamped to the candidate list so a stale intent can never point outside it. */
+    static int candidateIndex(@Nullable Intent intent) {
+        String[] references = candidateReferences(intent);
+        if (references.length == 0) return 0;
+        int index = intent.getIntExtra(EXTRA_CANDIDATE_INDEX, 0);
+        return Math.max(0, Math.min(index, references.length - 1));
+    }
+
     private static final String TAG = "EnvelopeMoney";
 
     private ReceiptZoomImageView zoomImage;
     private MaterialButton btnRotLeft;
     private MaterialButton btnRotRight;
     private MaterialButton btnSaveRotation;
+    private MaterialButton btnChooseDifferent;
+    private MaterialButton btnCandidateSelect;
+    private ImageButton btnCandidatePrevious;
+    private ImageButton btnCandidateNext;
+    private TextView tvCandidateTitle;
+    private TextView tvCandidateDetail;
+    private TextView tvCandidateCount;
     private TextView tvGesturesHint;
     private TextView tvError;
 
@@ -56,6 +92,9 @@ public class ReceiptPreviewActivity extends AppCompatActivity {
     private final java.util.concurrent.ExecutorService pictureExecutor = java.util.concurrent.Executors.newSingleThreadExecutor();
     /** Multiple of 90° for {@link ReceiptZoomImageView#setRotation(float)}; 0 when aligned with file. */
     private int rotationQuarters;
+    /** Candidate check state; empty array means normal attached-receipt viewing. */
+    private String[] candidateReferences = new String[0];
+    private int candidateIndex;
 
     private final OnBackPressedCallback backCallback = new OnBackPressedCallback(true) {
         @Override
@@ -76,13 +115,28 @@ public class ReceiptPreviewActivity extends AppCompatActivity {
         btnRotLeft = findViewById(R.id.btnReceiptRotateLeft);
         btnRotRight = findViewById(R.id.btnReceiptRotateRight);
         btnSaveRotation = findViewById(R.id.btnReceiptSaveRotation);
+        btnChooseDifferent = findViewById(R.id.btnReceiptChooseDifferent);
+        btnCandidateSelect = findViewById(R.id.btnCandidateSelect);
+        btnCandidatePrevious = findViewById(R.id.btnCandidatePrevious);
+        btnCandidateNext = findViewById(R.id.btnCandidateNext);
+        tvCandidateTitle = findViewById(R.id.tvCandidateTitle);
+        tvCandidateDetail = findViewById(R.id.tvCandidateDetail);
+        tvCandidateCount = findViewById(R.id.tvCandidateCount);
         tvGesturesHint = findViewById(R.id.tvReceiptPreviewGesturesHint);
 
         btnClose.setOnClickListener(v -> tryClosePreview());
         btnRotLeft.setOnClickListener(v -> applyViewRotation(-90f));
         btnRotRight.setOnClickListener(v -> applyViewRotation(90f));
         btnSaveRotation.setOnClickListener(v -> confirmReplaceThenSave());
+        btnCandidatePrevious.setOnClickListener(v -> showCandidate(candidateIndex - 1));
+        btnCandidateNext.setOnClickListener(v -> showCandidate(candidateIndex + 1));
+        btnCandidateSelect.setOnClickListener(v -> returnPickedCandidate());
+        btnChooseDifferent.setOnClickListener(v -> returnSwapRequest());
 
+        if (isCandidateIntent(getIntent())) {
+            enterCandidateMode(savedInstanceState);
+            return;
+        }
         Uri fromData = getIntent() != null ? getIntent().getData() : null;
         String uriStr = getIntent() != null ? getIntent().getStringExtra(EXTRA_IMAGE_URI) : null;
         if (fromData != null) {
@@ -94,6 +148,73 @@ public class ReceiptPreviewActivity extends AppCompatActivity {
             return;
         }
         loadPictureInBackground(false);
+    }
+
+    @Override
+    protected void onSaveInstanceState(@Nullable Bundle outState) {
+        super.onSaveInstanceState(outState);
+        outState.putInt(STATE_CANDIDATE_INDEX, candidateIndex);
+    }
+
+    /** Read-only check chrome: transaction header, arrow bar, no rotate/save; restores index after rotation. */
+    private void enterCandidateMode(@Nullable Bundle savedInstanceState) {
+        candidateReferences = candidateReferences(getIntent());
+        if (candidateReferences.length == 0) {
+            showError();
+            return;
+        }
+        candidateIndex = savedInstanceState != null
+                ? Math.max(0, Math.min(savedInstanceState.getInt(STATE_CANDIDATE_INDEX, 0),
+                        candidateReferences.length - 1))
+                : candidateIndex(getIntent());
+        btnRotLeft.setVisibility(View.GONE);
+        btnRotRight.setVisibility(View.GONE);
+        btnSaveRotation.setVisibility(View.GONE);
+        btnChooseDifferent.setVisibility(View.GONE);
+        findViewById(R.id.candidateInfo).setVisibility(View.VISIBLE);
+        findViewById(R.id.candidateBottomBar).setVisibility(View.VISIBLE);
+        tvCandidateTitle.setText(getIntent().getStringExtra(EXTRA_CANDIDATE_TITLE));
+        tvCandidateDetail.setText(getIntent().getStringExtra(EXTRA_CANDIDATE_DETAIL));
+        showCandidate(candidateIndex);
+    }
+
+    private void showCandidate(int index) {
+        if (index < 0 || index >= candidateReferences.length) return;
+        candidateIndex = index;
+        rotationQuarters = 0;
+        zoomImage.setRotation(0f);
+        imageUri = Uri.parse(candidateReferences[index]);
+        tvCandidateCount.setText(getString(R.string.receipt_candidate_count,
+                candidateIndex + 1, candidateReferences.length));
+        btnCandidatePrevious.setEnabled(candidateIndex > 0);
+        btnCandidateNext.setEnabled(candidateIndex < candidateReferences.length - 1);
+        loadOk = false;
+        updateCandidateSelectEnabled();
+        loadPictureInBackground(false);
+    }
+
+    private void updateCandidateSelectEnabled() {
+        if (btnCandidateSelect != null) {
+            btnCandidateSelect.setEnabled(loadOk && !pictureOperationInProgress);
+        }
+    }
+
+    private void returnPickedCandidate() {
+        if (candidateIndex >= candidateReferences.length) return;
+        Intent picked = new Intent();
+        picked.putExtra(EXTRA_PICKED_REFERENCE, candidateReferences[candidateIndex]);
+        setResult(RESULT_OK, picked);
+        finish();
+    }
+
+    /** Asks MainActivity to reopen the picker for this receipt; nothing changes here. */
+    private void returnSwapRequest() {
+        Intent swap = new Intent();
+        swap.putExtra(EXTRA_REQUEST_SWAP, true);
+        swap.putExtra(EXTRA_SWAP_REFERENCE, getIntent() != null
+                ? getIntent().getStringExtra(EXTRA_IMAGE_URI) : null);
+        setResult(RESULT_CANCELED, swap);
+        finish();
     }
 
     @Override
@@ -194,6 +315,7 @@ public class ReceiptPreviewActivity extends AppCompatActivity {
         pictureOperationInProgress = inProgress;
         btnRotLeft.setEnabled(!inProgress && loadOk);
         btnRotRight.setEnabled(!inProgress && loadOk);
+        updateCandidateSelectEnabled();
         updateRotationDirtyUi();
     }
     private void showErrorAfterSave() {

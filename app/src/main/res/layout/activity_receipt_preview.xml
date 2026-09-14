@@ -30,6 +30,46 @@
             android:src="@drawable/ic_back_white_24"
             android:tint="@android:color/white" />
 
+        <!-- Candidate check header: transaction context the user double-checks against. -->
+        <LinearLayout
+            android:id="@+id/candidateInfo"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/tvCandidateTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:singleLine="true"
+                android:textColor="@color/white"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvCandidateDetail"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:singleLine="true"
+                android:textColor="@color/white"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnReceiptChooseDifferent"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:text="@string/receipt_choose_different"
+            android:textColor="@color/white"
+            app:strokeColor="@color/white" />
+
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnReceiptSaveRotation"
             style="@style/Widget.MaterialComponents.Button.OutlinedButton"
@@ -63,6 +103,60 @@
             android:text="@string/receipt_preview_rotate_right"
             android:textColor="@color/white"
             app:strokeColor="@color/white" />
+    </LinearLayout>
+
+    <!-- Candidate check navigation: arrows, counter, and the deliberate attach action. -->
+    <LinearLayout
+        android:id="@+id/candidateBottomBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:background="#CC000000"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="8dp"
+        android:visibility="gone">
+
+        <ImageButton
+            android:id="@+id/btnCandidatePrevious"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/content_desc_receipt_candidate_previous"
+            android:src="@drawable/ic_back_white_24"
+            android:tint="@android:color/white" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center_horizontal"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tvCandidateCount"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@android:color/white"
+                android:textSize="12sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnCandidateSelect"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/receipt_candidate_select" />
+        </LinearLayout>
+
+        <ImageButton
+            android:id="@+id/btnCandidateNext"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/content_desc_receipt_candidate_next"
+            android:rotation="180"
+            android:src="@drawable/ic_back_white_24"
+            android:tint="@android:color/white" />
     </LinearLayout>
 
     <TextView

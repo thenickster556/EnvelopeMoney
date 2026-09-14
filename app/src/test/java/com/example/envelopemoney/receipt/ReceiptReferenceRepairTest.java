@@ -334,6 +334,36 @@ public class ReceiptReferenceRepairTest {
         assertTrue(result.alternatives.isEmpty());
     }
 
+    @Test public void swapCandidatesExcludesCurrentFileAndReturnsPool() {
+        FakeAlbum album = new FakeAlbum();
+        long noon = utcNoon(2026, 9, 7);
+        album.add(FRESH, "MountainMoney_" + noon + ".jpg", noon);
+        album.add("content://media/external/images/media/3", "MountainMoney_" + noon + ".jpg", noon);
+        List<ReceiptReferenceResolver.Result> others = ReceiptReferenceRepair.swapCandidates(album,
+                "MountainMoney_" + noon + ".jpg", "2026-09-07", FRESH,
+                TimeZone.getTimeZone("UTC"));
+        assertEquals(1, others.size());
+        assertEquals("content://media/external/images/media/3", others.get(0).reference);
+    }
+
+    @Test public void swapCandidatesUniqueSelfYieldsNone() {
+        FakeAlbum album = new FakeAlbum();
+        long noon = utcNoon(2026, 9, 7);
+        album.add(FRESH, "MountainMoney_" + noon + ".jpg", noon);
+        assertTrue(ReceiptReferenceRepair.swapCandidates(album,
+                "MountainMoney_" + noon + ".jpg", "2026-09-07", FRESH + "#stale-name.jpg",
+                TimeZone.getTimeZone("UTC")).isEmpty());
+    }
+
+    @Test public void swapCandidatesMissingAndDeniedAlbumsAreEmpty() {
+        assertTrue(ReceiptReferenceRepair.swapCandidates(new FakeAlbum(),
+                "MountainMoney_1.jpg", "2026-09-07", FRESH, TimeZone.getTimeZone("UTC")).isEmpty());
+        FakeAlbum denied = new FakeAlbum();
+        denied.denyAlbum = true;
+        assertTrue(ReceiptReferenceRepair.swapCandidates(denied,
+                "MountainMoney_1.jpg", "2026-09-07", FRESH, TimeZone.getTimeZone("UTC")).isEmpty());
+    }
+
     @Test public void applySkipsUnchangedReferenceAndFilename() {
         Envelope envelope = new Envelope("Food", 100);
         Transaction transaction = yesterday();

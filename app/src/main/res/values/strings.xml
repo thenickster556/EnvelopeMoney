@@ -150,7 +150,13 @@
     <string name="receipt_recovery_ambiguous">More than one picture in Pictures/Mountain Money matches this receipt. The saved reference has been kept to avoid opening the wrong picture.</string>
     <string name="receipt_recovery_corrupt">The matching picture in Pictures/Mountain Money could not be decoded. Its saved reference and transaction details have been kept.</string>
     <string name="receipt_chooser_title">Pick the right picture</string>
-    <string name="receipt_chooser_message">%1$d pictures could be this receipt. Tap one to attach it.</string>
+    <string name="receipt_chooser_message">%1$d pictures could be this receipt (%2$s). Tap one to check it full screen.</string>
     <string name="receipt_chooser_unnamed_picture">Picture</string>
     <string name="receipt_picture_updated">Receipt picture updated.</string>
+    <string name="receipt_candidate_select">Use this picture</string>
+    <string name="receipt_candidate_count">%1$d of %2$d</string>
+    <string name="content_desc_receipt_candidate_previous">Previous candidate picture</string>
+    <string name="content_desc_receipt_candidate_next">Next candidate picture</string>
+    <string name="receipt_choose_different">Choose different</string>
+    <string name="receipt_swap_none_found">No other pictures match this receipt.</string>
 </resources>

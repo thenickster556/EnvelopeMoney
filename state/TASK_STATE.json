@@ -21,6 +21,12 @@
   ],
   "completed_tasks": [
     {
+      "id": "receipt-candidate-check-swap-2026-09-14",
+      "title": "Fullscreen candidate check with arrows/select and change-it-later swap",
+      "status": "completed",
+      "intent": "User feedback: thumbnails too small to judge and taps attached blindly; no way back after a wrong pick. Delivered: picker thumbs 56->80dp with transaction summary in the message (ReceiptCandidateSummary.titleLine/detailLine: comment-first 'Lunch · $12.50', pond+display date detail, negatives '-$3.20', unparseable dates pass through); row tap and lone readable survivor open a fullscreen candidate check (ReceiptPreviewActivity candidate mode: read-only with rotate/save hidden, header info, '<'/'>' arrows disabled at ends + 'n of m' counter, 'Use this picture' enabled only when decoded, close/back minimizes, index survives config rotation, decode failure keeps navigation alive); picks return RESULT_OK+EXTRA_PICKED_REFERENCE through one shared receiptPreviewLauncher (ClipData grants every content:// candidate per ARCHITECTURE launch rule; stale results ignored) into handleReceiptCandidatePicked -> attachChosenReceipt (apply+persist+toast+normal preview); normal preview gains 'Choose different' -> ReceiptReferenceRepair.swapCandidates (one-claim matcher pool minus attached file, fragment-insensitive, denied/empty -> empty) -> same picker/check flow; empty pool toasts 'No other pictures match this receipt.'. No new Gson keys; Cancel/back/minimize never mutate. Tests first (6 added; red-state bugs caught and fixed: '$-3.20' format, getStringExtra vs String[] extra). Full suite 254 tests / 3 baseline failures (baseline 248/3). Coverage 97.13% lines / 83.83% branches, gates pass. Lint 43 baseline errors unchanged (only Overdraw warnings of existing pattern). assembleDebug + git diff --check pass. Candidate-mode rendering verified by compile/resources/on-device checklist (no MainActivity JVM harness, as before)."
+    },
+    {
       "id": "receipt-ambiguous-picker-speed-2026-09-14",
       "title": "Picker for ambiguous receipt matches and sub-second recovery search",
       "status": "completed",

@@ -142,6 +142,50 @@ public final class ReceiptReferenceRepair {
         return results;
     }
 
+    /**
+     * Album files this receipt could be swapped to: the one-claim matcher pool for the stored
+     * filename/date, minus the currently attached file (fragment-insensitive). Read-only; a
+     * denied or empty album returns an empty list instead of prompting.
+     */
+    public static List<ReceiptReferenceResolver.Result> swapCandidates(
+            ReceiptReferenceResolver.Source source, String fileName, String transactionDate,
+            String currentReference, TimeZone zone) {
+        if (source == null || currentReference == null) return new ArrayList<>();
+        List<ReceiptAlbumMatcher.Claim> claim = Collections.singletonList(new ReceiptAlbumMatcher.Claim(
+                "swap", ReceiptReferenceResolver.validFileName(fileName) ? fileName : null, transactionDate));
+        List<ReceiptReferenceResolver.Result> album;
+        try {
+            album = source.readAlbum();
+        } catch (SecurityException denied) {
+            return new ArrayList<>();
+        }
+        TimeZone tz = zone != null ? zone : TimeZone.getDefault();
+        ReceiptReferenceResolver.Result match = ReceiptAlbumMatcher.assign(
+                claim, album, tz, Collections.emptySet(), !source.albumAccessRestricted()).get("swap");
+        List<ReceiptReferenceResolver.Result> pool;
+        if (match == null) {
+            pool = Collections.emptyList();
+        } else if (match.status == ReceiptReferenceResolver.Status.RESOLVED) {
+            pool = Collections.singletonList(match);
+        } else {
+            pool = match.alternatives;
+        }
+        String attached = stripFragment(currentReference);
+        List<ReceiptReferenceResolver.Result> others = new ArrayList<>();
+        for (ReceiptReferenceResolver.Result candidate : pool) {
+            if (candidate == null || candidate.reference == null) continue;
+            if (stripFragment(candidate.reference).equals(attached)) continue;
+            others.add(candidate);
+        }
+        return others;
+    }
+
+    /** URI fragments carry a filename hint, not identity; compare the bare references. */
+    private static String stripFragment(String reference) {
+        int fragmentAt = reference.indexOf('#');
+        return fragmentAt >= 0 ? reference.substring(0, fragmentAt) : reference;
+    }
+
     /** Returns how many live records changed; the caller persists once only when this is nonzero. */
     public static int apply(List<Envelope> envelopes, List<Entry> entries,
                             Map<String, ReceiptReferenceResolver.Result> results) {

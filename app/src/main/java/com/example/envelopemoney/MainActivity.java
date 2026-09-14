@@ -53,6 +53,7 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import com.example.envelopemoney.receipt.PaddleOcrAdapter;
 import com.example.envelopemoney.receipt.ReceiptBitmapLoader;
+import com.example.envelopemoney.receipt.ReceiptCandidateSummary;
 import com.example.envelopemoney.receipt.AndroidReceiptSource;
 import com.example.envelopemoney.receipt.ReceiptReferenceResolver;
 import com.example.envelopemoney.receipt.ReceiptReferenceRepair;
@@ -171,6 +172,7 @@ public class MainActivity extends AppCompatActivity {
     private ActivityResultLauncher<Intent> receiptCaptureLauncher;
     private ActivityResultLauncher<String[]> galleryPickLauncher;
     private ActivityResultLauncher<String> receiptReadPermissionLauncher;
+    private ActivityResultLauncher<Intent> receiptPreviewLauncher;
     private final java.util.concurrent.ExecutorService receiptRecoveryExecutor = Executors.newSingleThreadExecutor();
     private boolean receiptRepairInProgress;
     private boolean receiptRepairRequestedAgain;
@@ -179,6 +181,12 @@ public class MainActivity extends AppCompatActivity {
     private boolean receiptPhotoAccessPromptPending;
     /** Receipt files picked in this session stay out of later choosers so two rows cannot take one picture. */
     private final Set<String> receiptChosenReferences = new HashSet<>();
+    /** Tapped reference awaiting a fullscreen candidate pick; null means no check is open. */
+    private String pendingCandidateReference;
+    /** Verified candidates by reference for the open check, so a pick needs no extra lookups. */
+    private final Map<String, ReceiptReferenceResolver.Result> pendingCandidateResults = new HashMap<>();
+    /** Open picker dialog, dismissed once a fullscreen pick is applied. */
+    private AlertDialog receiptChooserDialog;
     private LearningDb learningDb;
     @Nullable
     private List<String> lastOcrLines;
@@ -767,6 +775,18 @@ public class MainActivity extends AppCompatActivity {
                         pendingReceiptReference = null;
                         if (usableAccess) openReceiptWithRecovery(reference, false);
                         else showReceiptRecoveryFailure(reference, ReceiptReferenceResolver.Status.PERMISSION_REQUIRED);
+                    }
+                });
+        receiptPreviewLauncher = registerForActivityResult(
+                new ActivityResultContracts.StartActivityForResult(), result -> {
+                    Intent data = result.getData();
+                    if (result.getResultCode() == RESULT_OK && data != null) {
+                        handleReceiptCandidatePicked(
+                                data.getStringExtra(ReceiptPreviewActivity.EXTRA_PICKED_REFERENCE));
+                    } else if (data != null
+                            && data.getBooleanExtra(ReceiptPreviewActivity.EXTRA_REQUEST_SWAP, false)) {
+                        reopenReceiptChooserForSwap(
+                                data.getStringExtra(ReceiptPreviewActivity.EXTRA_SWAP_REFERENCE));
                     }
                 });
         receiptCaptureLauncher = registerForActivityResult(
@@ -2013,7 +2033,7 @@ public class MainActivity extends AppCompatActivity {
             preview.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         }
         try {
-            startActivity(preview);
+            receiptPreviewLauncher.launch(preview);
         } catch (RuntimeException e) {
             Log.e("EnvelopeMoney", "receipt preview launch", e);
             Toast.makeText(this, R.string.receipt_preview_load_failed, Toast.LENGTH_LONG).show();
@@ -2168,7 +2188,8 @@ public class MainActivity extends AppCompatActivity {
 
     /**
      * AMBIGUOUS with known candidates becomes a picker. Candidates that fail a fresh verification
-     * never reach the user; when exactly one readable candidate survives, it opens directly.
+     * never reach the user; every candidate — even a lone survivor — is confirmed on the
+     * fullscreen check screen before anything attaches.
      */
     private void showReceiptCandidateChooser(String reference,
                                              List<ReceiptReferenceResolver.Result> alternatives) {
@@ -2186,14 +2207,16 @@ public class MainActivity extends AppCompatActivity {
                 if (readable.isEmpty()) {
                     showReceiptRecoveryFailure(reference, ReceiptReferenceResolver.Status.AMBIGUOUS);
                 } else if (readable.size() == 1) {
-                    attachChosenReceipt(reference, readable.get(0));
+                    launchReceiptCandidateCheck(reference, readable, 0);
                 } else {
-                    buildReceiptChooserDialog(reference, readable).show();
+                    receiptChooserDialog = buildReceiptChooserDialog(reference, readable);
+                    receiptChooserDialog.show();
                 }
             });
         });
     }
 
+    /** Rows browse; the fullscreen check (launched per row) is the only place a pick happens. */
     private AlertDialog buildReceiptChooserDialog(String reference,
                                                   List<ReceiptReferenceResolver.Result> candidates) {
         ViewGroup body = (ViewGroup) LayoutInflater.from(this).inflate(R.layout.dialog_receipt_chooser, null);
@@ -2201,11 +2224,13 @@ public class MainActivity extends AppCompatActivity {
         SimpleDateFormat capturedAt = new SimpleDateFormat("MMM d, yyyy · h:mm a", Locale.getDefault());
         AlertDialog dialog = new MaterialAlertDialogBuilder(this)
                 .setTitle(R.string.receipt_chooser_title)
-                .setMessage(getString(R.string.receipt_chooser_message, candidates.size()))
+                .setMessage(getString(R.string.receipt_chooser_message, candidates.size(),
+                        receiptChooserSummary(reference)))
                 .setView(body)
                 .setNegativeButton(android.R.string.cancel, null)
                 .create();
-        for (ReceiptReferenceResolver.Result candidate : candidates) {
+        for (int index = 0; index < candidates.size(); index++) {
+            ReceiptReferenceResolver.Result candidate = candidates.get(index);
             ViewGroup row = (ViewGroup) LayoutInflater.from(this).inflate(R.layout.item_receipt_chooser, rows, false);
             String name = candidate.fileName != null ? candidate.fileName
                     : getString(R.string.receipt_chooser_unnamed_picture);
@@ -2217,12 +2242,8 @@ public class MainActivity extends AppCompatActivity {
             ImageView thumbnail = row.findViewById(R.id.receiptChooserThumbnail);
             thumbnail.setContentDescription(name);
             loadReceiptChooserThumbnail(thumbnail, candidate.reference);
-            row.setOnClickListener(v -> {
-                // Cancel keeps everything; a pick is the only path that changes the stored reference.
-                receiptChosenReferences.add(candidate.reference);
-                attachChosenReceipt(reference, candidate);
-                dialog.dismiss();
-            });
+            final int checkIndex = index;
+            row.setOnClickListener(v -> launchReceiptCandidateCheck(reference, candidates, checkIndex));
             rows.addView(row);
         }
         return dialog;
@@ -2252,6 +2273,107 @@ public class MainActivity extends AppCompatActivity {
         applyReceiptResolution(reference, entries, chosen);
         Toast.makeText(this, R.string.receipt_picture_updated, Toast.LENGTH_SHORT).show();
         launchReceiptPreviewActivity(Uri.parse(namedReceiptReference(chosen)));
+    }
+
+    /**
+     * Opens the fullscreen candidate check with the transaction context in the header. Every
+     * content:// candidate shares one ClipData so the read grant covers arrow navigation.
+     */
+    private void launchReceiptCandidateCheck(String reference,
+                                             List<ReceiptReferenceResolver.Result> candidates,
+                                             int startIndex) {
+        pendingCandidateReference = reference;
+        pendingCandidateResults.clear();
+        String[] references = new String[candidates.size()];
+        android.content.ClipData grants = null;
+        for (int index = 0; index < candidates.size(); index++) {
+            ReceiptReferenceResolver.Result candidate = candidates.get(index);
+            pendingCandidateResults.put(candidate.reference, candidate);
+            references[index] = candidate.reference;
+            Uri grantUri = ReceiptPreviewActivity.intentDataUri(Uri.parse(candidate.reference));
+            if (grantUri != null) {
+                if (grants == null) {
+                    grants = android.content.ClipData.newRawUri("receipt", grantUri);
+                } else {
+                    grants.addItem(new android.content.ClipData.Item(grantUri));
+                }
+            }
+        }
+        String[] lines = receiptCandidateLines(reference);
+        Intent check = new Intent(this, ReceiptPreviewActivity.class);
+        check.putExtra(ReceiptPreviewActivity.EXTRA_CANDIDATE_REFERENCES, references);
+        check.putExtra(ReceiptPreviewActivity.EXTRA_CANDIDATE_INDEX,
+                Math.max(0, Math.min(startIndex, references.length - 1)));
+        check.putExtra(ReceiptPreviewActivity.EXTRA_CANDIDATE_TITLE, lines[0]);
+        check.putExtra(ReceiptPreviewActivity.EXTRA_CANDIDATE_DETAIL, lines[1]);
+        if (grants != null) {
+            check.setClipData(grants);
+            check.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        }
+        try {
+            receiptPreviewLauncher.launch(check);
+        } catch (RuntimeException e) {
+            Log.e("EnvelopeMoney", "receipt candidate check launch", e);
+            Toast.makeText(this, R.string.receipt_preview_load_failed, Toast.LENGTH_LONG).show();
+        }
+    }
+
+    /** A confirmed pick applies through the guarded path; stale results (activity restarted) are ignored. */
+    private void handleReceiptCandidatePicked(String pickedReference) {
+        ReceiptReferenceResolver.Result chosen = pendingCandidateResults.get(pickedReference);
+        String reference = pendingCandidateReference;
+        pendingCandidateReference = null;
+        pendingCandidateResults.clear();
+        if (reference == null || chosen == null) return;
+        receiptChosenReferences.add(chosen.reference);
+        if (receiptChooserDialog != null && receiptChooserDialog.isShowing()) {
+            receiptChooserDialog.dismiss();
+        }
+        attachChosenReceipt(reference, chosen);
+    }
+
+    /**
+     * "Choose different" from the normal preview: re-opens the picker for this receipt with the
+     * attached file excluded. Normal recovery cannot produce this list — the attached reference
+     * resolves — so the matcher runs once for this claim alone.
+     */
+    private void reopenReceiptChooserForSwap(String swapReference) {
+        if (swapReference == null) return;
+        receiptRecoveryExecutor.execute(() -> {
+            List<ReceiptReferenceRepair.Entry> entries = receiptEntriesFor(swapReference);
+            Transaction transaction = entries.isEmpty() ? null : entries.get(0).transaction;
+            List<ReceiptReferenceResolver.Result> others = transaction == null
+                    ? Collections.emptyList()
+                    : ReceiptReferenceRepair.swapCandidates(new AndroidReceiptSource(this),
+                            transaction.getReceiptImageFileName(), transaction.getDate(),
+                            swapReference, TimeZone.getDefault());
+            runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                if (others.isEmpty()) {
+                    Toast.makeText(this, R.string.receipt_swap_none_found, Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                showReceiptCandidateChooser(swapReference, others);
+            });
+        });
+    }
+
+    /** Title/detail context lines from the tapped row's transaction; blank when the row is gone. */
+    private String[] receiptCandidateLines(String reference) {
+        List<ReceiptReferenceRepair.Entry> entries = receiptEntriesFor(reference);
+        if (entries.isEmpty()) return new String[]{"", ""};
+        Transaction transaction = entries.get(0).transaction;
+        return new String[]{
+                ReceiptCandidateSummary.titleLine(transaction.getComment(),
+                        transaction.getEnvelopeName(), transaction.getAmount()),
+                ReceiptCandidateSummary.detailLine(transaction.getComment(),
+                        transaction.getEnvelopeName(), transaction.getDate())};
+    }
+
+    private String receiptChooserSummary(String reference) {
+        String[] lines = receiptCandidateLines(reference);
+        if (lines[0].isEmpty()) return "";
+        return lines[1].isEmpty() ? lines[0] : lines[0] + " · " + lines[1];
     }
     private void updateTransactionHistory() {
         ensureRecurringTransactionsForCurrentMonth();

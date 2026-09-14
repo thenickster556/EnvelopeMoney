@@ -86,3 +86,24 @@ Install the debug APK with renamed copies (e.g. `IMG_x.jpg`, `MountainMoney_... 
 
 ## On-device check (recommended, not yet run)
 Rename two copies of one receipt into `Pictures/Mountain Money`, tap the dead reference, and expect the picker within a second (logcat: `receipt repair: N entries in Xms`, `receipt album: … (Yms)`). Pick each candidate once; verify the toast, preview, and that the second ambiguous row's picker no longer offers the already-picked file. Cancel must change nothing.
+
+---
+
+# Fullscreen candidate check + later swap — 2026-09-14
+
+## Delivered behavior (delta)
+- Picker thumbnails 56→80dp and the dialog message now carries the transaction summary; a row tap (or a lone readable survivor) opens a **fullscreen candidate check** instead of attaching — no attach can happen from the small list anymore.
+- `ReceiptPreviewActivity` candidate mode: transaction header via `ReceiptCandidateSummary` (`Lunch · $12.50` / `Food · Sep 7, 2026`; pond shown only when the comment named something else; negatives `-$3.20`; unparseable dates pass through), read-only (rotate/save hidden), `‹`/`›` arrows disabled at the ends with an `n of m` counter, `Use this picture` enabled only while the current picture decoded, close/back minimizes to the still-open picker, candidate index survives device rotation, decode failure keeps navigation alive with Select disabled.
+- All preview launches go through one `ActivityResultLauncher`; candidate intents carry every `content://` reference in a single ClipData so the read grant covers arrow navigation (ARCHITECTURE launch rule preserved). A confirmed pick applies through the guarded `applyReceiptResolution`, toasts, and opens the normal preview; stale results (activity restarted) are ignored via the pending-reference guard.
+- New **Choose different** button on the attached-receipt preview: finishes with swap extras; MainActivity runs the new `ReceiptReferenceRepair.swapCandidates` (one-claim matcher pool minus the attached file, fragment-insensitive; denied/empty album → empty) and reuses the picker → check flow; an empty pool toasts "No other pictures match this receipt."
+
+## Automated results
+- Tests first (all red before implementation): `swapCandidates` ×3 (pool minus current; unique-self → none; missing/denied → empty), `ReceiptCandidateSummaryTest` (comment/pond fallback, cents format, negative `-$3.20`, unparseable date), `ReceiptPreviewActivityTest.candidateHelpers_roundTripAndClamp` (String[] extra round-trip, index clamped). Two implementation bugs were caught red and fixed: `String.format` rendered `$-3.20` and `getStringExtra` cannot see a `String[]` extra.
+- Full `:app:testDebugUnitTest`: **254 tests, 251 passed, same 3 pre-existing failures** (baseline before this change: 248/3).
+- Recovery JaCoCo scope: **542/558 lines (97.13%) and 451/538 branches (83.83%)**; `:app:verifyReceiptRecoveryCoverage` passes both 80% gates.
+- `:app:lintDebug`: **43 existing errors** — unchanged; the new layouts add only Overdraw warnings of the same pattern as existing layouts.
+- `:app:assembleDebug`: passed. `git diff --check`: passed.
+- Candidate-mode rendering and the swap button have no JVM harness for `MainActivity`/activity views (recorded limitation, as before): verified by compile, resource lint, and the checklist below.
+
+## On-device check (recommended, not yet run)
+With two renamed copies in the folder: tap the dead reference → picker (80dp rows + summary) → row tap → fullscreen check showing `Lunch · $12.50 / Food · Sep 7, 2026`; arrows cycle with counter, Select attaches (toast + preview), back minimizes to the open picker. In the normal preview tap `Choose different` → same flow with the attached file absent; with no other matches expect only the toast.
