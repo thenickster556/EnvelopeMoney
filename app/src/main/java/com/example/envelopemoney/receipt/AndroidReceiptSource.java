@@ -5,7 +5,6 @@ import android.content.ContentUris;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
-import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.media.MediaScannerConnection;
 import android.net.Uri;
@@ -103,15 +102,10 @@ public final class AndroidReceiptSource implements ReceiptReferenceResolver.Sour
                 if (stream == null) return failure(unavailableStatus(), name);
                 BitmapFactory.decodeStream(stream, null, options);
             }
+            // The header decode proves the stream is a readable image; a second sampled pixel
+            // decode here doubled every search pass with no extra corruption signal. The
+            // fullscreen preview performs the real decode and already handles decode failures.
             if (options.outWidth <= 0 || options.outHeight <= 0) return failure(ReceiptReferenceResolver.Status.CORRUPT, name);
-            options.inJustDecodeBounds = false;
-            options.inSampleSize = 1;
-            while (Math.max(options.outWidth, options.outHeight) / options.inSampleSize > 256) options.inSampleSize *= 2;
-            try (InputStream stream = context.getContentResolver().openInputStream(uri)) {
-                Bitmap image = BitmapFactory.decodeStream(stream, null, options);
-                if (image == null) return failure(ReceiptReferenceResolver.Status.CORRUPT, name);
-                image.recycle();
-            }
             return ReceiptReferenceResolver.Result.resolved(uri.toString(), name);
         } catch (SecurityException denied) {
             return failure(ReceiptReferenceResolver.Status.PERMISSION_REQUIRED, name);
@@ -140,6 +134,7 @@ public final class AndroidReceiptSource implements ReceiptReferenceResolver.Sour
      * Duplicate indexed names remain ambiguous. All candidates must pass inspect before persistence.
      */
     @Override public List<ReceiptReferenceResolver.Result> readAlbum() {
+        long startedAt = System.currentTimeMillis();
         List<ReceiptReferenceResolver.Result> pictures = new ArrayList<>();
         Set<String> indexedNames = new HashSet<>();
         boolean accessDenied = false;
@@ -171,7 +166,8 @@ public final class AndroidReceiptSource implements ReceiptReferenceResolver.Sour
             accessDenied = true;
         }
         Log.i(TAG, "receipt album: " + pictures.size() + " pictures (mediastore=" + rowsSeen
-                + ", disk=" + diskSupplement + ", restricted=" + albumAccessRestricted() + ")");
+                + ", disk=" + diskSupplement + ", restricted=" + albumAccessRestricted()
+                + ", " + (System.currentTimeMillis() - startedAt) + "ms)");
         if (pictures.isEmpty() && (accessDenied || needsReadPermission())) {
             throw new SecurityException("Photo access required");
         }

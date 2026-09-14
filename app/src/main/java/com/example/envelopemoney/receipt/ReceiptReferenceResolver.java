@@ -2,6 +2,7 @@ package com.example.envelopemoney.receipt;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Set;
@@ -19,21 +20,28 @@ public final class ReceiptReferenceResolver {
         public final String fileName;
         /** Epoch millis when known (filename or MediaStore); 0 if unknown. */
         public final long captureTimeMs;
-        private Result(Status status, String reference, String fileName, long captureTimeMs) {
+        /** Competing album files behind an AMBIGUOUS outcome, for a user picker; empty otherwise. */
+        public final List<Result> alternatives;
+        private Result(Status status, String reference, String fileName, long captureTimeMs,
+                       List<Result> alternatives) {
             this.status = status;
             this.reference = reference;
             this.fileName = fileName;
             this.captureTimeMs = captureTimeMs;
+            this.alternatives = alternatives != null ? alternatives : Collections.emptyList();
         }
         public static Result resolved(String reference, String fileName) {
             return resolved(reference, fileName, 0L);
         }
         public static Result resolved(String reference, String fileName, long captureTimeMs) {
-            return new Result(Status.RESOLVED, reference, fileName, captureTimeMs);
+            return new Result(Status.RESOLVED, reference, fileName, captureTimeMs, null);
         }
-        public static Result failure(Status status) { return new Result(status, null, null, 0L); }
+        public static Result failure(Status status) { return failure(status, null); }
         public static Result failure(Status status, String fileName) {
-            return new Result(status, null, fileName, 0L);
+            return new Result(status, null, fileName, 0L, null);
+        }
+        public static Result failure(Status status, String fileName, List<Result> alternatives) {
+            return new Result(status, null, fileName, 0L, alternatives);
         }
     }
 

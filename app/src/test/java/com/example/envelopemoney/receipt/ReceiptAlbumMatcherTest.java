@@ -289,4 +289,56 @@ public class ReceiptAlbumMatcherTest {
         assertEquals(ReceiptReferenceResolver.Status.AMBIGUOUS, assigned.get("before").status);
         assertEquals(ReceiptReferenceResolver.Status.AMBIGUOUS, assigned.get("after").status);
     }
+
+    @Test
+    public void ambiguousIdentityMatchExposesBothCandidatesForTheChooser() {
+        long noon = utcNoon(2026, 9, 7);
+        List<ReceiptReferenceResolver.Result> album = Arrays.asList(
+                ReceiptReferenceResolver.Result.resolved(A, "a" + noon + ".jpg", noon),
+                ReceiptReferenceResolver.Result.resolved(B, "b" + noon + ".jpg", noon));
+        Map<String, ReceiptReferenceResolver.Result> assigned = ReceiptAlbumMatcher.assign(
+                Arrays.asList(claim("k1", "MountainMoney_" + noon + ".jpg", "2026-09-07")),
+                album, UTC);
+        ReceiptReferenceResolver.Result result = assigned.get("k1");
+        assertEquals(ReceiptReferenceResolver.Status.AMBIGUOUS, result.status);
+        assertEquals(2, result.alternatives.size());
+        assertEquals(A, result.alternatives.get(0).reference);
+        assertEquals(B, result.alternatives.get(1).reference);
+        assertEquals("a" + noon + ".jpg", result.alternatives.get(0).fileName);
+    }
+
+    @Test
+    public void ambiguousSameDayMatchExposesDayCandidates() {
+        long noon = utcNoon(2026, 9, 7);
+        List<ReceiptReferenceResolver.Result> album = Arrays.asList(
+                picture(A, noon), picture(B, noon + 3_600_000L));
+        Map<String, ReceiptReferenceResolver.Result> assigned = ReceiptAlbumMatcher.assign(
+                Arrays.asList(claim("k1", null, "2026-09-07")), album, UTC);
+        ReceiptReferenceResolver.Result result = assigned.get("k1");
+        assertEquals(ReceiptReferenceResolver.Status.AMBIGUOUS, result.status);
+        assertEquals(2, result.alternatives.size());
+        assertEquals(A, result.alternatives.get(0).reference);
+        assertEquals(B, result.alternatives.get(1).reference);
+    }
+
+    @Test
+    public void ambiguousAdjacentWindowExposesWindowCandidates() {
+        List<ReceiptReferenceResolver.Result> album = Arrays.asList(
+                picture(A, utcNoon(2026, 9, 6)),
+                picture(B, utcNoon(2026, 9, 8)));
+        Map<String, ReceiptReferenceResolver.Result> assigned = ReceiptAlbumMatcher.assign(
+                Arrays.asList(claim("k1", null, "2026-09-07")), album, UTC);
+        ReceiptReferenceResolver.Result result = assigned.get("k1");
+        assertEquals(ReceiptReferenceResolver.Status.AMBIGUOUS, result.status);
+        assertEquals(2, result.alternatives.size());
+    }
+
+    @Test
+    public void resolvedMatchesCarryNoAlternatives() {
+        long noon = utcNoon(2026, 9, 7);
+        Map<String, ReceiptReferenceResolver.Result> assigned = ReceiptAlbumMatcher.assign(
+                Arrays.asList(claim("k1", null, "2026-09-07")),
+                Arrays.asList(picture(A, noon)), UTC);
+        assertTrue(assigned.get("k1").alternatives.isEmpty());
+    }
 }

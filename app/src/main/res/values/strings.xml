@@ -149,4 +149,8 @@
     <string name="receipt_recovery_permission">Photo access is needed to search Pictures/Mountain Money. Allow photo access and retry the automatic search.</string>
     <string name="receipt_recovery_ambiguous">More than one picture in Pictures/Mountain Money matches this receipt. The saved reference has been kept to avoid opening the wrong picture.</string>
     <string name="receipt_recovery_corrupt">The matching picture in Pictures/Mountain Money could not be decoded. Its saved reference and transaction details have been kept.</string>
+    <string name="receipt_chooser_title">Pick the right picture</string>
+    <string name="receipt_chooser_message">%1$d pictures could be this receipt. Tap one to attach it.</string>
+    <string name="receipt_chooser_unnamed_picture">Picture</string>
+    <string name="receipt_picture_updated">Receipt picture updated.</string>
 </resources>

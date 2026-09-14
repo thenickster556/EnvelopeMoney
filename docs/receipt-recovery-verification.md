@@ -67,3 +67,22 @@ Renamed or re-copied album files could never recover: the same-day match returne
 
 ## On-device check (recommended)
 Install the debug APK with renamed copies (e.g. `IMG_x.jpg`, `MountainMoney_... (1).jpg`) in `Pictures/Mountain Money`, tap a receipt whose stored pointer is dead, and watch `adb logcat -s EnvelopeMoney` for the album inventory line ("receipt album: N pictures ... restricted=..."). Expected: renamed unique files repair and open; ties show the retry dialog; a "Select photos" grant on Android 14 stops the prompt while still resolving identity matches. No physical-phone verification is claimed in this record.
+
+---
+
+# Ambiguity picker + sub-second search — 2026-09-14
+
+## Delivered behavior (delta)
+- AMBIGUOUS no longer dead-ends. The matcher attaches the competing files (`Result.alternatives`, populated for identity collisions, same-day multi-file, and adjacent-window windows/contests); the tap flow re-verifies each candidate, drops unreadable ones, auto-applies a lone survivor, and otherwise shows a picker dialog (`dialog_receipt_chooser.xml` rows: thumbnail via `ReceiptBitmapLoader.decodeSampled(…,128)` on the recovery executor, filename, `MMM d, yyyy · h:mm a` capture time). A pick is applied through the same guarded `applyReceiptResolution`, persisted, toasted ("Receipt picture updated."), and previewed; Cancel changes nothing. Session picks are remembered so two rows cannot take one picture. Restricted access still converts ambiguity to PERMISSION_REQUIRED without alternatives.
+- Search speed: `inspect` verifies with one stream open + header decode instead of two opens plus a full sampled bitmap decode (the previous second decode doubled every pass with no extra corruption signal — the bounds pass already fails garbage input, which the corrupt test guards). The tap path resolves only `receiptEntriesFor(reference)`; the whole-app sweep remains in the startup repair. Each pass logs `receipt repair: N entries in Xms` and the album line now includes its duration, so any remaining slowness is attributable on-device.
+
+## Automated results
+- Tests first: alternatives attached per ambiguity kind, resolveAll pass-through, restricted strips alternatives, and a provider `opens` counter proving `inspect` opens the stream exactly once — all red before implementation (compile-level for the new field, assertion-level for the counter), green after.
+- Full `:app:testDebugUnitTest`: **248 tests, 245 passed, same 3 pre-existing failures** (baseline before this change: 240/3).
+- Recovery JaCoCo scope: **518/533 lines (97.19%) and 435/514 branches (84.63%)**; `:app:verifyReceiptRecoveryCoverage` passes both 80% gates.
+- `:app:lintDebug`: **43 existing errors** — unchanged; the new chooser layouts only add a pre-existing-pattern Overdraw warning.
+- `:app:assembleDebug`: passed.
+- The chooser dialog itself (Material views, thumbnail pop-in) has no JVM test harness for `MainActivity`; it is verified by compile, resource lint, and the on-device checklist below — consistent with how prior MainActivity UI work was recorded.
+
+## On-device check (recommended, not yet run)
+Rename two copies of one receipt into `Pictures/Mountain Money`, tap the dead reference, and expect the picker within a second (logcat: `receipt repair: N entries in Xms`, `receipt album: … (Yms)`). Pick each candidate once; verify the toast, preview, and that the second ambiguous row's picker no longer offers the already-picked file. Cancel must change nothing.

@@ -224,6 +224,13 @@ public class AndroidReceiptSourceTest {
         assertEquals(0, gallery.deletes);
     }
 
+    @Test public void inspectVerifiesWithASingleStreamOpen() throws Exception {
+        gallery.file = picture();
+        ReceiptReferenceResolver.Result result = new AndroidReceiptSource(context).inspect(FRESH);
+        assertEquals(ReceiptReferenceResolver.Status.RESOLVED, result.status);
+        assertEquals(1, gallery.opens);
+    }
+
     private File picture() throws Exception {
         File file = File.createTempFile("yesterday", ".jpg", context.getCacheDir());
         Bitmap bitmap = Bitmap.createBitmap(400, 200, Bitmap.Config.ARGB_8888);
@@ -242,6 +249,7 @@ public class AndroidReceiptSourceTest {
         String[] selectionArguments;
         int writes;
         int deletes;
+        int opens;
         String lastWrite;
         @Override public boolean onCreate() { return true; }
         @Override public String getType(Uri uri) { return "image/jpeg"; }
@@ -284,6 +292,7 @@ public class AndroidReceiptSourceTest {
             assertNull(uri.getFragment());
             if (file == null || !uri.toString().equals(FRESH)) throw new FileNotFoundException();
             if (mode.contains("w")) { writes++; lastWrite = uri.toString(); }
+            else opens++;
             return ParcelFileDescriptor.open(file, mode.contains("w")
                     ? ParcelFileDescriptor.MODE_WRITE_ONLY | ParcelFileDescriptor.MODE_TRUNCATE
                     : ParcelFileDescriptor.MODE_READ_ONLY);

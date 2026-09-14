@@ -177,6 +177,8 @@ public class MainActivity extends AppCompatActivity {
     private String pendingReceiptReference;
     private boolean receiptLibraryAccessMissing;
     private boolean receiptPhotoAccessPromptPending;
+    /** Receipt files picked in this session stay out of later choosers so two rows cannot take one picture. */
+    private final Set<String> receiptChosenReferences = new HashSet<>();
     private LearningDb learningDb;
     @Nullable
     private List<String> lastOcrLines;
@@ -1971,20 +1973,19 @@ public class MainActivity extends AppCompatActivity {
                 });
                 return;
             }
-            List<ReceiptReferenceRepair.Entry> all = envelopes == null
-                    ? Collections.emptyList()
-                    : ReceiptReferenceRepair.snapshot(envelopes);
-            Map<String, ReceiptReferenceResolver.Result> resolved = all.isEmpty()
+            List<ReceiptReferenceRepair.Entry> entries = receiptEntriesFor(reference);
+            Map<String, ReceiptReferenceResolver.Result> resolved = entries.isEmpty()
                     ? Collections.emptyMap()
-                    : ReceiptReferenceRepair.resolveAll(
-                            new AndroidReceiptSource(this), all, TimeZone.getDefault());
+                    : resolveReceiptEntries(entries);
             runOnUiThread(() -> {
                 if (isFinishing() || isDestroyed()) return;
-                List<ReceiptReferenceRepair.Entry> matching = receiptEntriesFor(reference);
-                ReceiptReferenceResolver.Result result = firstReceiptResult(matching, resolved);
+                ReceiptReferenceResolver.Result result = firstReceiptResult(entries, resolved);
                 if (result != null && result.status == ReceiptReferenceResolver.Status.RESOLVED) {
-                    applyReceiptResolution(reference, matching, result);
+                    applyReceiptResolution(reference, entries, result);
                     launchReceiptPreviewActivity(Uri.parse(namedReceiptReference(result)));
+                } else if (result != null && result.status == ReceiptReferenceResolver.Status.AMBIGUOUS
+                        && !result.alternatives.isEmpty()) {
+                    showReceiptCandidateChooser(reference, result.alternatives);
                 } else {
                     showReceiptRecoveryFailure(reference, result != null
                             ? result.status
@@ -2021,15 +2022,11 @@ public class MainActivity extends AppCompatActivity {
 
     /** Resolution is read-only; only verified associations are applied to unchanged live records. */
     private void openReceiptWithRecovery(String reference, boolean requestPermission) {
-        List<ReceiptReferenceRepair.Entry> all = envelopes == null
-                ? Collections.emptyList()
-                : ReceiptReferenceRepair.snapshot(envelopes);
         List<ReceiptReferenceRepair.Entry> entries = receiptEntriesFor(reference);
         receiptRecoveryExecutor.execute(() -> {
-            Map<String, ReceiptReferenceResolver.Result> resolved = all.isEmpty()
+            Map<String, ReceiptReferenceResolver.Result> resolved = entries.isEmpty()
                     ? Collections.emptyMap()
-                    : ReceiptReferenceRepair.resolveAll(
-                            new AndroidReceiptSource(this), all, TimeZone.getDefault());
+                    : resolveReceiptEntries(entries);
             ReceiptReferenceResolver.Result result = firstReceiptResult(entries, resolved);
             runOnUiThread(() -> {
                 if (isFinishing() || isDestroyed()) return;
@@ -2041,6 +2038,9 @@ public class MainActivity extends AppCompatActivity {
                         && result.status == ReceiptReferenceResolver.Status.PERMISSION_REQUIRED) {
                     pendingReceiptReference = reference;
                     receiptReadPermissionLauncher.launch(AndroidReceiptSource.readPermission());
+                } else if (result != null && result.status == ReceiptReferenceResolver.Status.AMBIGUOUS
+                        && !result.alternatives.isEmpty()) {
+                    showReceiptCandidateChooser(reference, result.alternatives);
                 } else {
                     showReceiptRecoveryFailure(reference, result != null
                             ? result.status
@@ -2077,8 +2077,7 @@ public class MainActivity extends AppCompatActivity {
         receiptRepairInProgress = true;
         receiptRecoveryExecutor.execute(() -> {
             if (Thread.currentThread().isInterrupted()) return;
-            Map<String, ReceiptReferenceResolver.Result> results = ReceiptReferenceRepair.resolveAll(
-                    new AndroidReceiptSource(this), entries, TimeZone.getDefault());
+            Map<String, ReceiptReferenceResolver.Result> results = resolveReceiptEntries(entries);
             runOnUiThread(() -> {
                 receiptRepairInProgress = false;
                 if (isFinishing() || isDestroyed()) return;
@@ -2154,6 +2153,105 @@ public class MainActivity extends AppCompatActivity {
                 .setNegativeButton(android.R.string.cancel, null)
                 .setPositiveButton(R.string.receipt_recovery_retry,
                         (dialog, which) -> openReceiptWithRecovery(reference, true)).show();
+    }
+
+    /** Resolves the given entries and logs the pass duration so a slow phase is visible in logcat. */
+    private Map<String, ReceiptReferenceResolver.Result> resolveReceiptEntries(
+            List<ReceiptReferenceRepair.Entry> entries) {
+        long startedAt = System.currentTimeMillis();
+        Map<String, ReceiptReferenceResolver.Result> resolved = ReceiptReferenceRepair.resolveAll(
+                new AndroidReceiptSource(this), entries, TimeZone.getDefault());
+        Log.d("EnvelopeMoney", "receipt repair: " + entries.size() + " entries in "
+                + (System.currentTimeMillis() - startedAt) + "ms");
+        return resolved;
+    }
+
+    /**
+     * AMBIGUOUS with known candidates becomes a picker. Candidates that fail a fresh verification
+     * never reach the user; when exactly one readable candidate survives, it opens directly.
+     */
+    private void showReceiptCandidateChooser(String reference,
+                                             List<ReceiptReferenceResolver.Result> alternatives) {
+        receiptRecoveryExecutor.execute(() -> {
+            AndroidReceiptSource source = new AndroidReceiptSource(this);
+            List<ReceiptReferenceResolver.Result> readable = new ArrayList<>();
+            for (ReceiptReferenceResolver.Result candidate : alternatives) {
+                if (candidate == null || candidate.reference == null
+                        || receiptChosenReferences.contains(candidate.reference)) continue;
+                ReceiptReferenceResolver.Result verified = source.inspect(candidate.reference);
+                if (verified.status == ReceiptReferenceResolver.Status.RESOLVED) readable.add(verified);
+            }
+            runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                if (readable.isEmpty()) {
+                    showReceiptRecoveryFailure(reference, ReceiptReferenceResolver.Status.AMBIGUOUS);
+                } else if (readable.size() == 1) {
+                    attachChosenReceipt(reference, readable.get(0));
+                } else {
+                    buildReceiptChooserDialog(reference, readable).show();
+                }
+            });
+        });
+    }
+
+    private AlertDialog buildReceiptChooserDialog(String reference,
+                                                  List<ReceiptReferenceResolver.Result> candidates) {
+        ViewGroup body = (ViewGroup) LayoutInflater.from(this).inflate(R.layout.dialog_receipt_chooser, null);
+        ViewGroup rows = body.findViewById(R.id.receiptChooserRows);
+        SimpleDateFormat capturedAt = new SimpleDateFormat("MMM d, yyyy · h:mm a", Locale.getDefault());
+        AlertDialog dialog = new MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.receipt_chooser_title)
+                .setMessage(getString(R.string.receipt_chooser_message, candidates.size()))
+                .setView(body)
+                .setNegativeButton(android.R.string.cancel, null)
+                .create();
+        for (ReceiptReferenceResolver.Result candidate : candidates) {
+            ViewGroup row = (ViewGroup) LayoutInflater.from(this).inflate(R.layout.item_receipt_chooser, rows, false);
+            String name = candidate.fileName != null ? candidate.fileName
+                    : getString(R.string.receipt_chooser_unnamed_picture);
+            TextView nameView = row.findViewById(R.id.receiptChooserName);
+            nameView.setText(name);
+            TextView dateView = row.findViewById(R.id.receiptChooserDate);
+            dateView.setText(candidate.captureTimeMs > 0
+                    ? capturedAt.format(new Date(candidate.captureTimeMs)) : "");
+            ImageView thumbnail = row.findViewById(R.id.receiptChooserThumbnail);
+            thumbnail.setContentDescription(name);
+            loadReceiptChooserThumbnail(thumbnail, candidate.reference);
+            row.setOnClickListener(v -> {
+                // Cancel keeps everything; a pick is the only path that changes the stored reference.
+                receiptChosenReferences.add(candidate.reference);
+                attachChosenReceipt(reference, candidate);
+                dialog.dismiss();
+            });
+            rows.addView(row);
+        }
+        return dialog;
+    }
+
+    /** Thumbnails decode on the recovery executor and pop in; a row stays usable without one. */
+    private void loadReceiptChooserThumbnail(ImageView thumbnail, String reference) {
+        receiptRecoveryExecutor.execute(() -> {
+            Bitmap decoded = null;
+            try {
+                decoded = ReceiptBitmapLoader.decodeSampled(this, Uri.parse(reference), 128);
+            } catch (IOException | RuntimeException unavailable) {
+                Log.d("EnvelopeMoney", "receipt chooser thumbnail unavailable");
+            }
+            Bitmap thumbnailBitmap = decoded;
+            runOnUiThread(() -> {
+                if (thumbnailBitmap == null || thumbnail.getParent() == null) return;
+                thumbnail.setImageBitmap(thumbnailBitmap);
+            });
+        });
+    }
+
+    /** Applies one user-verified pick, persists it, and opens the fullscreen preview. */
+    private void attachChosenReceipt(String reference, ReceiptReferenceResolver.Result chosen) {
+        List<ReceiptReferenceRepair.Entry> entries = receiptEntriesFor(reference);
+        if (entries.isEmpty()) return;
+        applyReceiptResolution(reference, entries, chosen);
+        Toast.makeText(this, R.string.receipt_picture_updated, Toast.LENGTH_SHORT).show();
+        launchReceiptPreviewActivity(Uri.parse(namedReceiptReference(chosen)));
     }
     private void updateTransactionHistory() {
         ensureRecurringTransactionsForCurrentMonth();

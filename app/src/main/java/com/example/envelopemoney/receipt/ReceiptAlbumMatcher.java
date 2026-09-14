@@ -67,7 +67,7 @@ public final class ReceiptAlbumMatcher {
             }
             if (candidates.size() != 1) {
                 results.put(claim.key, ReceiptReferenceResolver.Result.failure(
-                        ReceiptReferenceResolver.Status.AMBIGUOUS, claim.fileName));
+                        ReceiptReferenceResolver.Status.AMBIGUOUS, claim.fileName, candidates));
                 continue;
             }
             ReceiptReferenceResolver.Result picture = candidates.get(0);
@@ -188,7 +188,8 @@ public final class ReceiptAlbumMatcher {
                 continue;
             }
             for (Claim claim : dayClaims.getValue()) {
-                results.put(claim.key, ReceiptReferenceResolver.Result.failure(status, claim.fileName));
+                results.put(claim.key, ReceiptReferenceResolver.Result.failure(status, claim.fileName,
+                        status == ReceiptReferenceResolver.Status.AMBIGUOUS ? dayFiles : null));
             }
         }
         assignByAdjacentDay(loneClaimsWithoutSameDayFile, unusedByDay, tz, bound, results);
@@ -220,13 +221,14 @@ public final class ReceiptAlbumMatcher {
             }
             if (pool.size() > 1) {
                 results.put(claim.key, ReceiptReferenceResolver.Result.failure(
-                        ReceiptReferenceResolver.Status.AMBIGUOUS, claim.fileName));
+                        ReceiptReferenceResolver.Status.AMBIGUOUS, claim.fileName, pool));
                 continue;
             }
             ReceiptReferenceResolver.Result picture = pool.get(0);
             if (adjacentCandidateIsContested(picture, claim, loneClaims, unusedByDay, bound, tz, results)) {
                 results.put(claim.key, ReceiptReferenceResolver.Result.failure(
-                        ReceiptReferenceResolver.Status.AMBIGUOUS, claim.fileName));
+                        ReceiptReferenceResolver.Status.AMBIGUOUS, claim.fileName,
+                        Collections.singletonList(picture)));
                 continue;
             }
             bound.add(picture.reference);
@@ -247,7 +249,8 @@ public final class ReceiptAlbumMatcher {
                 List<ReceiptReferenceResolver.Result> dayFiles = unusedByDay.get(adjacent);
                 if (dayFiles != null && dayFiles.contains(picture)) {
                     results.put(other.key, ReceiptReferenceResolver.Result.failure(
-                            ReceiptReferenceResolver.Status.AMBIGUOUS, other.fileName));
+                            ReceiptReferenceResolver.Status.AMBIGUOUS, other.fileName,
+                            Collections.singletonList(picture)));
                     return true;
                 }
             }

@@ -297,6 +297,43 @@ public class ReceiptReferenceRepairTest {
                 album, entries, TimeZone.getTimeZone("UTC")).get(entries.get(0).key()).status);
     }
 
+    @Test public void resolveAllKeepsAmbiguousAlternativesForTheChooser() {
+        Envelope envelope = new Envelope("Food", 100);
+        Transaction first = yesterday();
+        Transaction second = new Transaction("Food", 4, "2026-09-07", "Dinner");
+        second.setReceiptImageUri("content://media/external/images/media/9");
+        envelope.getTransactions().addAll(Arrays.asList(first, second));
+        FakeAlbum album = new FakeAlbum();
+        long noon = utcNoon(2026, 9, 7);
+        album.add(FRESH, "MountainMoney_" + noon + ".jpg", noon);
+        album.add("content://media/external/images/media/3",
+                "MountainMoney_" + (noon + 3_600_000L) + ".jpg", noon + 3_600_000L);
+        List<ReceiptReferenceRepair.Entry> entries = ReceiptReferenceRepair.snapshot(Arrays.asList(envelope));
+        Map<String, ReceiptReferenceResolver.Result> results = ReceiptReferenceRepair.resolveAll(
+                album, entries, TimeZone.getTimeZone("UTC"));
+        for (ReceiptReferenceRepair.Entry entry : entries) {
+            ReceiptReferenceResolver.Result result = results.get(entry.key());
+            assertEquals(ReceiptReferenceResolver.Status.AMBIGUOUS, result.status);
+            assertEquals(2, result.alternatives.size());
+        }
+    }
+
+    @Test public void resolveAllRestrictedAlbumStripsAlternativesIntoPermissionRequired() {
+        Envelope envelope = new Envelope("Food", 100);
+        Transaction claim = yesterday();
+        claim.setReceiptImageFileName("twin.jpg");
+        envelope.getTransactions().add(claim);
+        FakeAlbum album = new FakeAlbum();
+        album.restricted = true;
+        album.add(FRESH, "twin.jpg", utcNoon(2026, 9, 7));
+        album.add("content://media/external/images/media/3", "twin.jpg", utcNoon(2026, 9, 7));
+        List<ReceiptReferenceRepair.Entry> entries = ReceiptReferenceRepair.snapshot(Arrays.asList(envelope));
+        ReceiptReferenceResolver.Result result = ReceiptReferenceRepair.resolveAll(
+                album, entries, TimeZone.getTimeZone("UTC")).get(entries.get(0).key());
+        assertEquals(ReceiptReferenceResolver.Status.PERMISSION_REQUIRED, result.status);
+        assertTrue(result.alternatives.isEmpty());
+    }
+
     @Test public void applySkipsUnchangedReferenceAndFilename() {
         Envelope envelope = new Envelope("Food", 100);
         Transaction transaction = yesterday();

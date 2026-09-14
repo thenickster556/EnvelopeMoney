@@ -21,6 +21,12 @@
   ],
   "completed_tasks": [
     {
+      "id": "receipt-ambiguous-picker-speed-2026-09-14",
+      "title": "Picker for ambiguous receipt matches and sub-second recovery search",
+      "status": "completed",
+      "intent": "(1) AMBIGUOUS recovery dead-ended in a message-only retry dialog. Result.alternatives now carries the competing files from ReceiptAlbumMatcher (identity collisions, same-day multi-file, adjacent windows/contests) through ReceiptReferenceRepair; the tap flow re-verifies candidates, drops unreadable ones, auto-applies a lone survivor, and otherwise shows a picker (dialog_receipt_chooser + item_receipt_chooser: 56dp thumbnail via ReceiptBitmapLoader.decodeSampled(128) on the recovery executor, filename, MMM d yyyy h:mm a capture time) where a tap applies via applyReceiptResolution, persists, toasts receipt_picture_updated, and previews; Cancel changes nothing; receiptChosenReferences session set prevents double-assigns; restricted access still strips alternatives into PERMISSION_REQUIRED. (2) 10+ s searches: inspect now verifies with one stream open + header decode (second sampled pixel decode removed; corrupt test guards garbage detection), tap paths resolve only receiptEntriesFor(reference) instead of every app receipt, and each pass logs 'receipt repair: N entries in Xms' plus album duration under EnvelopeMoney. Tests first (8 added: alternatives x5, repair pass-through x2, provider opens counter x1). Full suite 248 tests / 3 baseline failures (baseline 240/3). Coverage 97.19% lines / 84.63% branches, gates pass. Lint 43 baseline unchanged (chooser adds one pre-existing-pattern Overdraw warning). assembleDebug passes. Chooser dialog verified by compile/resources/on-device checklist (no MainActivity JVM harness, consistent with prior records)."
+    },
+    {
       "id": "receipt-album-match-recovery-2026-09-14",
       "title": "Widen automatic album matching so renamed/copied Mountain Money photos recover",
       "status": "completed",
