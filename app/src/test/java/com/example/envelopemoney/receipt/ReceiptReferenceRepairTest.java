@@ -244,6 +244,59 @@ public class ReceiptReferenceRepairTest {
                         .get(entries.get(0).key()).fileName);
     }
 
+    @Test public void resolveAllBindsRenamedDayMatchAndPersistsAlbumName() {
+        Envelope envelope = new Envelope("Food", 100);
+        Transaction renamed = yesterday();
+        renamed.setReceiptImageFileName("MountainMoney_gone.jpg");
+        envelope.getTransactions().add(renamed);
+        FakeAlbum album = new FakeAlbum();
+        long noon = utcNoon(2026, 9, 7);
+        album.add(FRESH, "IMG_20260907.jpg", noon);
+        List<ReceiptReferenceRepair.Entry> entries = ReceiptReferenceRepair.snapshot(Arrays.asList(envelope));
+        ReceiptReferenceResolver.Result result = ReceiptReferenceRepair.resolveAll(
+                album, entries, TimeZone.getTimeZone("UTC")).get(entries.get(0).key());
+        assertEquals(FRESH, result.reference);
+        assertEquals("IMG_20260907.jpg", result.fileName);
+        assertEquals(1, ReceiptReferenceRepair.apply(Arrays.asList(envelope), entries,
+                Collections.singletonMap(entries.get(0).key(), result)));
+        assertEquals(FRESH, renamed.getReceiptImageUri());
+        assertEquals("IMG_20260907.jpg", renamed.getReceiptImageFileName());
+    }
+
+    @Test public void resolveAllRejectsDayMatchWhenInspectedNameDiffersFromListing() {
+        Envelope envelope = new Envelope("Food", 100);
+        Transaction unnamed = yesterday();
+        envelope.getTransactions().add(unnamed);
+        FakeAlbum album = new FakeAlbum();
+        long noon = utcNoon(2026, 9, 7);
+        album.add(FRESH, "MountainMoney_" + noon + ".jpg", noon);
+        album.pictures.put(FRESH, ReceiptReferenceResolver.Result.resolved(FRESH,
+                "renamed-while-scanning.jpg", noon));
+        List<ReceiptReferenceRepair.Entry> entries = ReceiptReferenceRepair.snapshot(Arrays.asList(envelope));
+        assertEquals(ReceiptReferenceResolver.Status.MISSING, ReceiptReferenceRepair.resolveAll(
+                album, entries, TimeZone.getTimeZone("UTC")).get(entries.get(0).key()).status);
+    }
+
+    @Test public void resolveAllRestrictedAlbumAllowsIdentityButNotDateMatches() {
+        FakeAlbum album = new FakeAlbum();
+        album.restricted = true;
+        long noon = utcNoon(2026, 9, 7);
+        album.add(FRESH, "MountainMoney_" + noon + ".JPG", noon);
+        Envelope envelope = new Envelope("Food", 100);
+        Transaction named = yesterday();
+        named.setReceiptImageFileName("MountainMoney_" + noon + ".jpg");
+        envelope.getTransactions().add(named);
+        List<ReceiptReferenceRepair.Entry> entries = ReceiptReferenceRepair.snapshot(Arrays.asList(envelope));
+        assertEquals(FRESH, ReceiptReferenceRepair.resolveAll(
+                album, entries, TimeZone.getTimeZone("UTC")).get(entries.get(0).key()).reference);
+        Transaction unnamed = yesterday();
+        envelope.getTransactions().clear();
+        envelope.getTransactions().add(unnamed);
+        entries = ReceiptReferenceRepair.snapshot(Arrays.asList(envelope));
+        assertEquals(ReceiptReferenceResolver.Status.PERMISSION_REQUIRED, ReceiptReferenceRepair.resolveAll(
+                album, entries, TimeZone.getTimeZone("UTC")).get(entries.get(0).key()).status);
+    }
+
     @Test public void applySkipsUnchangedReferenceAndFilename() {
         Envelope envelope = new Envelope("Food", 100);
         Transaction transaction = yesterday();

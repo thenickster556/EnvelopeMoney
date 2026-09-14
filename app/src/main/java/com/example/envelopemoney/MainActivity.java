@@ -755,11 +755,15 @@ public class MainActivity extends AppCompatActivity {
         if (savedInstanceState != null) pendingReceiptReference = savedInstanceState.getString("pendingReceiptReference");
         receiptReadPermissionLauncher = registerForActivityResult(
                 new ActivityResultContracts.RequestPermission(), granted -> {
-                    if (granted) startReceiptReferenceRepair();
+                    // Android 14 "Select photos" grants partial access without granting the requested
+                    // permission; treat any usable access as a grant so recovery re-runs immediately.
+                    boolean usableAccess = granted
+                            || !new AndroidReceiptSource(this).needsReadPermission();
+                    if (usableAccess) startReceiptReferenceRepair();
                     if (pendingReceiptReference != null) {
                         String reference = pendingReceiptReference;
                         pendingReceiptReference = null;
-                        if (granted) openReceiptWithRecovery(reference, false);
+                        if (usableAccess) openReceiptWithRecovery(reference, false);
                         else showReceiptRecoveryFailure(reference, ReceiptReferenceResolver.Status.PERMISSION_REQUIRED);
                     }
                 });

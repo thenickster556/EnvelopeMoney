@@ -79,7 +79,7 @@
 ## Open an existing receipt
 1. Tap the transaction photo icon or dialog preview action.
 2. The app tries the stored URI first with a one-shot byte decode (no re-import/move). If it is readable, fullscreen preview launches with `EXTRA_IMAGE_URI` and, for `content://`, Intent data plus a read grant only.
-3. If the stored URI is not readable, the same one-pass album matcher used at startup runs for that row. A unique filename or unique same-day unused `Pictures/Mountain Money` file is persisted, then opened. None or two-plus unused files that day keep the old pointer and show the automatic-search retry dialog. Launch/resume can still request photo access when receipts exist.
+3. If the stored URI is not readable, the same one-pass album matcher used at startup runs for that row. A unique identity is persisted and opened: the exact filename, a normalized equivalent (case, `.jpeg`, percent-encoding, ` (1)` copy suffix), a file sharing the stored name's timestamp digit-run, or the only unused `Pictures/Mountain Money` file captured on the transaction day (or one day either side when that day is empty; a renamed-but-decodable match updates the stored filename). No candidate or two-plus equally plausible candidates keep the old pointer and show the automatic-search retry dialog. Launch/resume can still request photo access when receipts exist; Android 14 "Select photos" access stops prompting while unique filenames still resolve.
 4. Gallery pick uses `OpenDocument` and takes a persistable read grant before import.
 5. Rotation save writes the same stored URI.
 The existing gallery action still imports a new/replacement receipt when intentionally selected.

@@ -41,3 +41,29 @@ gradlew :app:lintDebug
 The second command consumes the completed unit-test execution data; it does not suppress or turn the three baseline test failures into passes. Reports are under `app/build/reports/tests`, `app/build/reports/jacoco/receiptRecoveryCoverage`, and `app/build/reports/lint-results-debug.html`. Run `ReceiptFolderRecoveryInstrumentedTest` with AndroidJUnitRunner on a disposable emulator for startup/restart and automatic-retry UI checks.
 ### Visual behavior and remaining check
 Before this change, a broken reference could fail to open even while the picture remained in the gallery. After recovery, the existing zoom/rotation viewer renders the verified image; unresolved associations receive a themed automatic-search retry dialog. No fixed sizing was added. The dialog uses text-labelled Material buttons and the existing viewer keeps its existing gesture controls. A clean screenshot and the corrected retry-dialog instrumentation rerun remain required to finish visual acceptance.
+
+---
+
+# Matching widened for renamed/copied photos — 2026-09-14
+
+## Root cause found
+Renamed or re-copied album files could never recover: the same-day match returned by `ReceiptAlbumMatcher` was rejected in `ReceiptReferenceRepair.resolveAll` whenever the album filename differed from the stale stored name. Because the exact-filename pass had already consumed every claim whose exact name existed, every claim reaching the date pass necessarily had a different name — the veto turned all of them into MISSING. Contributing causes fixed alongside: exact case-sensitive filename compare (`.JPG`, `.jpeg`, percent-encoding, ` (1)` copy suffixes), case-sensitive `RELATIVE_PATH` folder equality, no adjacent-day tolerance for backdated entries, and no Android 14 "Select photos" partial-access support. The whole pipeline also logged nothing, so on-device failures were invisible.
+
+## Delivered behavior (delta)
+- Identity tiers bind without date evidence, each requiring a unique candidate: exact filename → normalized filename (case, `.jpeg`→`.jpg`, percent-decode, Windows ` (n)` copy suffix stripped) → shared epoch token (the ≥10-digit run inside `MountainMoney_{epochMs}.jpg`, so renames like `backup 1726150469234 copy.jpg` still match).
+- The claim-name veto is replaced by a listing-vs-inspection race guard: a date match with a renamed album file persists and updates `receiptImageFileName`; only a candidate whose name changed between album listing and decode inspection is dropped.
+- Date matching: the unique same-day pair rule is unchanged; a lone claim whose day holds no unused file retries one day either side. Two files in a window, or two lone claims contesting one adjacent file, are both ambiguous.
+- `Pictures/Mountain Money` folder equality is path-casing-insensitive; an empty granted MediaStore index triggers one best-effort `MediaScannerConnection` rescan before the disk supplement is logged.
+- Android 14 partial photo access (`READ_MEDIA_VISUAL_USER_SELECTED`, now declared) is restricted-but-listable: identity matches resolve, date matching stays off, and prompting stops. The permission reports denied on older platforms, so no version gate is needed.
+- Album inventory size and restricted state now log under the `EnvelopeMoney` tag on each repair pass.
+
+## Automated results
+- New tests written first and confirmed failing (compile-level for the new helper APIs, assertion-level for the veto and permission behavior), then implemented.
+- Full `:app:testDebugUnitTest`: **240 tests, 237 passed, same 3 pre-existing failures** (list above, reproduced before the change: 221 tests / 3 failures baseline).
+- Recovery JaCoCo scope (matcher, resolver, repair, Android source): **518/534 lines (97.00%) and 434/516 branches (84.11%)**; `:app:verifyReceiptRecoveryCoverage` passes both 80% gates.
+- `:app:lintDebug`: **43 existing errors** — unchanged count and files; the new manifest permission and receipt edits produced no new lint findings.
+- `:app:assembleDebug`: passed.
+- Robolectric cannot sandbox SDK 34 on the JDK 11 this toolchain requires (Gradle 6.7.1), so the partial-access logic is verified at SDK 33 using the permission grant directly; the Android 14 system dialog behavior is not exercised in JVM tests.
+
+## On-device check (recommended)
+Install the debug APK with renamed copies (e.g. `IMG_x.jpg`, `MountainMoney_... (1).jpg`) in `Pictures/Mountain Money`, tap a receipt whose stored pointer is dead, and watch `adb logcat -s EnvelopeMoney` for the album inventory line ("receipt album: N pictures ... restricted=..."). Expected: renamed unique files repair and open; ties show the retry dialog; a "Select photos" grant on Android 14 stops the prompt while still resolving identity matches. No physical-phone verification is claimed in this record.

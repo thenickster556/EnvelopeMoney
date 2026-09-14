@@ -7,10 +7,12 @@ import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.media.MediaScannerConnection;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
 import android.provider.MediaStore;
+import android.util.Log;
 import androidx.core.content.ContextCompat;
 import java.io.File;
 import java.io.IOException;
@@ -18,10 +20,15 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 
 /** Read-only Android adapter for exact-folder receipt discovery and sampled image verification. */
 public final class AndroidReceiptSource implements ReceiptReferenceResolver.Source {
+    private static final String TAG = "EnvelopeMoney";
+    /** compileSdk 33 has no constant for the Android 14 partial photo-access permission. */
+    private static final String READ_MEDIA_VISUAL_USER_SELECTED = "android.permission.READ_MEDIA_VISUAL_USER_SELECTED";
+
     private final Context context;
     public AndroidReceiptSource(Context context) { this.context = context.getApplicationContext(); }
 
@@ -32,13 +39,34 @@ public final class AndroidReceiptSource implements ReceiptReferenceResolver.Sour
         return null;
     }
 
-    public boolean needsReadPermission() {
+    private boolean fullLibraryAccessGranted() {
         String permission = readPermission();
         return permission != null && ContextCompat.checkSelfPermission(context, permission)
-                != PackageManager.PERMISSION_GRANTED;
+                == PackageManager.PERMISSION_GRANTED;
     }
 
-    @Override public boolean albumAccessRestricted() { return needsReadPermission(); }
+    /**
+     * Android 14 "Select photos" access lists chosen photos without granting the whole library.
+     * The permission exists only on Android 14+, so older platforms simply report it denied.
+     */
+    private boolean partialVisualAccessGranted() {
+        return ContextCompat.checkSelfPermission(context, READ_MEDIA_VISUAL_USER_SELECTED)
+                == PackageManager.PERMISSION_GRANTED;
+    }
+
+    public boolean needsReadPermission() {
+        if (readPermission() == null) return false;
+        if (fullLibraryAccessGranted()) return false;
+        return !partialVisualAccessGranted();
+    }
+
+    /**
+     * A user-selected partial list can omit folder files, so date matching stays off; identity
+     * (filename) matches remain valid because listed photos are readable.
+     */
+    @Override public boolean albumAccessRestricted() {
+        return readPermission() != null && !fullLibraryAccessGranted();
+    }
 
     /** Startup repair must ask for library access whenever stored receipts exist and it is missing. */
     public boolean shouldRequestLibraryAccess(boolean hasStoredReceipts) {
@@ -115,65 +143,98 @@ public final class AndroidReceiptSource implements ReceiptReferenceResolver.Sour
         List<ReceiptReferenceResolver.Result> pictures = new ArrayList<>();
         Set<String> indexedNames = new HashSet<>();
         boolean accessDenied = false;
-        boolean scopedStorage = Build.VERSION.SDK_INT >= 29;
-        String locationColumn = scopedStorage ? MediaStore.MediaColumns.RELATIVE_PATH : MediaStore.MediaColumns.DATA;
-        File folder = albumDirectory();
-        String albumQuery = scopedStorage ? MediaStoreReceiptSaver.ALBUM_RELATIVE + "%" : folder.getAbsolutePath() + File.separator + "%";
-        try (Cursor cursor = context.getContentResolver().query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                new String[]{MediaStore.Images.Media._ID, MediaStore.MediaColumns.DISPLAY_NAME, locationColumn,
-                        MediaStore.Images.Media.DATE_TAKEN, MediaStore.Images.Media.DATE_ADDED},
-                locationColumn + " LIKE ?",
-                new String[]{albumQuery}, null)) {
-            if (cursor != null) {
-                int idCol = cursor.getColumnIndex(MediaStore.Images.Media._ID);
-                int nameCol = cursor.getColumnIndex(MediaStore.MediaColumns.DISPLAY_NAME);
-                int locationCol = cursor.getColumnIndex(locationColumn);
-                int takenCol = cursor.getColumnIndex(MediaStore.Images.Media.DATE_TAKEN);
-                int addedCol = cursor.getColumnIndex(MediaStore.Images.Media.DATE_ADDED);
-                while (cursor.moveToNext()) {
-                    String name = nameCol >= 0 ? cursor.getString(nameCol) : null;
-                    String location = locationCol >= 0 ? cursor.getString(locationCol) : null;
-                    if (name == null || location == null || idCol < 0) continue;
-                    // LIKE also returns nested directories; persist only the exact receipt folder.
-                    if (!isExactAlbumLocation(location, scopedStorage, folder)) continue;
-                    Uri uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                            cursor.getLong(idCol));
-                    long taken = takenCol >= 0 && !cursor.isNull(takenCol) ? cursor.getLong(takenCol) : 0L;
-                    long added = addedCol >= 0 && !cursor.isNull(addedCol) ? cursor.getLong(addedCol) : 0L;
-                    pictures.add(ReceiptReferenceResolver.Result.resolved(uri.toString(), name,
-                            captureTimeMs(name, taken, added)));
-                    indexedNames.add(name);
-                }
+        int rowsSeen = 0;
+        try {
+            rowsSeen += queryAlbumRows(pictures, indexedNames);
+            if (rowsSeen == 0 && !needsReadPermission()) {
+                // Files copied over USB or a PC can sit in the folder before MediaStore indexes them.
+                Log.i(TAG, "receipt album empty in MediaStore; requesting rescan of the Mountain Money folder");
+                rescanAlbumFolder();
+                rowsSeen += queryAlbumRows(pictures, indexedNames);
             }
         } catch (SecurityException denied) {
             accessDenied = true;
-        } catch (RuntimeException unavailableIndex) {
-            // OEM provider failures do not prevent recovery from accessible files in the known folder.
         }
+        int diskSupplement = 0;
         try {
-            File[] files = folder.listFiles();
+            File[] files = albumDirectory().listFiles();
             if (files != null) {
                 for (File file : files) {
                     if (file.isFile() && !indexedNames.contains(file.getName())) {
                         pictures.add(ReceiptReferenceResolver.Result.resolved(
                                 file.toURI().toString(), file.getName(), captureTimeMs(file)));
+                        diskSupplement++;
                     }
                 }
             }
         } catch (SecurityException denied) {
             accessDenied = true;
         }
+        Log.i(TAG, "receipt album: " + pictures.size() + " pictures (mediastore=" + rowsSeen
+                + ", disk=" + diskSupplement + ", restricted=" + albumAccessRestricted() + ")");
         if (pictures.isEmpty() && (accessDenied || needsReadPermission())) {
             throw new SecurityException("Photo access required");
         }
         return pictures;
     }
 
+    /** One MediaStore pass over the exact album folder; rows outside it are skipped. */
+    private int queryAlbumRows(List<ReceiptReferenceResolver.Result> pictures, Set<String> indexedNames) {
+        boolean scopedStorage = Build.VERSION.SDK_INT >= 29;
+        String locationColumn = scopedStorage ? MediaStore.MediaColumns.RELATIVE_PATH : MediaStore.MediaColumns.DATA;
+        File folder = albumDirectory();
+        String albumQuery = scopedStorage ? MediaStoreReceiptSaver.ALBUM_RELATIVE + "%" : folder.getAbsolutePath() + File.separator + "%";
+        int kept = 0;
+        try (Cursor cursor = context.getContentResolver().query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                new String[]{MediaStore.Images.Media._ID, MediaStore.MediaColumns.DISPLAY_NAME, locationColumn,
+                        MediaStore.Images.Media.DATE_TAKEN, MediaStore.Images.Media.DATE_ADDED},
+                locationColumn + " LIKE ?",
+                new String[]{albumQuery}, null)) {
+            if (cursor == null) return 0;
+            int idCol = cursor.getColumnIndex(MediaStore.Images.Media._ID);
+            int nameCol = cursor.getColumnIndex(MediaStore.MediaColumns.DISPLAY_NAME);
+            int locationCol = cursor.getColumnIndex(locationColumn);
+            int takenCol = cursor.getColumnIndex(MediaStore.Images.Media.DATE_TAKEN);
+            int addedCol = cursor.getColumnIndex(MediaStore.Images.Media.DATE_ADDED);
+            while (cursor.moveToNext()) {
+                String name = nameCol >= 0 ? cursor.getString(nameCol) : null;
+                String location = locationCol >= 0 ? cursor.getString(locationCol) : null;
+                if (name == null || location == null || idCol < 0) continue;
+                // LIKE also returns nested directories; persist only the exact receipt folder.
+                if (!isExactAlbumLocation(location, scopedStorage, folder)) continue;
+                Uri uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                        cursor.getLong(idCol));
+                long taken = takenCol >= 0 && !cursor.isNull(takenCol) ? cursor.getLong(takenCol) : 0L;
+                long added = addedCol >= 0 && !cursor.isNull(addedCol) ? cursor.getLong(addedCol) : 0L;
+                pictures.add(ReceiptReferenceResolver.Result.resolved(uri.toString(), name,
+                        captureTimeMs(name, taken, added)));
+                indexedNames.add(name);
+                kept++;
+            }
+        } catch (SecurityException denied) {
+            // Propagated to readAlbum so an empty denied album reports PERMISSION_REQUIRED.
+            throw denied;
+        } catch (RuntimeException unavailableIndex) {
+            // OEM provider failures do not prevent recovery from accessible files in the known folder.
+            Log.w(TAG, "receipt album MediaStore query unavailable", unavailableIndex);
+        }
+        return kept;
+    }
+
+    private void rescanAlbumFolder() {
+        try {
+            MediaScannerConnection.scanFile(context,
+                    new String[]{albumDirectory().getAbsolutePath()}, null, null);
+        } catch (RuntimeException scanUnavailable) {
+            Log.w(TAG, "receipt album rescan unavailable", scanUnavailable);
+        }
+    }
+
     private static File albumDirectory() {
         return new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "Mountain Money");
     }
 
-    /** MediaStore may store {@code Pictures/Mountain Money} with or without a trailing slash. */
+    /** MediaStore may store {@code Pictures/Mountain Money} in any casing, with or without a trailing slash. */
     static boolean isExactAlbumLocation(String location, boolean scopedStorage, File folder) {
         if (location == null) return false;
         if (!scopedStorage) {
@@ -183,7 +244,8 @@ public final class AndroidReceiptSource implements ReceiptReferenceResolver.Sour
         if (normalized.endsWith("/")) {
             normalized = normalized.substring(0, normalized.length() - 1);
         }
-        return MediaStoreReceiptSaver.ALBUM_RELATIVE.replace('\\', '/').equals(normalized);
+        String album = MediaStoreReceiptSaver.ALBUM_RELATIVE.replace('\\', '/');
+        return album.toLowerCase(Locale.ROOT).equals(normalized.toLowerCase(Locale.ROOT));
     }
 
     public static ReceiptReferenceResolver.Result resolve(Context context, String reference, String fileName) {

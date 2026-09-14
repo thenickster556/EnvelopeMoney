@@ -103,8 +103,11 @@ public final class ReceiptReferenceRepair {
                     && match.reference != null) {
                 ReceiptReferenceResolver.Result verified = source.inspect(match.reference);
                 if (verified.status == ReceiptReferenceResolver.Status.RESOLVED) {
-                    if (claim.fileName != null && verified.fileName != null
-                            && !claim.fileName.equals(verified.fileName)) {
+                    // Date matches legitimately carry an album filename that differs from the stale
+                    // stored one; only a row whose name changed since the listing is a race, not a match.
+                    boolean listedNameChanged = match.fileName != null && verified.fileName != null
+                            && !match.fileName.equals(verified.fileName);
+                    if (listedNameChanged) {
                         results.put(claim.key, ReceiptReferenceResolver.Result.failure(
                                 ReceiptReferenceResolver.Status.MISSING, claim.fileName));
                         continue;

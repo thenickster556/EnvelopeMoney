@@ -1,5 +1,7 @@
 package com.example.envelopemoney.receipt;
 
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
@@ -12,9 +14,11 @@ import java.util.Set;
 import java.util.TimeZone;
 
 /**
- * One-pass album assignment. Unique filenames win; leftover unnamed receipts may take the
- * only unused album file whose capture day matches the transaction date. Two leftovers on
- * the same day stay ambiguous.
+ * One-pass album assignment. Identity tiers win without date evidence: the exact filename, then a
+ * normalized filename (case, .jpeg extension, URL encoding, " (1)" copy suffix), then a shared
+ * epoch token such as the digits in MountainMoney_1726150469234. Leftover claims fall back to the
+ * only unused album file captured on the transaction day, or one day either side when that day
+ * holds no file. Anything short of a unique candidate stays ambiguous or missing.
  */
 public final class ReceiptAlbumMatcher {
     private ReceiptAlbumMatcher() {
@@ -42,57 +46,104 @@ public final class ReceiptAlbumMatcher {
             List<ReceiptReferenceResolver.Result> album,
             TimeZone zone,
             Set<String> reservedReferences,
-            boolean allowSameDayMatch) {
+            boolean allowDateMatch) {
         Map<String, ReceiptReferenceResolver.Result> results = new HashMap<>();
         if (claims == null || claims.isEmpty()) {
             return results;
         }
         TimeZone tz = zone != null ? zone : TimeZone.getDefault();
-        Map<String, List<ReceiptReferenceResolver.Result>> byName = new HashMap<>();
-        if (album != null) {
-            for (ReceiptReferenceResolver.Result picture : album) {
-                if (picture == null || picture.fileName == null) continue;
-                List<ReceiptReferenceResolver.Result> same = byName.get(picture.fileName);
-                if (same == null) {
-                    same = new ArrayList<>();
-                    byName.put(picture.fileName, same);
-                }
-                same.add(picture);
-            }
-        }
-        Set<String> boundByName = new HashSet<>();
+        AlbumIndex index = new AlbumIndex(album);
+        Set<String> bound = new HashSet<>();
         if (reservedReferences != null) {
-            boundByName.addAll(reservedReferences);
+            bound.addAll(reservedReferences);
         }
         List<Claim> leftover = new ArrayList<>();
         for (Claim claim : claims) {
             String name = ReceiptReferenceResolver.validFileName(claim.fileName) ? claim.fileName : null;
-            if (name == null) {
+            List<ReceiptReferenceResolver.Result> candidates = index.identityCandidates(name, bound);
+            if (candidates.isEmpty()) {
                 leftover.add(claim);
                 continue;
             }
-            List<ReceiptReferenceResolver.Result> matches = byName.get(name);
-            if (matches == null || matches.isEmpty()) {
-                leftover.add(claim);
-                continue;
-            }
-            if (matches.size() != 1) {
+            if (candidates.size() != 1) {
                 results.put(claim.key, ReceiptReferenceResolver.Result.failure(
-                        ReceiptReferenceResolver.Status.AMBIGUOUS, name));
+                        ReceiptReferenceResolver.Status.AMBIGUOUS, claim.fileName));
                 continue;
             }
-            ReceiptReferenceResolver.Result picture = matches.get(0);
-            boundByName.add(picture.reference);
+            ReceiptReferenceResolver.Result picture = candidates.get(0);
+            bound.add(picture.reference);
             results.put(claim.key, picture);
         }
-        if (!allowSameDayMatch) {
+        if (!allowDateMatch) {
             for (Claim claim : leftover) {
                 results.put(claim.key, ReceiptReferenceResolver.Result.failure(
                         ReceiptReferenceResolver.Status.MISSING, claim.fileName));
             }
             return results;
         }
-        Map<String, List<Claim>> leftoverByDay = new HashMap<>();
+        assignByCaptureDay(leftover, index, tz, bound, results);
+        return results;
+    }
+
+    /** Immutable filename inventory of the album, queried per identity tier. */
+    private static final class AlbumIndex {
+        private final List<ReceiptReferenceResolver.Result> files = new ArrayList<>();
+
+        AlbumIndex(List<ReceiptReferenceResolver.Result> album) {
+            if (album == null) return;
+            for (ReceiptReferenceResolver.Result picture : album) {
+                if (picture != null) files.add(picture);
+            }
+        }
+
+        /**
+         * Unbound files sharing the claim's identity under the first tier that finds any: exact
+         * filename, normalized filename, or epoch token. Later tiers never override earlier ones,
+         * so an exact hit can not be displaced by a looser coincidence.
+         */
+        List<ReceiptReferenceResolver.Result> identityCandidates(String fileName, Set<String> bound) {
+            if (fileName == null) return Collections.emptyList();
+            List<ReceiptReferenceResolver.Result> exact = filesNamed(fileName, bound);
+            if (!exact.isEmpty()) return exact;
+            String normalized = normalizeFileName(fileName);
+            if (normalized != null) {
+                List<ReceiptReferenceResolver.Result> byNormalization = new ArrayList<>();
+                for (ReceiptReferenceResolver.Result picture : files) {
+                    if (bound.contains(picture.reference)) continue;
+                    if (normalized.equals(normalizeFileName(picture.fileName))) byNormalization.add(picture);
+                }
+                if (!byNormalization.isEmpty()) return byNormalization;
+            }
+            String token = epochToken(fileName);
+            if (token != null) {
+                List<ReceiptReferenceResolver.Result> byToken = new ArrayList<>();
+                for (ReceiptReferenceResolver.Result picture : files) {
+                    if (bound.contains(picture.reference)) continue;
+                    if (token.equals(epochToken(picture.fileName))) byToken.add(picture);
+                }
+                return byToken;
+            }
+            return Collections.emptyList();
+        }
+
+        private List<ReceiptReferenceResolver.Result> filesNamed(String fileName, Set<String> bound) {
+            List<ReceiptReferenceResolver.Result> matches = new ArrayList<>();
+            for (ReceiptReferenceResolver.Result picture : files) {
+                if (bound.contains(picture.reference)) continue;
+                if (fileName.equals(picture.fileName)) matches.add(picture);
+            }
+            return matches;
+        }
+    }
+
+    /**
+     * Same-day pass first, exactly as before: one claim and one unused file on a day bind, several
+     * files make the day ambiguous, several claims keep the day unassigned. Lone claims whose day
+     * holds no file get one adjacent-day retry so backdated entries and scan-time drift recover.
+     */
+    private static void assignByCaptureDay(List<Claim> leftover, AlbumIndex index, TimeZone tz,
+                                           Set<String> bound, Map<String, ReceiptReferenceResolver.Result> results) {
+        Map<String, List<Claim>> claimsByDay = new HashMap<>();
         for (Claim claim : leftover) {
             String day = normalizeDay(claim.transactionDate);
             if (day == null) {
@@ -100,47 +151,116 @@ public final class ReceiptAlbumMatcher {
                         ReceiptReferenceResolver.Status.MISSING, claim.fileName));
                 continue;
             }
-            List<Claim> same = leftoverByDay.get(day);
+            List<Claim> same = claimsByDay.get(day);
             if (same == null) {
                 same = new ArrayList<>();
-                leftoverByDay.put(day, same);
+                claimsByDay.put(day, same);
             }
             same.add(claim);
         }
         Map<String, List<ReceiptReferenceResolver.Result>> unusedByDay = new HashMap<>();
-        if (album != null) {
-            for (ReceiptReferenceResolver.Result picture : album) {
-                if (picture == null || boundByName.contains(picture.reference)) continue;
-                long capture = picture.captureTimeMs > 0
-                        ? picture.captureTimeMs
-                        : valueOrZero(captureTimeMs(picture.fileName));
-                if (capture <= 0) continue;
-                String day = localDay(capture, tz);
-                List<ReceiptReferenceResolver.Result> same = unusedByDay.get(day);
-                if (same == null) {
-                    same = new ArrayList<>();
-                    unusedByDay.put(day, same);
-                }
-                same.add(picture);
+        for (ReceiptReferenceResolver.Result picture : index.files) {
+            if (bound.contains(picture.reference)) continue;
+            String day = captureDayOf(picture, tz);
+            if (day == null) continue;
+            List<ReceiptReferenceResolver.Result> same = unusedByDay.get(day);
+            if (same == null) {
+                same = new ArrayList<>();
+                unusedByDay.put(day, same);
             }
+            same.add(picture);
         }
-        for (Map.Entry<String, List<Claim>> dayClaims : leftoverByDay.entrySet()) {
+        List<Claim> loneClaimsWithoutSameDayFile = new ArrayList<>();
+        for (Map.Entry<String, List<Claim>> dayClaims : claimsByDay.entrySet()) {
             List<ReceiptReferenceResolver.Result> dayFiles = unusedByDay.get(dayClaims.getKey());
-            if (dayFiles == null) dayFiles = new ArrayList<>();
+            if (dayFiles == null) dayFiles = Collections.emptyList();
             if (dayClaims.getValue().size() == 1 && dayFiles.size() == 1) {
                 ReceiptReferenceResolver.Result picture = dayFiles.get(0);
-                boundByName.add(picture.reference);
+                bound.add(picture.reference);
                 results.put(dayClaims.getValue().get(0).key, picture);
                 continue;
             }
             ReceiptReferenceResolver.Status status = dayFiles.size() > 1
                     ? ReceiptReferenceResolver.Status.AMBIGUOUS
                     : ReceiptReferenceResolver.Status.MISSING;
+            if (dayClaims.getValue().size() == 1 && dayFiles.isEmpty()) {
+                loneClaimsWithoutSameDayFile.add(dayClaims.getValue().get(0));
+                continue;
+            }
             for (Claim claim : dayClaims.getValue()) {
                 results.put(claim.key, ReceiptReferenceResolver.Result.failure(status, claim.fileName));
             }
         }
-        return results;
+        assignByAdjacentDay(loneClaimsWithoutSameDayFile, unusedByDay, tz, bound, results);
+    }
+
+    /**
+     * Adjacent-day retry for claims whose own day held no file at all. The single unused file one
+     * day either side binds, unless several files or another lone claim contest it; contesting
+     * claims are both marked ambiguous so iteration order cannot pick a winner.
+     */
+    private static void assignByAdjacentDay(List<Claim> loneClaims,
+                                            Map<String, List<ReceiptReferenceResolver.Result>> unusedByDay,
+                                            TimeZone tz, Set<String> bound,
+                                            Map<String, ReceiptReferenceResolver.Result> results) {
+        for (Claim claim : loneClaims) {
+            if (results.containsKey(claim.key)) continue;
+            List<ReceiptReferenceResolver.Result> pool = new ArrayList<>();
+            for (String adjacent : adjacentDays(normalizeDay(claim.transactionDate))) {
+                List<ReceiptReferenceResolver.Result> dayFiles = unusedByDay.get(adjacent);
+                if (dayFiles == null) continue;
+                for (ReceiptReferenceResolver.Result picture : dayFiles) {
+                    if (!bound.contains(picture.reference)) pool.add(picture);
+                }
+            }
+            if (pool.isEmpty()) {
+                results.put(claim.key, ReceiptReferenceResolver.Result.failure(
+                        ReceiptReferenceResolver.Status.MISSING, claim.fileName));
+                continue;
+            }
+            if (pool.size() > 1) {
+                results.put(claim.key, ReceiptReferenceResolver.Result.failure(
+                        ReceiptReferenceResolver.Status.AMBIGUOUS, claim.fileName));
+                continue;
+            }
+            ReceiptReferenceResolver.Result picture = pool.get(0);
+            if (adjacentCandidateIsContested(picture, claim, loneClaims, unusedByDay, bound, tz, results)) {
+                results.put(claim.key, ReceiptReferenceResolver.Result.failure(
+                        ReceiptReferenceResolver.Status.AMBIGUOUS, claim.fileName));
+                continue;
+            }
+            bound.add(picture.reference);
+            results.put(claim.key, picture);
+        }
+    }
+
+    private static boolean adjacentCandidateIsContested(ReceiptReferenceResolver.Result picture, Claim claim,
+                                                        List<Claim> loneClaims,
+                                                        Map<String, List<ReceiptReferenceResolver.Result>> unusedByDay,
+                                                        Set<String> bound, TimeZone tz,
+                                                        Map<String, ReceiptReferenceResolver.Result> results) {
+        String fileDay = captureDayOf(picture, tz);
+        for (Claim other : loneClaims) {
+            if (other == claim || results.containsKey(other.key)) continue;
+            for (String adjacent : adjacentDays(normalizeDay(other.transactionDate))) {
+                if (!adjacent.equals(fileDay)) continue;
+                List<ReceiptReferenceResolver.Result> dayFiles = unusedByDay.get(adjacent);
+                if (dayFiles != null && dayFiles.contains(picture)) {
+                    results.put(other.key, ReceiptReferenceResolver.Result.failure(
+                            ReceiptReferenceResolver.Status.AMBIGUOUS, other.fileName));
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /** Filename epoch first (MountainMoney saves millis in the name), otherwise unusable. */
+    static String captureDayOf(ReceiptReferenceResolver.Result picture, TimeZone tz) {
+        long capture = picture.captureTimeMs > 0
+                ? picture.captureTimeMs
+                : valueOrZero(captureTimeMs(picture.fileName));
+        return capture > 0 ? localDay(capture, tz) : null;
     }
 
     public static Long captureTimeMs(String fileName) {
@@ -155,6 +275,72 @@ public final class ReceiptAlbumMatcher {
         return Long.parseLong(digits);
     }
 
+    /**
+     * Comparable filename form: trimmed, lowercased, .jpeg folded to .jpg, percent-encoding
+     * decoded, and Windows-style " (1)" copy suffixes dropped. Returns null when nothing usable
+     * remains, which sends the claim to the date tiers instead.
+     */
+    static String normalizeFileName(String fileName) {
+        if (fileName == null) return null;
+        String trimmed = fileName.trim();
+        if (trimmed.isEmpty()) return null;
+        String lowered = decodePercent(trimmed.toLowerCase(Locale.ROOT)).trim();
+        if (lowered.isEmpty()) return null;
+        int extensionStart = lowered.lastIndexOf('.');
+        String extension = "";
+        String base = lowered;
+        if (extensionStart >= 0) {
+            extension = lowered.substring(extensionStart);
+            base = lowered.substring(0, extensionStart);
+        }
+        if (".jpeg".equals(extension)) extension = ".jpg";
+        base = base.replaceFirst("\\s*\\(\\d+\\)$", "").trim();
+        if (base.isEmpty()) return null;
+        return base + extension;
+    }
+
+    /** Decodes %XX sequences; unlike URLDecoder a plus sign stays a plus sign in a filename. */
+    private static String decodePercent(String value) {
+        if (!value.contains("%")) return value;
+        StringBuilder decoded = new StringBuilder(value.length());
+        for (int i = 0; i < value.length(); i++) {
+            char character = value.charAt(i);
+            if (character == '%' && i + 2 < value.length()
+                    && isHexDigit(value.charAt(i + 1)) && isHexDigit(value.charAt(i + 2))) {
+                decoded.append((char) Integer.parseInt(value.substring(i + 1, i + 3), 16));
+                i += 2;
+            } else {
+                decoded.append(character);
+            }
+        }
+        return decoded.toString();
+    }
+
+    private static boolean isHexDigit(char character) {
+        return (character >= '0' && character <= '9')
+                || (character >= 'a' && character <= 'f')
+                || (character >= 'A' && character <= 'F');
+    }
+
+    /** First digit run of at least ten characters in the base name; epoch millis are that long. */
+    static String epochToken(String fileName) {
+        if (fileName == null) return null;
+        int extensionStart = fileName.lastIndexOf('.');
+        if (extensionStart <= 0) return null;
+        String base = fileName.substring(0, extensionStart);
+        int runStart = -1;
+        for (int i = 0; i <= base.length(); i++) {
+            boolean digit = i < base.length() && Character.isDigit(base.charAt(i));
+            if (digit) {
+                if (runStart < 0) runStart = i;
+                continue;
+            }
+            if (runStart >= 0 && i - runStart >= 10) return base.substring(runStart, i);
+            runStart = -1;
+        }
+        return null;
+    }
+
     static String localDay(long epochMs, TimeZone zone) {
         Calendar calendar = Calendar.getInstance(zone);
         calendar.setTimeInMillis(epochMs);
@@ -162,6 +348,25 @@ public final class ReceiptAlbumMatcher {
         int month = calendar.get(Calendar.MONTH) + 1;
         int day = calendar.get(Calendar.DAY_OF_MONTH);
         return String.format(Locale.US, "%04d-%02d-%02d", year, month, day);
+    }
+
+    /** The day before and after a yyyy-MM-dd day; empty for unparseable input. */
+    private static List<String> adjacentDays(String day) {
+        if (day == null) return Collections.emptyList();
+        SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd", Locale.US);
+        format.setLenient(false);
+        try {
+            Calendar calendar = Calendar.getInstance();
+            calendar.setTime(format.parse(day));
+            List<String> adjacent = new ArrayList<>(2);
+            calendar.add(Calendar.DAY_OF_MONTH, -1);
+            adjacent.add(format.format(calendar.getTime()));
+            calendar.add(Calendar.DAY_OF_MONTH, 2);
+            adjacent.add(format.format(calendar.getTime()));
+            return adjacent;
+        } catch (ParseException invalidDay) {
+            return Collections.emptyList();
+        }
     }
 
     private static String normalizeDay(String date) {

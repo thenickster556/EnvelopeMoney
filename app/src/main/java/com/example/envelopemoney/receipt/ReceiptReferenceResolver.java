@@ -50,7 +50,9 @@ public final class ReceiptReferenceResolver {
 
     private final Source source;
     private Map<String, Result> albumByName;
+    private Map<String, Result> albumByNormalizedName;
     private final Set<String> ambiguousNames = new HashSet<>();
+    private final Set<String> ambiguousNormalizedNames = new HashSet<>();
     private boolean albumAccessDenied;
 
     public ReceiptReferenceResolver(Source source) { this.source = source; }
@@ -76,10 +78,19 @@ public final class ReceiptReferenceResolver {
         try {
             if (albumByName == null) {
                 albumByName = new HashMap<>();
+                albumByNormalizedName = new HashMap<>();
                 for (Result picture : source.readAlbum()) {
                     Result previous = albumByName.put(picture.fileName, picture);
                     if (previous != null && !previous.reference.equals(picture.reference)) {
                         ambiguousNames.add(picture.fileName);
+                    }
+                    String normalized = ReceiptAlbumMatcher.normalizeFileName(picture.fileName);
+                    if (normalized != null) {
+                        Result previousNormalized = albumByNormalizedName.put(normalized, picture);
+                        if (previousNormalized != null
+                                && !previousNormalized.reference.equals(picture.reference)) {
+                            ambiguousNormalizedNames.add(normalized);
+                        }
                     }
                 }
             }
@@ -96,13 +107,21 @@ public final class ReceiptReferenceResolver {
         if (ambiguousNames.contains(expectedName)) return Result.failure(Status.AMBIGUOUS);
         Result candidate = albumByName.get(expectedName);
         if (candidate == null) {
+            // A renamed copy (case, .jpeg, " (1)" suffix) still identifies its file.
+            String normalized = ReceiptAlbumMatcher.normalizeFileName(expectedName);
+            if (normalized != null && !ambiguousNormalizedNames.contains(normalized)) {
+                candidate = albumByNormalizedName.get(normalized);
+            }
+        }
+        if (candidate == null) {
             if (source.albumAccessRestricted()) {
                 return Result.failure(Status.PERMISSION_REQUIRED, expectedName);
             }
             return original;
         }
         Result verified = source.inspect(candidate.reference);
-        if (verified.status == Status.RESOLVED && !expectedName.equals(verified.fileName)) {
+        if (verified.status == Status.RESOLVED && candidate.fileName != null && verified.fileName != null
+                && !candidate.fileName.equals(verified.fileName)) {
             // The row changed between inventory and decoding. Keep the old association for a retry.
             return Result.failure(Status.MISSING, expectedName);
         }

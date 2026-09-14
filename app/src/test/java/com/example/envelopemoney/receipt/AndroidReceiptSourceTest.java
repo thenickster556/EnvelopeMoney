@@ -108,6 +108,41 @@ public class AndroidReceiptSourceTest {
         assertEquals(FRESH, result.reference);
     }
 
+    @Test @Config(sdk = 33) public void exactAlbumLocationAcceptsDifferentFolderCasing() {
+        File folder = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "Mountain Money");
+        assertTrue(AndroidReceiptSource.isExactAlbumLocation("Pictures/mountain money", true, folder));
+        assertTrue(AndroidReceiptSource.isExactAlbumLocation("PICTURES/Mountain Money/", true, folder));
+    }
+
+    @Test @Config(sdk = 33) public void albumRowsWithDifferentPathCasingStillResolve() throws Exception {
+        gallery.file = picture();
+        gallery.relativePath = "Pictures/mountain money";
+        ReceiptReferenceResolver.Result result = AndroidReceiptSource.resolve(context, OLD, NAME);
+        assertEquals(ReceiptReferenceResolver.Status.RESOLVED, result.status);
+        assertEquals(FRESH, result.reference);
+    }
+
+    // Robolectric cannot sandbox SDK 34 on the JDK 11 this project builds with, so the
+    // user-selected grant is exercised at 33: the permission reports denied wherever it is unknown.
+    @Test @Config(sdk = 33) public void partialVisualAccessIsRestrictedButListableAndDoesNotPrompt() throws Exception {
+        shadowOf(RuntimeEnvironment.getApplication()).denyPermissions(
+                Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.READ_MEDIA_IMAGES);
+        shadowOf(RuntimeEnvironment.getApplication()).grantPermissions(
+                "android.permission.READ_MEDIA_VISUAL_USER_SELECTED");
+        AndroidReceiptSource source = new AndroidReceiptSource(context);
+        assertFalse(source.needsReadPermission());
+        assertTrue(source.albumAccessRestricted());
+        assertFalse(source.shouldRequestLibraryAccess(true));
+        gallery.file = picture();
+        assertEquals(ReceiptReferenceResolver.Status.RESOLVED,
+                AndroidReceiptSource.resolve(context, OLD, NAME).status);
+    }
+
+    @Test public void emptyAlbumWithGrantedAccessReturnsEmptyListWithoutException() {
+        AndroidReceiptSource source = new AndroidReceiptSource(context);
+        assertTrue(source.readAlbum().isEmpty());
+    }
+
     @Test public void plainAndFilePathsRemainReadableAndFragmentsNeverReachProvider() throws Exception {
         File file = picture();
         AndroidReceiptSource source = new AndroidReceiptSource(context);

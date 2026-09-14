@@ -159,4 +159,134 @@ public class ReceiptAlbumMatcherTest {
                 album, UTC, Collections.singleton(A), true);
         assertEquals(ReceiptReferenceResolver.Status.MISSING, assigned.get("unnamed").status);
     }
+
+    @Test
+    public void normalizeFileNameFoldsCaseExtensionEncodingAndCopySuffix() {
+        assertEquals("mountainmoney_1000000000.jpg",
+                ReceiptAlbumMatcher.normalizeFileName("MountainMoney_1000000000.JPG"));
+        assertEquals("mountainmoney_1000000000.jpg",
+                ReceiptAlbumMatcher.normalizeFileName("MountainMoney_1000000000 (1).jpeg"));
+        assertEquals("mountainmoney_1000000000.jpg",
+                ReceiptAlbumMatcher.normalizeFileName("MountainMoney_1000000000(2).jpg"));
+        assertEquals("receipt copy.jpg",
+                ReceiptAlbumMatcher.normalizeFileName("receipt%20copy.jpg"));
+        assertEquals("plain%zz.jpg",
+                ReceiptAlbumMatcher.normalizeFileName("plain%zz.jpg"));
+        assertNull(ReceiptAlbumMatcher.epochToken("short_digits_123.jpg"));
+        assertNull(ReceiptAlbumMatcher.epochToken("1726150469234"));
+        assertEquals("plain.jpg", ReceiptAlbumMatcher.normalizeFileName(" plain.jpg "));
+        assertNull(ReceiptAlbumMatcher.normalizeFileName(null));
+        assertNull(ReceiptAlbumMatcher.normalizeFileName("   "));
+    }
+
+    @Test
+    public void epochTokenExtractsLongDigitRunsFromAnyName() {
+        assertEquals("1726150469234",
+                ReceiptAlbumMatcher.epochToken("MountainMoney_1726150469234.jpg"));
+        assertEquals("1726150469234",
+                ReceiptAlbumMatcher.epochToken("backup of 1726150469234.jpeg"));
+        assertNull(ReceiptAlbumMatcher.epochToken("IMG_20260907_123456.jpg"));
+        assertNull(ReceiptAlbumMatcher.epochToken(null));
+    }
+
+    @Test
+    public void renamedCopyIsMatchedBySharedEpochTokenWithoutDateEvidence() {
+        long noon = utcNoon(2026, 9, 7);
+        List<ReceiptReferenceResolver.Result> album = Arrays.asList(
+                ReceiptReferenceResolver.Result.resolved(A, "backup " + noon + " copy.jpg", noon));
+        Map<String, ReceiptReferenceResolver.Result> assigned = ReceiptAlbumMatcher.assign(
+                Arrays.asList(claim("k1", "MountainMoney_" + noon + ".jpg", "2020-01-01")),
+                album, UTC);
+        assertEquals(A, assigned.get("k1").reference);
+    }
+
+    @Test
+    public void twoFilesSharingEpochTokenStayAmbiguous() {
+        long noon = utcNoon(2026, 9, 7);
+        List<ReceiptReferenceResolver.Result> album = Arrays.asList(
+                ReceiptReferenceResolver.Result.resolved(A, "a" + noon + ".jpg", noon),
+                ReceiptReferenceResolver.Result.resolved(B, "b" + noon + ".jpg", noon));
+        Map<String, ReceiptReferenceResolver.Result> assigned = ReceiptAlbumMatcher.assign(
+                Arrays.asList(claim("k1", "MountainMoney_" + noon + ".jpg", "2026-09-07")),
+                album, UTC);
+        assertEquals(ReceiptReferenceResolver.Status.AMBIGUOUS, assigned.get("k1").status);
+    }
+
+    @Test
+    public void exactOriginalWinsOverNormalizedDuplicateCopy() {
+        long noon = utcNoon(2026, 9, 7);
+        String original = "MountainMoney_" + noon + ".jpg";
+        List<ReceiptReferenceResolver.Result> album = Arrays.asList(
+                ReceiptReferenceResolver.Result.resolved(A, original, noon),
+                ReceiptReferenceResolver.Result.resolved(B, "MountainMoney_" + noon + " (1).jpg", noon));
+        Map<String, ReceiptReferenceResolver.Result> assigned = ReceiptAlbumMatcher.assign(
+                Arrays.asList(claim("k1", original, "2026-09-07")), album, UTC);
+        assertEquals(A, assigned.get("k1").reference);
+    }
+
+    @Test
+    public void reservedReferenceIsNotReboundByNormalizedName() {
+        long noon = utcNoon(2026, 9, 7);
+        String name = "MountainMoney_" + noon + ".jpg";
+        List<ReceiptReferenceResolver.Result> album = Arrays.asList(
+                ReceiptReferenceResolver.Result.resolved(A, name, noon));
+        Map<String, ReceiptReferenceResolver.Result> assigned = ReceiptAlbumMatcher.assign(
+                Arrays.asList(claim("k1", name.toUpperCase(), "2026-09-07")),
+                album, UTC, Collections.singleton(A), true);
+        assertEquals(ReceiptReferenceResolver.Status.MISSING, assigned.get("k1").status);
+    }
+
+    @Test
+    public void uniqueAdjacentDayFileIsAssigned() {
+        long nextNoon = utcNoon(2026, 9, 8);
+        List<ReceiptReferenceResolver.Result> album = Arrays.asList(picture(A, nextNoon));
+        Map<String, ReceiptReferenceResolver.Result> assigned = ReceiptAlbumMatcher.assign(
+                Arrays.asList(claim("k1", null, "2026-09-07")), album, UTC);
+        assertEquals(A, assigned.get("k1").reference);
+    }
+
+    @Test
+    public void sameDayFileBeatsAdjacentDayFile() {
+        long noon = utcNoon(2026, 9, 7);
+        long nextNoon = utcNoon(2026, 9, 8);
+        List<ReceiptReferenceResolver.Result> album = Arrays.asList(
+                picture(A, noon), picture(B, nextNoon));
+        Map<String, ReceiptReferenceResolver.Result> assigned = ReceiptAlbumMatcher.assign(
+                Arrays.asList(claim("k1", null, "2026-09-07")), album, UTC);
+        assertEquals(A, assigned.get("k1").reference);
+    }
+
+    @Test
+    public void adjacentDayFileIsNotStolenFromSameDayClaim() {
+        long noon = utcNoon(2026, 9, 7);
+        List<ReceiptReferenceResolver.Result> album = Arrays.asList(picture(A, noon));
+        Map<String, ReceiptReferenceResolver.Result> assigned = ReceiptAlbumMatcher.assign(
+                Arrays.asList(claim("sameDay", null, "2026-09-07"),
+                        claim("nextDay", null, "2026-09-08")),
+                album, UTC);
+        assertEquals(A, assigned.get("sameDay").reference);
+        assertEquals(ReceiptReferenceResolver.Status.MISSING, assigned.get("nextDay").status);
+    }
+
+    @Test
+    public void twoFilesInsideAdjacentWindowStayAmbiguous() {
+        List<ReceiptReferenceResolver.Result> album = Arrays.asList(
+                picture(A, utcNoon(2026, 9, 6)),
+                picture(B, utcNoon(2026, 9, 8)));
+        Map<String, ReceiptReferenceResolver.Result> assigned = ReceiptAlbumMatcher.assign(
+                Arrays.asList(claim("k1", null, "2026-09-07")), album, UTC);
+        assertEquals(ReceiptReferenceResolver.Status.AMBIGUOUS, assigned.get("k1").status);
+    }
+
+    @Test
+    public void adjacentDayFileWithCompetingClaimsStaysAmbiguous() {
+        long noon = utcNoon(2026, 9, 7);
+        List<ReceiptReferenceResolver.Result> album = Arrays.asList(picture(A, noon));
+        Map<String, ReceiptReferenceResolver.Result> assigned = ReceiptAlbumMatcher.assign(
+                Arrays.asList(claim("before", null, "2026-09-06"),
+                        claim("after", null, "2026-09-08")),
+                album, UTC);
+        assertEquals(ReceiptReferenceResolver.Status.AMBIGUOUS, assigned.get("before").status);
+        assertEquals(ReceiptReferenceResolver.Status.AMBIGUOUS, assigned.get("after").status);
+    }
 }
