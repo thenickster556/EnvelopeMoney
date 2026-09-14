@@ -53,7 +53,7 @@ public class AndroidReceiptSourceTest {
         assertEquals(FRESH, result.reference);
         assertTrue(gallery.selection.contains(android.os.Build.VERSION.SDK_INT >= 29 ? "relative_path" : "_data"));
         assertTrue(gallery.selectionArguments[0].replace('\\', '/').contains("Pictures/Mountain Money"));
-        Bitmap preview = ReceiptBitmapLoader.decodeSampled(context, Uri.parse(OLD + "#" + NAME), 128);
+        Bitmap preview = ReceiptBitmapLoader.decodeSampled(context, Uri.parse(FRESH), 128);
         assertNotNull(preview); preview.recycle();
         assertEquals(0, gallery.deletes);
         assertEquals(0, gallery.writes);
@@ -169,9 +169,21 @@ public class AndroidReceiptSourceTest {
         assertTrue(receipt.exists());
     }
 
+    @Test public void captureTimePrefersFilenameThenDateTakenThenDateAdded() {
+        long named = 1_783_776_000_000L;
+        assertEquals(named, AndroidReceiptSource.captureTimeMs("MountainMoney_" + named + ".jpg", 50L, 2L));
+        assertEquals(50L, AndroidReceiptSource.captureTimeMs("IMG_001.jpg", 50L, 2L));
+        assertEquals(2000L, AndroidReceiptSource.captureTimeMs("IMG_001.jpg", 0L, 2L));
+        assertEquals(1_700_000_000_000L, AndroidReceiptSource.captureTimeMs("IMG_001.jpg", 0L, 1_700_000_000_000L));
+        assertEquals(0L, AndroidReceiptSource.captureTimeMs("IMG_001.jpg", 0L, 0L));
+        assertEquals(0L, AndroidReceiptSource.captureTimeMs((File) null));
+        File receipt = new File("MountainMoney_" + named + ".jpg");
+        assertEquals(named, AndroidReceiptSource.captureTimeMs(receipt));
+    }
+
     @Test public void rotationWritesResolvedPictureAndLeavesOriginalReferenceAlone() throws Exception {
         gallery.file = picture();
-        ReceiptRotatedJpegWriter.writeRotatedJpegOverwrite(context, Uri.parse(OLD + "#" + NAME), 90);
+        ReceiptRotatedJpegWriter.writeRotatedJpegOverwrite(context, Uri.parse(FRESH), 90);
         assertEquals(1, gallery.writes);
         assertEquals(FRESH, gallery.lastWrite);
         assertEquals(0, gallery.deletes);
@@ -214,10 +226,24 @@ public class AndroidReceiptSourceTest {
             String location = android.os.Build.VERSION.SDK_INT >= 29
                     ? (relativePath != null ? relativePath : "Pictures/Mountain Money/")
                     : new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "Mountain Money/" + displayName).getAbsolutePath();
-            cursor.addRow(new Object[]{2L, displayName, location});
-            if (duplicate) cursor.addRow(new Object[]{3L, NAME, location});
+            cursor.addRow(albumRow(projection, 2L, displayName, location));
+            if (duplicate) cursor.addRow(albumRow(projection, 3L, NAME, location));
             return cursor;
         }
+        private Object[] albumRow(String[] projection, long id, String name, String location) {
+            Object[] row = new Object[projection.length];
+            for (int i = 0; i < projection.length; i++) {
+                String column = projection[i];
+                if (MediaStore.Images.Media._ID.equals(column)) row[i] = id;
+                else if (MediaStore.MediaColumns.DISPLAY_NAME.equals(column)) row[i] = name;
+                else if (MediaStore.MediaColumns.RELATIVE_PATH.equals(column)
+                        || MediaStore.MediaColumns.DATA.equals(column)) row[i] = location;
+                else if (MediaStore.Images.Media.DATE_TAKEN.equals(column)) row[i] = 0L;
+                else if (MediaStore.MediaColumns.DATE_ADDED.equals(column)) row[i] = 0L;
+            }
+            return row;
+        }
+
         @Override public ParcelFileDescriptor openFile(Uri uri, String mode) throws FileNotFoundException {
             if (denied) throw new SecurityException();
             assertNull(uri.getFragment());

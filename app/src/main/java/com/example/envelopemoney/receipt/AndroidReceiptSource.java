@@ -120,18 +120,28 @@ public final class AndroidReceiptSource implements ReceiptReferenceResolver.Sour
         File folder = albumDirectory();
         String albumQuery = scopedStorage ? MediaStoreReceiptSaver.ALBUM_RELATIVE + "%" : folder.getAbsolutePath() + File.separator + "%";
         try (Cursor cursor = context.getContentResolver().query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                new String[]{MediaStore.Images.Media._ID, MediaStore.MediaColumns.DISPLAY_NAME, locationColumn},
+                new String[]{MediaStore.Images.Media._ID, MediaStore.MediaColumns.DISPLAY_NAME, locationColumn,
+                        MediaStore.Images.Media.DATE_TAKEN, MediaStore.Images.Media.DATE_ADDED},
                 locationColumn + " LIKE ?",
                 new String[]{albumQuery}, null)) {
             if (cursor != null) {
+                int idCol = cursor.getColumnIndex(MediaStore.Images.Media._ID);
+                int nameCol = cursor.getColumnIndex(MediaStore.MediaColumns.DISPLAY_NAME);
+                int locationCol = cursor.getColumnIndex(locationColumn);
+                int takenCol = cursor.getColumnIndex(MediaStore.Images.Media.DATE_TAKEN);
+                int addedCol = cursor.getColumnIndex(MediaStore.Images.Media.DATE_ADDED);
                 while (cursor.moveToNext()) {
-                    String name = cursor.getString(1);
-                    String location = cursor.getString(2);
-                    if (name == null || location == null) continue;
+                    String name = nameCol >= 0 ? cursor.getString(nameCol) : null;
+                    String location = locationCol >= 0 ? cursor.getString(locationCol) : null;
+                    if (name == null || location == null || idCol < 0) continue;
                     // LIKE also returns nested directories; persist only the exact receipt folder.
                     if (!isExactAlbumLocation(location, scopedStorage, folder)) continue;
-                    Uri uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, cursor.getLong(0));
-                    pictures.add(ReceiptReferenceResolver.Result.resolved(uri.toString(), name));
+                    Uri uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                            cursor.getLong(idCol));
+                    long taken = takenCol >= 0 && !cursor.isNull(takenCol) ? cursor.getLong(takenCol) : 0L;
+                    long added = addedCol >= 0 && !cursor.isNull(addedCol) ? cursor.getLong(addedCol) : 0L;
+                    pictures.add(ReceiptReferenceResolver.Result.resolved(uri.toString(), name,
+                            captureTimeMs(name, taken, added)));
                     indexedNames.add(name);
                 }
             }
@@ -145,7 +155,8 @@ public final class AndroidReceiptSource implements ReceiptReferenceResolver.Sour
             if (files != null) {
                 for (File file : files) {
                     if (file.isFile() && !indexedNames.contains(file.getName())) {
-                        pictures.add(ReceiptReferenceResolver.Result.resolved(file.toURI().toString(), file.getName()));
+                        pictures.add(ReceiptReferenceResolver.Result.resolved(
+                                file.toURI().toString(), file.getName(), captureTimeMs(file)));
                     }
                 }
             }
@@ -186,5 +197,25 @@ public final class AndroidReceiptSource implements ReceiptReferenceResolver.Sour
 
     private static ReceiptReferenceResolver.Result failure(ReceiptReferenceResolver.Status status, String name) {
         return ReceiptReferenceResolver.Result.failure(status, name);
+    }
+
+    /**
+     * Filename epoch first, then MediaStore {@code DATE_TAKEN} (ms), then {@code DATE_ADDED}
+     * (seconds unless the value is already milliseconds).
+     */
+    static long captureTimeMs(String fileName, long dateTakenMs, long dateAddedRaw) {
+        Long fromName = ReceiptAlbumMatcher.captureTimeMs(fileName);
+        if (fromName != null && fromName > 0) return fromName;
+        if (dateTakenMs > 0) return dateTakenMs;
+        if (dateAddedRaw > 1_000_000_000_000L) return dateAddedRaw;
+        if (dateAddedRaw > 0) return dateAddedRaw * 1000L;
+        return 0L;
+    }
+
+    static long captureTimeMs(File file) {
+        if (file == null) return 0L;
+        Long fromName = ReceiptAlbumMatcher.captureTimeMs(file.getName());
+        if (fromName != null && fromName > 0) return fromName;
+        return file.lastModified();
     }
 }

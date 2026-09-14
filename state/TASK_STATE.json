@@ -21,6 +21,18 @@
   ],
   "completed_tasks": [
     {
+      "id": "receipt-album-unique-day-2026-09-12",
+      "title": "Port preview path and unique same-day album matching to transfer-patch",
+      "status": "completed",
+      "intent": "Keep stored-URI one-shot open (OpenDocument persistable read grant, content-only Intent data, no re-import). Add ReceiptAlbumMatcher: unique MountainMoney filename wins; leftover unnamed receipts take the only unused album file whose capture local day equals Transaction.date. Two leftovers that day stay AMBIGUOUS. Capture time from filename epoch or DATE_TAKEN/DATE_ADDED. Repair and tap-after-fail share one-pass resolveAll. No new Gson keys. Receipt unit tests: 135, 1 baseline ReceiptSourceDeleter failure. Recovery coverage 97.61% lines / 84.86% branches."
+    },
+    {
+      "id": "receipt-stored-uri-open-2026-09-12",
+      "title": "Restore stored-URI preview open; filename-first was the wrong diagnosis",
+      "status": "completed",
+      "intent": "Revert de4f52a filename-first lookup. Preview launches the stored URI on the UI thread with content:// Intent data + FLAG_GRANT_READ only (write grants can throw). Decode reads bytes once like 0afe24a ReceiptUriStreams so one-shot providers work; leftover file:// uses FileInputStream. No re-import on tap. OpenDocument persistable grants restored. Tests: ReceiptBitmapLoaderTest.decodeSampled_readsUriThatAllowsOnlyOneOpen, ReceiptPreviewActivityTest.intentDataUri_onlyContentScheme."
+    },
+    {
       "id": "receipt-gallery-access-legacy-2026-09-10",
       "title": "Request photo access so automatic recovery can find legacy Pictures/Mountain Money files",
       "status": "completed",
@@ -271,5 +283,5 @@
       "title": "Fullscreen zoomable rotatable ReceiptPreviewActivity; ReceiptZoomImageView; ReceiptBitmapLoader"
     }
   ],
-  "last_updated": "2026-09-10"
+  "last_updated": "2026-09-12"
 }

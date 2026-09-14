@@ -76,10 +76,10 @@
 4. Changing Last 3/6/12, pond chips, or Include transfers redraws snapshot, month bars, over-budget list, and by-pond bars. Empty qualifying spend still shows $0 bars and **No spending in this range**.
 5. Closing Analysis does not persist filters and does not change home pond selection.
 
-## Open an existing receipt (automatic recovery)
-1. Tap the transaction photo icon or dialog preview action. At launch, if any transactions already have a receipt, Android may also ask for photo access before the automatic folder search.
-2. The app checks the original reference, available filename metadata and the exact receipt folder in the background.
-3. If Android photo access is required, allow it (Photos / media permission, not only the one-shot gallery picker). The app retries and repairs other stored receipt references automatically, including pictures from yesterday and earlier that the app no longer “owns.”
-4. A uniquely identified, decoded picture opens in the existing zoom/rotation viewer. Its repaired association is persisted across current and historical records.
-5. If the file cannot be identified, is ambiguous or cannot be decoded, the app keeps the association and shows the specific failure with **Retry automatic search**. No recovery picture picker is shown.
+## Open an existing receipt
+1. Tap the transaction photo icon or dialog preview action.
+2. The app tries the stored URI first with a one-shot byte decode (no re-import/move). If it is readable, fullscreen preview launches with `EXTRA_IMAGE_URI` and, for `content://`, Intent data plus a read grant only.
+3. If the stored URI is not readable, the same one-pass album matcher used at startup runs for that row. A unique filename or unique same-day unused `Pictures/Mountain Money` file is persisted, then opened. None or two-plus unused files that day keep the old pointer and show the automatic-search retry dialog. Launch/resume can still request photo access when receipts exist.
+4. Gallery pick uses `OpenDocument` and takes a persistable read grant before import.
+5. Rotation save writes the same stored URI.
 The existing gallery action still imports a new/replacement receipt when intentionally selected.

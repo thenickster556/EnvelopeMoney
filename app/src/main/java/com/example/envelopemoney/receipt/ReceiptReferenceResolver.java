@@ -17,14 +17,24 @@ public final class ReceiptReferenceResolver {
         public final Status status;
         public final String reference;
         public final String fileName;
-        private Result(Status status, String reference, String fileName) {
-            this.status = status; this.reference = reference; this.fileName = fileName;
+        /** Epoch millis when known (filename or MediaStore); 0 if unknown. */
+        public final long captureTimeMs;
+        private Result(Status status, String reference, String fileName, long captureTimeMs) {
+            this.status = status;
+            this.reference = reference;
+            this.fileName = fileName;
+            this.captureTimeMs = captureTimeMs;
         }
         public static Result resolved(String reference, String fileName) {
-            return new Result(Status.RESOLVED, reference, fileName);
+            return resolved(reference, fileName, 0L);
         }
-        public static Result failure(Status status) { return new Result(status, null, null); }
-        public static Result failure(Status status, String fileName) { return new Result(status, null, fileName); }
+        public static Result resolved(String reference, String fileName, long captureTimeMs) {
+            return new Result(Status.RESOLVED, reference, fileName, captureTimeMs);
+        }
+        public static Result failure(Status status) { return new Result(status, null, null, 0L); }
+        public static Result failure(Status status, String fileName) {
+            return new Result(status, null, fileName, 0L);
+        }
     }
 
     /** Platform boundary: inspect must verify image decoding; readAlbum must restrict the folder. */
@@ -46,9 +56,11 @@ public final class ReceiptReferenceResolver {
     public ReceiptReferenceResolver(Source source) { this.source = source; }
 
     /**
-     * Verifies the original first, then a unique album match. One resolver is used per background
-     * pass so the album is indexed once. A new pass retries access after a permission change.
-     * No date or age participates in recovery, including receipts created earlier today.
+     * Verifies the original first, then a unique album filename match. One resolver is used per
+     * background pass so the album is indexed once. A new pass retries access after a permission
+     * change. This single-row path does not guess from transaction dates; leftover same-day
+     * matching is a one-pass {@link ReceiptAlbumMatcher} / {@link ReceiptReferenceRepair#resolveAll}
+     * concern.
      */
     public Result resolve(String reference, String fileName) {
         if (reference == null || reference.trim().isEmpty()) return Result.failure(Status.MISSING);
@@ -112,7 +124,7 @@ public final class ReceiptReferenceResolver {
         }
     }
 
-    private static boolean validFileName(String name) {
+    static boolean validFileName(String name) {
         return name != null && name.contains(".") && !name.startsWith(".")
                 && !name.contains("/") && !name.contains("\\") && !name.contains("\u0000");
     }

@@ -108,6 +108,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.Objects;
+import java.util.TimeZone;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 
@@ -168,7 +169,7 @@ public class MainActivity extends AppCompatActivity {
     private View.OnClickListener receiptDialogSaveListener;
     private boolean receiptImportInProgress;
     private ActivityResultLauncher<Intent> receiptCaptureLauncher;
-    private ActivityResultLauncher<String> galleryPickLauncher;
+    private ActivityResultLauncher<String[]> galleryPickLauncher;
     private ActivityResultLauncher<String> receiptReadPermissionLauncher;
     private final java.util.concurrent.ExecutorService receiptRecoveryExecutor = Executors.newSingleThreadExecutor();
     private boolean receiptRepairInProgress;
@@ -787,12 +788,17 @@ public class MainActivity extends AppCompatActivity {
                     }
                 });
         galleryPickLauncher = registerForActivityResult(
-                new ActivityResultContracts.GetContent(),
+                new ActivityResultContracts.OpenDocument(),
                 uri -> {
                     awaitingGalleryPick = false;
                     if (uri == null) {
                         ensureReceiptTransactionDialogVisible();
                         return;
+                    }
+                    try {
+                        getContentResolver().takePersistableUriPermission(
+                                uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    } catch (SecurityException ignored) {
                     }
                     View host = resolveReceiptDialogHost();
                     if (host == null) {
@@ -1921,7 +1927,7 @@ public class MainActivity extends AppCompatActivity {
             btnReceiptGallery.setOnClickListener(v -> {
                 receiptImportHostView = dialogView;
                 awaitingGalleryPick = true;
-                galleryPickLauncher.launch("image/*");
+                galleryPickLauncher.launch(new String[]{"image/*"});
             });
         }
         View btnPreview = dialogView.findViewById(R.id.btnReceiptPreview);
@@ -1948,28 +1954,93 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showReceiptImagePreview(Uri uri) {
-        if (uri != null) openReceiptWithRecovery(uri.toString(), true);
+        if (uri == null) {
+            return;
+        }
+        final String reference = uri.toString();
+        // Read-only: do not re-import/move. That can delete the only album row.
+        receiptRecoveryExecutor.execute(() -> {
+            if (ReceiptBitmapLoader.isReadable(getApplicationContext(), uri)) {
+                runOnUiThread(() -> {
+                    if (isFinishing() || isDestroyed()) return;
+                    launchReceiptPreviewActivity(uri);
+                });
+                return;
+            }
+            List<ReceiptReferenceRepair.Entry> all = envelopes == null
+                    ? Collections.emptyList()
+                    : ReceiptReferenceRepair.snapshot(envelopes);
+            Map<String, ReceiptReferenceResolver.Result> resolved = all.isEmpty()
+                    ? Collections.emptyMap()
+                    : ReceiptReferenceRepair.resolveAll(
+                            new AndroidReceiptSource(this), all, TimeZone.getDefault());
+            runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                List<ReceiptReferenceRepair.Entry> matching = receiptEntriesFor(reference);
+                ReceiptReferenceResolver.Result result = firstReceiptResult(matching, resolved);
+                if (result != null && result.status == ReceiptReferenceResolver.Status.RESOLVED) {
+                    applyReceiptResolution(reference, matching, result);
+                    launchReceiptPreviewActivity(Uri.parse(namedReceiptReference(result)));
+                } else {
+                    showReceiptRecoveryFailure(reference, result != null
+                            ? result.status
+                            : ReceiptReferenceResolver.Status.MISSING);
+                }
+            });
+        });
+    }
+
+    /**
+     * Content URIs must be Intent data so read grants reach {@link ReceiptPreviewActivity}.
+     * Extras do not forward URI permissions. Never put {@code file://} on {@link Intent#setData}.
+     * Write grants are omitted: they throw if the caller only has read access.
+     */
+    private void launchReceiptPreviewActivity(Uri uri) {
+        if (uri == null) {
+            return;
+        }
+        Intent preview = new Intent(this, ReceiptPreviewActivity.class);
+        preview.putExtra(ReceiptPreviewActivity.EXTRA_IMAGE_URI, uri.toString());
+        Uri data = ReceiptPreviewActivity.intentDataUri(uri);
+        if (data != null) {
+            preview.setDataAndType(data, "image/*");
+            preview.setClipData(android.content.ClipData.newRawUri("receipt", data));
+            preview.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        }
+        try {
+            startActivity(preview);
+        } catch (RuntimeException e) {
+            Log.e("EnvelopeMoney", "receipt preview launch", e);
+            Toast.makeText(this, R.string.receipt_preview_load_failed, Toast.LENGTH_LONG).show();
+        }
     }
 
     /** Resolution is read-only; only verified associations are applied to unchanged live records. */
     private void openReceiptWithRecovery(String reference, boolean requestPermission) {
+        List<ReceiptReferenceRepair.Entry> all = envelopes == null
+                ? Collections.emptyList()
+                : ReceiptReferenceRepair.snapshot(envelopes);
         List<ReceiptReferenceRepair.Entry> entries = receiptEntriesFor(reference);
-        String fileName = entries.isEmpty() ? null : entries.get(0).fileName;
         receiptRecoveryExecutor.execute(() -> {
-            ReceiptReferenceResolver.Result result = AndroidReceiptSource.resolve(
-                    getApplicationContext(), reference, fileName);
+            Map<String, ReceiptReferenceResolver.Result> resolved = all.isEmpty()
+                    ? Collections.emptyMap()
+                    : ReceiptReferenceRepair.resolveAll(
+                            new AndroidReceiptSource(this), all, TimeZone.getDefault());
+            ReceiptReferenceResolver.Result result = firstReceiptResult(entries, resolved);
             runOnUiThread(() -> {
                 if (isFinishing() || isDestroyed()) return;
-                if (result.status == ReceiptReferenceResolver.Status.RESOLVED) {
+                if (result != null && result.status == ReceiptReferenceResolver.Status.RESOLVED) {
                     applyReceiptResolution(reference, entries, result);
-                    startActivity(new Intent(this, ReceiptPreviewActivity.class)
-                            .putExtra(ReceiptPreviewActivity.EXTRA_IMAGE_URI, namedReceiptReference(result)));
+                    launchReceiptPreviewActivity(Uri.parse(namedReceiptReference(result)));
                 } else if (requestPermission && new AndroidReceiptSource(this).needsReadPermission()
+                        && result != null
                         && result.status == ReceiptReferenceResolver.Status.PERMISSION_REQUIRED) {
                     pendingReceiptReference = reference;
                     receiptReadPermissionLauncher.launch(AndroidReceiptSource.readPermission());
                 } else {
-                    showReceiptRecoveryFailure(reference, result.status);
+                    showReceiptRecoveryFailure(reference, result != null
+                            ? result.status
+                            : ReceiptReferenceResolver.Status.MISSING);
                 }
             });
         });
@@ -2001,14 +2072,9 @@ public class MainActivity extends AppCompatActivity {
         if (entries.isEmpty()) return;
         receiptRepairInProgress = true;
         receiptRecoveryExecutor.execute(() -> {
-            Map<String, ReceiptReferenceResolver.Result> results = new HashMap<>();
-            ReceiptReferenceResolver resolver = new ReceiptReferenceResolver(new AndroidReceiptSource(this));
-            for (ReceiptReferenceRepair.Entry entry : entries) {
-                if (Thread.currentThread().isInterrupted()) return;
-                if (!results.containsKey(entry.key())) {
-                    results.put(entry.key(), resolver.resolve(entry.reference, entry.fileName));
-                }
-            }
+            if (Thread.currentThread().isInterrupted()) return;
+            Map<String, ReceiptReferenceResolver.Result> results = ReceiptReferenceRepair.resolveAll(
+                    new AndroidReceiptSource(this), entries, TimeZone.getDefault());
             runOnUiThread(() -> {
                 receiptRepairInProgress = false;
                 if (isFinishing() || isDestroyed()) return;
@@ -2026,10 +2092,33 @@ public class MainActivity extends AppCompatActivity {
 
     private List<ReceiptReferenceRepair.Entry> receiptEntriesFor(String reference) {
         List<ReceiptReferenceRepair.Entry> matching = new ArrayList<>();
+        if (envelopes == null || reference == null) return matching;
+        String stripped = stripReceiptFragment(reference);
         for (ReceiptReferenceRepair.Entry entry : ReceiptReferenceRepair.snapshot(envelopes)) {
-            if (reference.equals(entry.reference)) matching.add(entry);
+            if (reference.equals(entry.reference) || stripped.equals(stripReceiptFragment(entry.reference))) {
+                matching.add(entry);
+            }
         }
         return matching;
+    }
+
+    private static String stripReceiptFragment(String reference) {
+        if (reference == null) return "";
+        int hash = reference.indexOf('#');
+        return hash >= 0 ? reference.substring(0, hash) : reference;
+    }
+
+    private static ReceiptReferenceResolver.Result firstReceiptResult(
+            List<ReceiptReferenceRepair.Entry> matching,
+            Map<String, ReceiptReferenceResolver.Result> results) {
+        ReceiptReferenceResolver.Result fallback = null;
+        for (ReceiptReferenceRepair.Entry entry : matching) {
+            ReceiptReferenceResolver.Result result = results.get(entry.key());
+            if (result == null) continue;
+            if (result.status == ReceiptReferenceResolver.Status.RESOLVED) return result;
+            if (fallback == null) fallback = result;
+        }
+        return fallback;
     }
 
     private String namedReceiptReference(ReceiptReferenceResolver.Result result) {

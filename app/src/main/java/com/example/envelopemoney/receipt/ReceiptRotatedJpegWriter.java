@@ -28,7 +28,6 @@ public final class ReceiptRotatedJpegWriter {
      */
     public static void writeRotatedJpegOverwrite(@NonNull Context context, @NonNull Uri uri, float degrees)
             throws IOException {
-        uri = ReceiptBitmapLoader.requireResolvedUri(context, uri);
         float d = degrees % 360f;
         if (d < -0.01f) {
             d += 360f;
@@ -54,8 +53,7 @@ public final class ReceiptRotatedJpegWriter {
                 src = null;
             }
             try {
-                Uri writeUri = uri;
-                try (OutputStream out = context.getContentResolver().openOutputStream(writeUri, "w")) {
+                try (OutputStream out = context.getContentResolver().openOutputStream(uri, "w")) {
                     if (out == null) {
                         throw new IOException("openOutputStream null");
                     }

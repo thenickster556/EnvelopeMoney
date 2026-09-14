@@ -27,6 +27,18 @@ public class ReceiptPreviewActivity extends AppCompatActivity {
 
     public static final String EXTRA_IMAGE_URI = "receipt_image_uri";
 
+    /**
+     * URI permission grants follow {@link android.content.Intent#setData}, not extras.
+     * Only {@code content://} may be put on Intent data ({@code file://} throws FileUriExposedException).
+     */
+    @Nullable
+    public static Uri intentDataUri(@Nullable Uri uri) {
+        if (uri == null || !"content".equalsIgnoreCase(uri.getScheme())) {
+            return null;
+        }
+        return uri.getFragment() == null ? uri : uri.buildUpon().fragment(null).build();
+    }
+
     private static final String TAG = "EnvelopeMoney";
 
     private ReceiptZoomImageView zoomImage;
@@ -71,12 +83,16 @@ public class ReceiptPreviewActivity extends AppCompatActivity {
         btnRotRight.setOnClickListener(v -> applyViewRotation(90f));
         btnSaveRotation.setOnClickListener(v -> confirmReplaceThenSave());
 
+        Uri fromData = getIntent() != null ? getIntent().getData() : null;
         String uriStr = getIntent() != null ? getIntent().getStringExtra(EXTRA_IMAGE_URI) : null;
-        if (uriStr == null || uriStr.isEmpty()) {
+        if (fromData != null) {
+            imageUri = fromData;
+        } else if (uriStr != null && !uriStr.isEmpty()) {
+            imageUri = Uri.parse(uriStr);
+        } else {
             showError();
             return;
         }
-        imageUri = Uri.parse(uriStr);
         loadPictureInBackground(false);
     }
 

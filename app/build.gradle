@@ -66,6 +66,7 @@ tasks.withType(Test).configureEach {
 }
 def receiptRecoveryClasses = fileTree(dir: "$buildDir/intermediates/javac/debug/classes", includes: [
         '**/receipt/ReceiptReferenceResolver*.class', '**/receipt/ReceiptReferenceRepair*.class',
+        '**/receipt/ReceiptAlbumMatcher*.class',
         '**/receipt/AndroidReceiptSource*.class'])
 task receiptRecoveryCoverage(type: JacocoReport, dependsOn: 'testDebugUnitTest') {
     executionData file("$buildDir/jacoco/testDebugUnitTest.exec")
