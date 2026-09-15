@@ -10,4 +10,6 @@
     <dimen name="comment_suggestion_row_height">44dp</dimen>
     <dimen name="comment_suggestion_list_max_height">132dp</dimen>
     <dimen name="analysis_month_chart_height">160dp</dimen>
+    <dimen name="receipt_preview_toolbar_icon_size">56dp</dimen>
+    <dimen name="receipt_preview_toolbar_icon_gap">8dp</dimen>
 </resources>

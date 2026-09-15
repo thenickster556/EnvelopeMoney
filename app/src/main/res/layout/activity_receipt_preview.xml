@@ -25,76 +25,101 @@
             android:layout_height="wrap_content"
             android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:padding="8dp">
+            android:paddingStart="4dp"
+            android:paddingTop="8dp"
+            android:paddingEnd="4dp"
+            android:paddingBottom="8dp">
 
-            <ImageButton
-                android:id="@+id/btnReceiptPreviewClose"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="@string/content_desc_close_receipt_preview"
-                android:src="@drawable/ic_back_white_24"
-                android:tint="@android:color/white" />
-
-            <!-- Candidate check header: transaction context the user double-checks against. -->
             <LinearLayout
-                android:id="@+id/candidateInfo"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
                 android:layout_weight="1"
-                android:orientation="vertical"
-                android:visibility="gone">
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
 
-                <TextView
-                    android:id="@+id/tvCandidateTitle"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:ellipsize="end"
-                    android:singleLine="true"
-                    android:textColor="@color/white"
-                    android:textStyle="bold" />
+                <ImageButton
+                    android:id="@+id/btnReceiptPreviewClose"
+                    android:layout_width="@dimen/receipt_preview_toolbar_icon_size"
+                    android:layout_height="@dimen/receipt_preview_toolbar_icon_size"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/content_desc_close_receipt_preview"
+                    android:padding="8dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_back_white_24"
+                    android:tint="@android:color/white" />
 
-                <TextView
-                    android:id="@+id/tvCandidateDetail"
-                    android:layout_width="match_parent"
+                <!-- Candidate check header: transaction context the user double-checks against. -->
+                <LinearLayout
+                    android:id="@+id/candidateInfo"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:ellipsize="end"
-                    android:singleLine="true"
-                    android:textColor="@color/white"
-                    android:textSize="12sp" />
+                    android:layout_marginStart="8dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:id="@+id/tvCandidateTitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:ellipsize="end"
+                        android:singleLine="true"
+                        android:textColor="@color/white"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvCandidateDetail"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:ellipsize="end"
+                        android:singleLine="true"
+                        android:textColor="@color/white"
+                        android:textSize="12sp" />
+                </LinearLayout>
             </LinearLayout>
 
             <ImageButton
                 android:id="@+id/btnReceiptChooseDifferent"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
+                android:layout_width="@dimen/receipt_preview_toolbar_icon_size"
+                android:layout_height="@dimen/receipt_preview_toolbar_icon_size"
+                android:layout_marginStart="@dimen/receipt_preview_toolbar_icon_gap"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="@string/receipt_choose_different"
+                android:padding="8dp"
+                android:scaleType="fitCenter"
                 android:src="@drawable/ic_swap_white_24" />
 
             <ImageButton
                 android:id="@+id/btnReceiptSaveRotation"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
+                android:layout_width="@dimen/receipt_preview_toolbar_icon_size"
+                android:layout_height="@dimen/receipt_preview_toolbar_icon_size"
+                android:layout_marginStart="@dimen/receipt_preview_toolbar_icon_gap"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="@string/receipt_preview_save_rotation"
+                android:padding="8dp"
+                android:scaleType="fitCenter"
                 android:src="@drawable/ic_save_white_24" />
 
             <ImageButton
                 android:id="@+id/btnReceiptRotateLeft"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
+                android:layout_width="@dimen/receipt_preview_toolbar_icon_size"
+                android:layout_height="@dimen/receipt_preview_toolbar_icon_size"
+                android:layout_marginStart="@dimen/receipt_preview_toolbar_icon_gap"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="@string/receipt_preview_rotate_left"
+                android:padding="8dp"
+                android:scaleType="fitCenter"
                 android:src="@drawable/ic_rotate_left_white_24" />
 
             <ImageButton
                 android:id="@+id/btnReceiptRotateRight"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
+                android:layout_width="@dimen/receipt_preview_toolbar_icon_size"
+                android:layout_height="@dimen/receipt_preview_toolbar_icon_size"
+                android:layout_marginStart="@dimen/receipt_preview_toolbar_icon_gap"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="@string/receipt_preview_rotate_right"
+                android:padding="8dp"
+                android:scaleType="fitCenter"
                 android:src="@drawable/ic_rotate_right_white_24" />
         </LinearLayout>
 

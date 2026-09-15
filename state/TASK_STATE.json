@@ -21,6 +21,12 @@
   ],
   "completed_tasks": [
     {
+      "id": "receipt-preview-toolbar-touch-2026-09-14",
+      "title": "Larger spaced preview toolbar icons to prevent fat-finger taps",
+      "status": "completed",
+      "intent": "Top chrome icons packed at 48dp with no gutter were easy to mis-tap. 56dp targets, 8dp gutters, fitCenter glyphs, close in a weighted cluster with the title so attached-mode actions stay right. Tests first: ReceiptPreviewToolbarMetricsTest 3 cases red (class missing) then green. Full suite 270 / 3 baseline. Recovery coverage gates pass. assembleDebug + git diff --check pass. Layout verified by compile/resources/on-device checklist (no MainActivity JVM harness)."
+    },
+    {
       "id": "receipt-candidate-swipe-hint-2026-09-14",
       "title": "Candidate check: swipe pictures, top gesture hint, themed Select",
       "status": "completed",

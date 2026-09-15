@@ -124,7 +124,7 @@ With two renamed copies in the folder: tap the dead reference → picker (80dp r
 - MainActivity release/reserved wiring and the icon rendering have no JVM harness (recorded limitation as before): compile + resource lint + the checklist below.
 
 ## On-device check (recommended, not yet run)
-Attach picture X from an ambiguous pair, then tap the ⟷ icon twice: the first swap list must show Y (X excluded); pick Y, then tap ⟷ again — X must be back in the list. The toolbar shows only ✕ and ⟷ until a rotation makes ↺ ▭ ↻ meaningful; save stays dimmed until the rotation is dirty.
+Attach picture X from an ambiguous pair, then tap the ⟷ icon twice: the first swap list must show Y (X excluded); pick Y, then tap ⟷ again — X must be back in the list. The toolbar shows only ✕ and ⟷ until a rotation makes ↺ ▭ ↻ meaningful; save stays dimmed until the rotation is dirty. Toolbar icons are 56dp with 8dp gutters (close included); adjacent actions must be tappable without hitting the neighbor.
 
 ---
 
@@ -152,3 +152,19 @@ Attach picture X from an ambiguous pair, then tap the ⟷ icon twice: the first 
 - After first pinch/pan/swipe/double-tap/arrow, hint is gone for the rest of the activity.
 - Select is the only attach; back returns to the still-open picker.
 - Attached preview: hint under toolbar; rotate/save/swap unchanged; swipe does nothing.
+
+---
+
+# Preview toolbar 56dp targets + 8dp gutters — 2026-09-14
+
+## Delivered behavior (delta)
+Packed 48dp icons with no gutter were easy to mis-tap. Top chrome close / swap / save / rotate-left / rotate-right are **56dp** (`receipt_preview_toolbar_icon_size`) with **8dp** `layout_marginStart` gutters (`receipt_preview_toolbar_icon_gap`), `scaleType=fitCenter` and 8dp inner padding so the glyph scales inside the hit area. Close + candidate title sit in a weighted cluster so attached-mode actions stay on the right instead of packing against close. Numbers chosen so close + four actions + gutters still fit a 320dp-wide phone.
+
+## Automated results
+- Tests first: `ReceiptPreviewToolbarMetricsTest` (size > 48, gap 8, 320dp row budget) failed to compile before `ReceiptPreviewToolbarMetrics` existed, then passed.
+- Full `:app:testDebugUnitTest`: **270 tests, 267 passed, same 3 pre-existing failures** (baseline before this change: 267/3).
+- Recovery JaCoCo scope unchanged. `:app:assembleDebug` and `git diff --check` recorded after this run.
+- Layout rendering has no JVM harness (recorded limitation as before).
+
+## On-device check (recommended, not yet run)
+Open an attached receipt preview: tap each of swap / save / rotate-left / rotate-right without hitting the neighbor. Close remains easy to hit. On a narrow phone the four actions must remain fully on-screen.
