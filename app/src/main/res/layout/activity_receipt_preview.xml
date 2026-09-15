@@ -59,50 +59,37 @@
                 android:textSize="12sp" />
         </LinearLayout>
 
-        <com.google.android.material.button.MaterialButton
+        <ImageButton
             android:id="@+id/btnReceiptChooseDifferent"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:layout_weight="1"
-            android:text="@string/receipt_choose_different"
-            android:textColor="@color/white"
-            app:strokeColor="@color/white" />
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/receipt_choose_different"
+            android:src="@drawable/ic_swap_white_24" />
 
-        <com.google.android.material.button.MaterialButton
+        <ImageButton
             android:id="@+id/btnReceiptSaveRotation"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:layout_weight="1"
-            android:enabled="false"
-            android:text="@string/receipt_preview_save_rotation"
-            android:textColor="@color/white"
-            app:strokeColor="@color/white" />
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/receipt_preview_save_rotation"
+            android:src="@drawable/ic_save_white_24" />
 
-        <com.google.android.material.button.MaterialButton
+        <ImageButton
             android:id="@+id/btnReceiptRotateLeft"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:layout_weight="1"
-            android:text="@string/receipt_preview_rotate_left"
-            android:textColor="@color/white"
-            app:strokeColor="@color/white" />
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/receipt_preview_rotate_left"
+            android:src="@drawable/ic_rotate_left_white_24" />
 
-        <com.google.android.material.button.MaterialButton
+        <ImageButton
             android:id="@+id/btnReceiptRotateRight"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:layout_weight="1"
-            android:text="@string/receipt_preview_rotate_right"
-            android:textColor="@color/white"
-            app:strokeColor="@color/white" />
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/receipt_preview_rotate_right"
+            android:src="@drawable/ic_rotate_right_white_24" />
     </LinearLayout>
 
     <!-- Candidate check navigation: arrows, counter, and the deliberate attach action. -->

@@ -107,3 +107,21 @@ Rename two copies of one receipt into `Pictures/Mountain Money`, tap the dead re
 
 ## On-device check (recommended, not yet run)
 With two renamed copies in the folder: tap the dead reference → picker (80dp rows + summary) → row tap → fullscreen check showing `Lunch · $12.50 / Food · Sep 7, 2026`; arrows cycle with counter, Select attaches (toast + preview), back minimizes to the open picker. In the normal preview tap `Choose different` → same flow with the attached file absent; with no other matches expect only the toast.
+
+---
+
+# Stable swap pool + icon-only toolbar — 2026-09-14
+
+## Delivered behavior (delta)
+- **Bug fixed — "Choose different" said "No other pictures match" and lost earlier candidates.** After a pick, the stored filename belongs to the picked file, so the previous single-pass `swapCandidates` resolved the identity tier to exactly the attached file and never reached the date pool; the session set also never released the replaced reference. `swapCandidates` now builds the pool as an identity scan (exact ∪ normalized ∪ epoch token, no tier short-circuit) union a nameless-claim date pass, deduped, minus the attached file and minus reserved references of other transactions (new `Set` parameter, fragment-stripped); `handleReceiptCandidatePicked` releases the replaced reference when its rows move to the pick, so previous picks reappear. The toast now appears only when nothing else truly matches.
+- **Toolbar de-jumbled:** Choose different / Save rotation / Rotate left / Rotate right became 48dp white vector icons (`ic_swap/ic_save/ic_rotate_left/ic_rotate_right _white_24`) matching the existing close icon's theme; label strings became contentDescriptions (TalkBack unchanged, no orphaned resources); disabled icons dim to 40% alpha via `setIconEnabled` wired into the existing state methods; "Use this picture" remains the single text action in the candidate check.
+
+## Automated results
+- Tests first: the three existing `swapCandidates` tests rewritten to the reserved-set signature plus four new red cases — post-pick same-day others, post-pick epoch sibling on another day, normalized copy sibling, reserved exclusion of another row's file — all red before implementation (compile-level for the signature), green after.
+- Full `:app:testDebugUnitTest`: **257 tests, 254 passed, same 3 pre-existing failures** (baseline before this change: 254/3).
+- Recovery JaCoCo scope: **562/577 lines (97.40%) and 480/576 branches (83.33%)**; `:app:verifyReceiptRecoveryCoverage` passes both 80% gates.
+- `:app:lintDebug`: **43 existing errors** — unchanged (no new findings; label strings kept alive as contentDescriptions). `:app:assembleDebug`: passed. `git diff --check`: passed.
+- MainActivity release/reserved wiring and the icon rendering have no JVM harness (recorded limitation as before): compile + resource lint + the checklist below.
+
+## On-device check (recommended, not yet run)
+Attach picture X from an ambiguous pair, then tap the ⟷ icon twice: the first swap list must show Y (X excluded); pick Y, then tap ⟷ again — X must be back in the list. The toolbar shows only ✕ and ⟷ until a rotation makes ↺ ▭ ↻ meaningful; save stays dimmed until the rotation is dirty.

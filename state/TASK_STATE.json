@@ -21,6 +21,12 @@
   ],
   "completed_tasks": [
     {
+      "id": "receipt-swap-pool-icons-2026-09-14",
+      "title": "Swap pool keeps previous candidates; icon-only preview toolbar",
+      "status": "completed",
+      "intent": "Fixed 'Choose different' losing earlier candidates: after a pick the stored filename names the picked file, so the single matcher pass resolved the identity tier to the attached file (empty pool -> 'No other pictures match' toast) and the session set never released replaced picks. swapCandidates rebuilt: identity scan (exact UNION normalized UNION epoch token, no tier short-circuit) UNION one nameless-claim date pass, deduped by reference, minus attached file and minus reserved references of other transactions (new Set param, fragment-stripped; reserved built in reopenReceiptChooserForSwap from snapshot minus this row); handleReceiptCandidatePicked releases the replaced reference when its rows move. Toolbar de-jumbled: four text MaterialButtons -> 48dp white vector ImageButtons (ic_swap/ic_save/ic_rotate_left/ic_rotate_right_white_24) matching the close-icon theme, contentDescription = existing label strings (TalkBack unchanged, no orphaned resources), setIconEnabled dims disabled icons to 40% alpha, 'Use this picture' stays the single text action. Tests first: 3 rewritten to the 6-arg signature + 4 new red cases (post-pick same-day, epoch sibling other day, normalized copy sibling, reserved exclusion). Full suite 257 tests / 3 baseline failures (baseline 254/3). Coverage 97.40% lines / 83.33% branches, gates pass. Lint 43 baseline errors unchanged. assembleDebug + git diff --check pass. Icon rendering and release/reserved wiring verified by compile/resources/on-device checklist (no MainActivity JVM harness, as before)."
+    },
+    {
       "id": "receipt-candidate-check-swap-2026-09-14",
       "title": "Fullscreen candidate check with arrows/select and change-it-later swap",
       "status": "completed",

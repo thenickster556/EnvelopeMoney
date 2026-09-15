@@ -2325,6 +2325,8 @@ public class MainActivity extends AppCompatActivity {
         pendingCandidateReference = null;
         pendingCandidateResults.clear();
         if (reference == null || chosen == null) return;
+        // Every shared row moves to the pick, so the replaced file is owned nowhere and free again.
+        receiptChosenReferences.remove(stripReceiptFragment(reference));
         receiptChosenReferences.add(chosen.reference);
         if (receiptChooserDialog != null && receiptChooserDialog.isShowing()) {
             receiptChooserDialog.dismiss();
@@ -2334,19 +2336,28 @@ public class MainActivity extends AppCompatActivity {
 
     /**
      * "Choose different" from the normal preview: re-opens the picker for this receipt with the
-     * attached file excluded. Normal recovery cannot produce this list — the attached reference
-     * resolves — so the matcher runs once for this claim alone.
+     * attached file and other transactions' files excluded. Normal recovery cannot produce this
+     * list — the attached reference resolves — so the matcher runs once for this claim alone.
      */
     private void reopenReceiptChooserForSwap(String swapReference) {
         if (swapReference == null) return;
         receiptRecoveryExecutor.execute(() -> {
             List<ReceiptReferenceRepair.Entry> entries = receiptEntriesFor(swapReference);
             Transaction transaction = entries.isEmpty() ? null : entries.get(0).transaction;
-            List<ReceiptReferenceResolver.Result> others = transaction == null
-                    ? Collections.emptyList()
-                    : ReceiptReferenceRepair.swapCandidates(new AndroidReceiptSource(this),
-                            transaction.getReceiptImageFileName(), transaction.getDate(),
-                            swapReference, TimeZone.getDefault());
+            List<ReceiptReferenceResolver.Result> swapPool = Collections.emptyList();
+            if (transaction != null) {
+                Set<String> reserved = new HashSet<>();
+                for (ReceiptReferenceRepair.Entry entry : ReceiptReferenceRepair.snapshot(envelopes)) {
+                    if (entry.transaction == transaction) continue;
+                    if (entry.reference != null && !entry.reference.isEmpty()) {
+                        reserved.add(stripReceiptFragment(entry.reference));
+                    }
+                }
+                swapPool = ReceiptReferenceRepair.swapCandidates(new AndroidReceiptSource(this),
+                        transaction.getReceiptImageFileName(), transaction.getDate(),
+                        swapReference, reserved, TimeZone.getDefault());
+            }
+            final List<ReceiptReferenceResolver.Result> others = swapPool;
             runOnUiThread(() -> {
                 if (isFinishing() || isDestroyed()) return;
                 if (others.isEmpty()) {

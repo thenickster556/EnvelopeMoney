@@ -143,16 +143,15 @@ public final class ReceiptReferenceRepair {
     }
 
     /**
-     * Album files this receipt could be swapped to: the one-claim matcher pool for the stored
-     * filename/date, minus the currently attached file (fragment-insensitive). Read-only; a
-     * denied or empty album returns an empty list instead of prompting.
+     * Every album file this receipt could be swapped to: all identity matches (exact filename,
+     * normalized filename, or epoch token — no tier short-circuit) plus the date-window pool,
+     * minus the attached file and files reserved by other transactions. Read-only; denied or
+     * empty albums return an empty list instead of prompting.
      */
     public static List<ReceiptReferenceResolver.Result> swapCandidates(
             ReceiptReferenceResolver.Source source, String fileName, String transactionDate,
-            String currentReference, TimeZone zone) {
+            String currentReference, Set<String> reservedReferences, TimeZone zone) {
         if (source == null || currentReference == null) return new ArrayList<>();
-        List<ReceiptAlbumMatcher.Claim> claim = Collections.singletonList(new ReceiptAlbumMatcher.Claim(
-                "swap", ReceiptReferenceResolver.validFileName(fileName) ? fileName : null, transactionDate));
         List<ReceiptReferenceResolver.Result> album;
         try {
             album = source.readAlbum();
@@ -160,20 +159,42 @@ public final class ReceiptReferenceRepair {
             return new ArrayList<>();
         }
         TimeZone tz = zone != null ? zone : TimeZone.getDefault();
-        ReceiptReferenceResolver.Result match = ReceiptAlbumMatcher.assign(
-                claim, album, tz, Collections.emptySet(), !source.albumAccessRestricted()).get("swap");
-        List<ReceiptReferenceResolver.Result> pool;
-        if (match == null) {
-            pool = Collections.emptyList();
-        } else if (match.status == ReceiptReferenceResolver.Status.RESOLVED) {
-            pool = Collections.singletonList(match);
-        } else {
-            pool = match.alternatives;
+        Set<String> reserved = reservedReferences != null ? reservedReferences : Collections.emptySet();
+        String wantedName = ReceiptReferenceResolver.validFileName(fileName) ? fileName : null;
+        String wantedNormalized = ReceiptAlbumMatcher.normalizeFileName(wantedName);
+        String wantedToken = ReceiptAlbumMatcher.epochToken(wantedName);
+        Set<String> seen = new HashSet<>();
+        List<ReceiptReferenceResolver.Result> pool = new ArrayList<>();
+        if (album != null) {
+            for (ReceiptReferenceResolver.Result file : album) {
+                if (file == null || file.reference == null || file.fileName == null) continue;
+                boolean exact = wantedName != null && wantedName.equals(file.fileName);
+                boolean normalized = wantedNormalized != null
+                        && wantedNormalized.equals(ReceiptAlbumMatcher.normalizeFileName(file.fileName));
+                boolean byToken = wantedToken != null
+                        && wantedToken.equals(ReceiptAlbumMatcher.epochToken(file.fileName));
+                if ((exact || normalized || byToken) && seen.add(file.reference)) pool.add(file);
+            }
+        }
+        List<ReceiptAlbumMatcher.Claim> dateClaim = Collections.singletonList(
+                new ReceiptAlbumMatcher.Claim("swap-date", null, transactionDate));
+        ReceiptReferenceResolver.Result dateMatch = ReceiptAlbumMatcher.assign(
+                dateClaim, album, tz, Collections.emptySet(), !source.albumAccessRestricted())
+                .get("swap-date");
+        if (dateMatch != null) {
+            List<ReceiptReferenceResolver.Result> dayPool =
+                    dateMatch.status == ReceiptReferenceResolver.Status.RESOLVED
+                            ? Collections.singletonList(dateMatch)
+                            : dateMatch.alternatives;
+            for (ReceiptReferenceResolver.Result file : dayPool) {
+                if (file == null || file.reference == null) continue;
+                if (seen.add(file.reference)) pool.add(file);
+            }
         }
         String attached = stripFragment(currentReference);
         List<ReceiptReferenceResolver.Result> others = new ArrayList<>();
         for (ReceiptReferenceResolver.Result candidate : pool) {
-            if (candidate == null || candidate.reference == null) continue;
+            if (reserved.contains(candidate.reference)) continue;
             if (stripFragment(candidate.reference).equals(attached)) continue;
             others.add(candidate);
         }

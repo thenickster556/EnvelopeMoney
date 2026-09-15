@@ -71,10 +71,10 @@ public class ReceiptPreviewActivity extends AppCompatActivity {
     private static final String TAG = "EnvelopeMoney";
 
     private ReceiptZoomImageView zoomImage;
-    private MaterialButton btnRotLeft;
-    private MaterialButton btnRotRight;
-    private MaterialButton btnSaveRotation;
-    private MaterialButton btnChooseDifferent;
+    private ImageButton btnRotLeft;
+    private ImageButton btnRotRight;
+    private ImageButton btnSaveRotation;
+    private ImageButton btnChooseDifferent;
     private MaterialButton btnCandidateSelect;
     private ImageButton btnCandidatePrevious;
     private ImageButton btnCandidateNext;
@@ -313,10 +313,16 @@ public class ReceiptPreviewActivity extends AppCompatActivity {
 
     private void setPictureOperationInProgress(boolean inProgress) {
         pictureOperationInProgress = inProgress;
-        btnRotLeft.setEnabled(!inProgress && loadOk);
-        btnRotRight.setEnabled(!inProgress && loadOk);
+        setIconEnabled(btnRotLeft, !inProgress && loadOk);
+        setIconEnabled(btnRotRight, !inProgress && loadOk);
         updateCandidateSelectEnabled();
         updateRotationDirtyUi();
+    }
+
+    /** Icon buttons dim instead of relying on text-button tinting; never hidden by state. */
+    private void setIconEnabled(ImageButton button, boolean enabled) {
+        button.setEnabled(enabled);
+        button.setAlpha(enabled ? 1f : 0.4f);
     }
     private void showErrorAfterSave() {
         tvError.setVisibility(View.VISIBLE);
@@ -339,7 +345,8 @@ public class ReceiptPreviewActivity extends AppCompatActivity {
 
     private void updateRotationDirtyUi() {
         if (btnSaveRotation != null) {
-            btnSaveRotation.setEnabled(loadOk && !pictureOperationInProgress && isRotationDirty());
+            setIconEnabled(btnSaveRotation,
+                    loadOk && !pictureOperationInProgress && isRotationDirty());
         }
     }
 
