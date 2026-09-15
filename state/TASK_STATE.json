@@ -21,6 +21,12 @@
   ],
   "completed_tasks": [
     {
+      "id": "receipt-immersive-cue-window-2026-09-15",
+      "title": "Fullscreen pick cue and ranked ±1-day unused receipt options",
+      "status": "completed",
+      "intent": "Candidate immersive only: bottom translucent comment/pond/amount cue. Unique auto-match unchanged; failed unique bind offers unused Pictures/Mountain Money shots from tx date ±1, ranked by capture time. Tests first. Full suite 285 / 3 baseline. Recovery 97.54% lines / 82.04% branches. Lint 43 baseline. assembleDebug + git diff --check pass. Device UI not re-run."
+    },
+    {
       "id": "codex-p1-gallery-picker-2026-09-15",
       "title": "Gallery photo picker, off-thread receipt IO, web transfer save, GridFS rotate, preview fullscreen",
       "status": "completed",

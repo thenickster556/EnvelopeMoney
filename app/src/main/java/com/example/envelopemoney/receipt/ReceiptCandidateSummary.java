@@ -18,9 +18,31 @@ public final class ReceiptCandidateSummary {
     /** "Lunch · $12.50" — comment first, pond name when there is no comment; negatives read "-$3.20". */
     public static String titleLine(String comment, String envelopeName, double amount) {
         String title = comment != null && !comment.trim().isEmpty() ? comment.trim() : envelopeName;
+        return title + " · " + formatMoney(amount);
+    }
+
+    /** Immersive cue line 1. Empty comments use {@code emptyFallback} so the three-line layout stays stable. */
+    public static String immersiveComment(String comment, String emptyFallback) {
+        if (comment != null && !comment.trim().isEmpty()) {
+            return comment.trim();
+        }
+        return emptyFallback != null ? emptyFallback : "";
+    }
+
+    /** Immersive cue line 2. Pond is always shown, unlike {@link #detailLine}. */
+    public static String immersivePond(String envelopeName) {
+        return envelopeName != null ? envelopeName : "";
+    }
+
+    /** Immersive cue line 3. Same money rules as {@link #titleLine}. */
+    public static String immersiveAmount(double amount) {
+        return formatMoney(amount);
+    }
+
+    private static String formatMoney(double amount) {
         double cents = MoneyMath.roundToCents(amount);
         String sign = cents < 0 ? "-" : "";
-        return title + " · " + sign + String.format(Locale.US, "$%.2f", Math.abs(cents));
+        return sign + String.format(Locale.US, "$%.2f", Math.abs(cents));
     }
 
     /** "Food · Sep 7, 2026" — pond only when the comment already named something else. */

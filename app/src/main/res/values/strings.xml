@@ -157,6 +157,8 @@
     <string name="receipt_chooser_unnamed_picture">Picture</string>
     <string name="receipt_picture_updated">Receipt picture updated.</string>
     <string name="receipt_candidate_select">Use this picture</string>
+    <string name="receipt_candidate_no_comment">No comment</string>
+    <string name="content_desc_receipt_immersive_cue">Matching %1$s, %2$s, %3$s</string>
     <string name="receipt_candidate_count">%1$d of %2$d</string>
     <string name="content_desc_receipt_candidate_previous">Previous candidate picture</string>
     <string name="content_desc_receipt_candidate_next">Next candidate picture</string>

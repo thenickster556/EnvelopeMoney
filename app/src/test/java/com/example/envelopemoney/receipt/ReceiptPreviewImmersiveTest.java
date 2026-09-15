@@ -35,4 +35,12 @@ public class ReceiptPreviewImmersiveTest {
         assertTrue(ReceiptPreviewImmersive.consumeBack(true));
         assertFalse(ReceiptPreviewImmersive.consumeBack(false));
     }
+
+    @Test
+    public void cue_visibleOnlyWhenImmersiveAndCandidate() {
+        assertEquals(View.VISIBLE, ReceiptPreviewImmersive.cueVisibility(true, true));
+        assertEquals(View.GONE, ReceiptPreviewImmersive.cueVisibility(false, true));
+        assertEquals(View.GONE, ReceiptPreviewImmersive.cueVisibility(true, false));
+        assertEquals(View.GONE, ReceiptPreviewImmersive.cueVisibility(false, false));
+    }
 }

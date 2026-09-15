@@ -27,4 +27,18 @@ public class ReceiptCandidateSummaryTest {
         assertEquals("Food · not-a-date",
                 ReceiptCandidateSummary.detailLine("Lunch", "Food", "not-a-date"));
     }
+
+    @Test
+    public void immersiveCueShowsCommentPondAndAmountSeparately() {
+        assertEquals("Lunch",
+                ReceiptCandidateSummary.immersiveComment("Lunch", "No comment"));
+        assertEquals("No comment",
+                ReceiptCandidateSummary.immersiveComment(null, "No comment"));
+        assertEquals("No comment",
+                ReceiptCandidateSummary.immersiveComment("   ", "No comment"));
+        assertEquals("Groceries", ReceiptCandidateSummary.immersivePond("Groceries"));
+        assertEquals("", ReceiptCandidateSummary.immersivePond(null));
+        assertEquals("$12.50", ReceiptCandidateSummary.immersiveAmount(12.5));
+        assertEquals("-$3.20", ReceiptCandidateSummary.immersiveAmount(-3.2));
+    }
 }

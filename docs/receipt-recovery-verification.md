@@ -181,3 +181,18 @@ Add/edit **From gallery** launches `GetContent` (`image/*`) so the photo gallery
 
 ## On-device check (recommended, not yet run)
 Add transaction → gallery icon → photo grid, not Files. Candidate slides: tap fullscreen → JPEG fills, exit/Back restores Select.
+
+# Fullscreen pick cue + ranked ±1-day options — 2026-09-15
+
+## Delivered behavior (delta)
+Candidate immersive (the `[FS]` button only) shows a bottom 40% black glass strip with comment, pond, and amount so the JPEG can fill the screen without losing transaction context. The opaque header + Select screen is unchanged. Empty comment reads **No comment**. Exit overlay / Back hides the cue.
+
+Unique automatic binds are unchanged. When unique bind fails, unused `Pictures/Mountain Money` files whose capture local day is the transaction date ±1 (minus bound/reserved) become ranked chooser alternatives (stale `MountainMoney_{epoch}` else noon of the date; closer capture first). Identity collisions union that window. An empty window stays MISSING. No extra MediaStore query or stream open. Recovery still never opens a Files/gallery picker.
+
+## Automated results
+- Tests first: `ReceiptCandidateSummaryTest` immersive format, `ReceiptPreviewImmersiveTest` cue visibility, `ReceiptAlbumMatcherTest` window+rank (unique still auto, unused ±1 day ranked, reserved excluded) failed to compile before helpers existed, then passed.
+- Full `:app:testDebugUnitTest`: **285 tests, 282 passed, same 3 pre-existing failures** (baseline before this change: 274/3).
+- Recovery JaCoCo: 97.54% lines (635/651) / 82.04% branches (530/646), gates pass. Lint: 43 baseline errors. `:app:assembleDebug` and `git diff --check` pass.
+
+## On-device check (recommended, not yet run)
+Candidate slides → `[FS]`: comment, pond, amount readable through the glass; exit still hits; Exit/Back restores Select. Dead receipt with several unused shots that day ±1: picker opens quickly, closest capture first. Unique one-file days still skip the picker.

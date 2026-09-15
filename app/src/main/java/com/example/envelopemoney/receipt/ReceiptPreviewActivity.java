@@ -33,6 +33,9 @@ public class ReceiptPreviewActivity extends AppCompatActivity {
     public static final String EXTRA_CANDIDATE_INDEX = "receipt_candidate_index";
     public static final String EXTRA_CANDIDATE_TITLE = "receipt_candidate_title";
     public static final String EXTRA_CANDIDATE_DETAIL = "receipt_candidate_detail";
+    public static final String EXTRA_CANDIDATE_COMMENT = "receipt_candidate_comment";
+    public static final String EXTRA_CANDIDATE_POND = "receipt_candidate_pond";
+    public static final String EXTRA_CANDIDATE_AMOUNT = "receipt_candidate_amount";
     public static final String EXTRA_PICKED_REFERENCE = "receipt_picked_reference";
     public static final String EXTRA_REQUEST_SWAP = "receipt_request_swap";
     public static final String EXTRA_SWAP_REFERENCE = "receipt_swap_reference";
@@ -80,6 +83,10 @@ public class ReceiptPreviewActivity extends AppCompatActivity {
     private ImageButton btnExitFullscreen;
     private View topChrome;
     private View candidateBottomBar;
+    private View candidateImmersiveCue;
+    private TextView tvImmersiveComment;
+    private TextView tvImmersivePond;
+    private TextView tvImmersiveAmount;
     private MaterialButton btnCandidateSelect;
     private ImageButton btnCandidatePrevious;
     private ImageButton btnCandidateNext;
@@ -127,6 +134,10 @@ public class ReceiptPreviewActivity extends AppCompatActivity {
         btnExitFullscreen = findViewById(R.id.btnReceiptPreviewExitFullscreen);
         topChrome = findViewById(R.id.receiptPreviewTopChrome);
         candidateBottomBar = findViewById(R.id.candidateBottomBar);
+        candidateImmersiveCue = findViewById(R.id.candidateImmersiveCue);
+        tvImmersiveComment = findViewById(R.id.tvImmersiveComment);
+        tvImmersivePond = findViewById(R.id.tvImmersivePond);
+        tvImmersiveAmount = findViewById(R.id.tvImmersiveAmount);
         btnCandidateSelect = findViewById(R.id.btnCandidateSelect);
         btnCandidatePrevious = findViewById(R.id.btnCandidatePrevious);
         btnCandidateNext = findViewById(R.id.btnCandidateNext);
@@ -197,6 +208,7 @@ public class ReceiptPreviewActivity extends AppCompatActivity {
         candidateBottomBar.setVisibility(View.VISIBLE);
         tvCandidateTitle.setText(getIntent().getStringExtra(EXTRA_CANDIDATE_TITLE));
         tvCandidateDetail.setText(getIntent().getStringExtra(EXTRA_CANDIDATE_DETAIL));
+        bindImmersiveCue();
         tvGesturesHint.setText(R.string.receipt_preview_gestures_hint_candidates);
         zoomImage.setFitSwipeListener(delta -> {
             if (pictureOperationInProgress) {
@@ -214,7 +226,28 @@ public class ReceiptPreviewActivity extends AppCompatActivity {
     private void setPreviewImmersive(boolean value) {
         immersive = value;
         ReceiptPreviewImmersive.apply(immersive, isCandidateMode(),
-                topChrome, candidateBottomBar, btnExitFullscreen);
+                topChrome, candidateBottomBar, btnExitFullscreen, candidateImmersiveCue);
+    }
+
+    /** Comment, pond, and amount for the fullscreen glass; empty comment reads "No comment". */
+    private void bindImmersiveCue() {
+        String comment = getIntent().getStringExtra(EXTRA_CANDIDATE_COMMENT);
+        String pond = getIntent().getStringExtra(EXTRA_CANDIDATE_POND);
+        String amount = getIntent().getStringExtra(EXTRA_CANDIDATE_AMOUNT);
+        if (comment == null || comment.trim().isEmpty()) {
+            comment = getString(R.string.receipt_candidate_no_comment);
+        }
+        if (pond == null) {
+            pond = "";
+        }
+        if (amount == null) {
+            amount = "";
+        }
+        tvImmersiveComment.setText(comment);
+        tvImmersivePond.setText(pond);
+        tvImmersiveAmount.setText(amount);
+        candidateImmersiveCue.setContentDescription(
+                getString(R.string.content_desc_receipt_immersive_cue, comment, pond, amount));
     }
 
     private boolean isCandidateMode() {

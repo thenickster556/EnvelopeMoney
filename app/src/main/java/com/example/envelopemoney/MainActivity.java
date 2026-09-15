@@ -2299,6 +2299,10 @@ public class MainActivity extends AppCompatActivity {
                 Math.max(0, Math.min(startIndex, references.length - 1)));
         check.putExtra(ReceiptPreviewActivity.EXTRA_CANDIDATE_TITLE, lines[0]);
         check.putExtra(ReceiptPreviewActivity.EXTRA_CANDIDATE_DETAIL, lines[1]);
+        String[] cue = receiptCandidateCue(reference);
+        check.putExtra(ReceiptPreviewActivity.EXTRA_CANDIDATE_COMMENT, cue[0]);
+        check.putExtra(ReceiptPreviewActivity.EXTRA_CANDIDATE_POND, cue[1]);
+        check.putExtra(ReceiptPreviewActivity.EXTRA_CANDIDATE_AMOUNT, cue[2]);
         if (grants != null) {
             check.setClipData(grants);
             check.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
@@ -2360,6 +2364,20 @@ public class MainActivity extends AppCompatActivity {
                 showReceiptCandidateChooser(swapReference, others);
             });
         });
+    }
+
+    /** Fullscreen cue lines from the tapped row; empty comment is "No comment". */
+    private String[] receiptCandidateCue(String reference) {
+        String emptyComment = getString(R.string.receipt_candidate_no_comment);
+        List<ReceiptReferenceRepair.Entry> entries = receiptEntriesFor(reference);
+        if (entries.isEmpty()) {
+            return new String[]{emptyComment, "", ""};
+        }
+        Transaction transaction = entries.get(0).transaction;
+        return new String[]{
+                ReceiptCandidateSummary.immersiveComment(transaction.getComment(), emptyComment),
+                ReceiptCandidateSummary.immersivePond(transaction.getEnvelopeName()),
+                ReceiptCandidateSummary.immersiveAmount(transaction.getAmount())};
     }
 
     /** Title/detail context lines from the tapped row's transaction; blank when the row is gone. */

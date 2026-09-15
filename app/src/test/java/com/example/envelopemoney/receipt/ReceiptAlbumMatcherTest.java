@@ -18,6 +18,7 @@ public class ReceiptAlbumMatcherTest {
     private static final String OLD = "content://media/external/images/media/1";
     private static final String A = "content://media/external/images/media/2";
     private static final String B = "content://media/external/images/media/3";
+    private static final String C = "content://media/external/images/media/4";
 
     private static long utcNoon(int year, int month, int day) {
         Calendar calendar = Calendar.getInstance(UTC);
@@ -339,6 +340,126 @@ public class ReceiptAlbumMatcherTest {
         Map<String, ReceiptReferenceResolver.Result> assigned = ReceiptAlbumMatcher.assign(
                 Arrays.asList(claim("k1", null, "2026-09-07")),
                 Arrays.asList(picture(A, noon)), UTC);
+        assertTrue(assigned.get("k1").alternatives.isEmpty());
+    }
+
+    @Test
+    public void targetCaptureUsesStoredEpochElseNoonOfTransactionDay() {
+        long evening = utcNoon(2026, 9, 7) + 8 * 3_600_000L;
+        assertEquals(evening, ReceiptAlbumMatcher.targetCaptureMs(
+                claim("k", "MountainMoney_" + evening + ".jpg", "2026-09-07"), UTC));
+        assertEquals(utcNoon(2026, 9, 7), ReceiptAlbumMatcher.targetCaptureMs(
+                claim("k", null, "2026-09-07"), UTC));
+        assertEquals(0L, ReceiptAlbumMatcher.targetCaptureMs(
+                claim("k", null, "not-a-date"), UTC));
+    }
+
+    @Test
+    public void rankByLikelihoodOrdersCloserCaptureThenReference() {
+        long noon = utcNoon(2026, 9, 7);
+        List<ReceiptReferenceResolver.Result> ranked = ReceiptAlbumMatcher.rankByLikelihood(
+                claim("k1", null, "2026-09-07"),
+                Arrays.asList(picture(B, noon + 3_600_000L), picture(A, noon)), UTC);
+        assertEquals(A, ranked.get(0).reference);
+        assertEquals(B, ranked.get(1).reference);
+    }
+
+    @Test
+    public void failedUniqueBindOffersRankedUnusedFilesWithinOneDay() {
+        long noon = utcNoon(2026, 9, 7);
+        long twoMinutesAfterNoon = noon + 2 * 60_000L;
+        long evening = noon + 6 * 3_600_000L + 10 * 60_000L;
+        long yesterday = utcNoon(2026, 9, 6);
+        Map<String, ReceiptReferenceResolver.Result> assigned = ReceiptAlbumMatcher.assign(
+                Arrays.asList(claim("k1", null, "2026-09-07")),
+                Arrays.asList(picture(A, twoMinutesAfterNoon), picture(B, evening),
+                        picture(C, yesterday)), UTC);
+        ReceiptReferenceResolver.Result result = assigned.get("k1");
+        assertEquals(ReceiptReferenceResolver.Status.AMBIGUOUS, result.status);
+        assertEquals(3, result.alternatives.size());
+        assertEquals(A, result.alternatives.get(0).reference);
+        assertEquals(B, result.alternatives.get(1).reference);
+        assertEquals(C, result.alternatives.get(2).reference);
+    }
+
+    @Test
+    public void twoClaimsOneLeftoverOfferThatUnusedFile() {
+        long noon = utcNoon(2026, 9, 7);
+        Map<String, ReceiptReferenceResolver.Result> assigned = ReceiptAlbumMatcher.assign(
+                Arrays.asList(claim("k1", null, "2026-09-07"), claim("k2", null, "2026-09-07")),
+                Arrays.asList(picture(A, noon)), UTC);
+        assertEquals(ReceiptReferenceResolver.Status.AMBIGUOUS, assigned.get("k1").status);
+        assertEquals(1, assigned.get("k1").alternatives.size());
+        assertEquals(A, assigned.get("k1").alternatives.get(0).reference);
+        assertEquals(ReceiptReferenceResolver.Status.AMBIGUOUS, assigned.get("k2").status);
+        assertEquals(A, assigned.get("k2").alternatives.get(0).reference);
+    }
+
+    @Test
+    public void emptyWindowStaysMissing() {
+        Map<String, ReceiptReferenceResolver.Result> assigned = ReceiptAlbumMatcher.assign(
+                Arrays.asList(claim("k1", null, "2026-09-07")),
+                Arrays.asList(picture(A, utcNoon(2026, 9, 5))), UTC);
+        assertEquals(ReceiptReferenceResolver.Status.MISSING, assigned.get("k1").status);
+        assertTrue(assigned.get("k1").alternatives.isEmpty());
+    }
+
+    @Test
+    public void identityCollisionUnionsNearbyUnusedAndRanks() {
+        long noon = utcNoon(2026, 9, 7);
+        long nextNoon = utcNoon(2026, 9, 8);
+        Map<String, ReceiptReferenceResolver.Result> assigned = ReceiptAlbumMatcher.assign(
+                Arrays.asList(claim("k1", "MountainMoney_" + noon + ".jpg", "2026-09-07")),
+                Arrays.asList(
+                        ReceiptReferenceResolver.Result.resolved(A, "a" + noon + ".jpg", noon),
+                        ReceiptReferenceResolver.Result.resolved(B, "b" + noon + ".jpg", noon),
+                        picture(C, nextNoon)), UTC);
+        ReceiptReferenceResolver.Result result = assigned.get("k1");
+        assertEquals(ReceiptReferenceResolver.Status.AMBIGUOUS, result.status);
+        assertEquals(3, result.alternatives.size());
+        assertEquals(A, result.alternatives.get(0).reference);
+        assertEquals(B, result.alternatives.get(1).reference);
+        assertEquals(C, result.alternatives.get(2).reference);
+    }
+
+    @Test
+    public void staleStoredEpochRanksCloserCaptureFirst() {
+        long noon = utcNoon(2026, 9, 7);
+        long evening = noon + 8 * 3_600_000L;
+        String stale = "MountainMoney_" + evening + ".jpg";
+        Map<String, ReceiptReferenceResolver.Result> assigned = ReceiptAlbumMatcher.assign(
+                Arrays.asList(claim("k1", stale, "2026-09-07")),
+                Arrays.asList(
+                        ReceiptReferenceResolver.Result.resolved(A, "lunch.jpg", noon),
+                        ReceiptReferenceResolver.Result.resolved(B, "dinner.jpg", evening)), UTC);
+        ReceiptReferenceResolver.Result result = assigned.get("k1");
+        assertEquals(ReceiptReferenceResolver.Status.AMBIGUOUS, result.status);
+        assertEquals(B, result.alternatives.get(0).reference);
+        assertEquals(A, result.alternatives.get(1).reference);
+    }
+
+    @Test
+    public void reservedFileIsExcludedFromRankedWindow() {
+        long noon = utcNoon(2026, 9, 7);
+        Map<String, ReceiptReferenceResolver.Result> assigned = ReceiptAlbumMatcher.assign(
+                Arrays.asList(claim("k1", null, "2026-09-07")),
+                Arrays.asList(picture(A, noon), picture(B, noon + 3_600_000L),
+                        picture(C, noon + 7_200_000L)),
+                UTC, Collections.singleton(A), true);
+        ReceiptReferenceResolver.Result result = assigned.get("k1");
+        assertEquals(ReceiptReferenceResolver.Status.AMBIGUOUS, result.status);
+        assertEquals(2, result.alternatives.size());
+        assertEquals(B, result.alternatives.get(0).reference);
+        assertEquals(C, result.alternatives.get(1).reference);
+    }
+
+    @Test
+    public void uniqueSameDayStillAutoWhenAdjacentUnusedExists() {
+        long noon = utcNoon(2026, 9, 7);
+        Map<String, ReceiptReferenceResolver.Result> assigned = ReceiptAlbumMatcher.assign(
+                Arrays.asList(claim("k1", null, "2026-09-07")),
+                Arrays.asList(picture(A, noon), picture(B, utcNoon(2026, 9, 8))), UTC);
+        assertEquals(A, assigned.get("k1").reference);
         assertTrue(assigned.get("k1").alternatives.isEmpty());
     }
 }
