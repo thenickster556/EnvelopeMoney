@@ -21,6 +21,12 @@
   ],
   "completed_tasks": [
     {
+      "id": "codex-p1-gallery-picker-2026-09-15",
+      "title": "Gallery photo picker, off-thread receipt IO, web transfer save, GridFS rotate, preview fullscreen",
+      "status": "completed",
+      "intent": "GetContent gallery (not Files); persist album URI; picker bytes and camera decode/save off main; web validate-before-insert and transfer pond relocate; GridFS temp-then-replace; candidate chrome-hiding fullscreen. Tests first. Full suite 274 / 3 baseline. Recovery 97.40% lines / 83.33% branches. Lint 43 baseline. npm test 108 pass. assembleDebug + git diff --check pass. Device gallery/camera/fullscreen UI not re-run."
+    },
+    {
       "id": "receipt-preview-toolbar-touch-2026-09-14",
       "title": "Larger spaced preview toolbar icons to prevent fat-finger taps",
       "status": "completed",
@@ -319,5 +325,5 @@
       "title": "Fullscreen zoomable rotatable ReceiptPreviewActivity; ReceiptZoomImageView; ReceiptBitmapLoader"
     }
   ],
-  "last_updated": "2026-09-14"
+  "last_updated": "2026-09-15"
 }

@@ -30,6 +30,8 @@ import com.google.common.util.concurrent.ListenableFuture;
 import java.io.File;
 import java.io.IOException;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Camera capture for receipts; saves upright JPEG to {@link MediaStoreReceiptSaver}.
@@ -44,7 +46,10 @@ public class ReceiptCaptureActivity extends AppCompatActivity {
 
     private PreviewView previewView;
     private ImageCapture imageCapture;
+    private MaterialButton shutter;
     private ReceiptCaptureMode selectedMode = ReceiptCaptureMode.AUTO;
+    private final ExecutorService captureExecutor = Executors.newSingleThreadExecutor();
+    private boolean captureInProgress;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -52,7 +57,7 @@ public class ReceiptCaptureActivity extends AppCompatActivity {
         setContentView(R.layout.activity_receipt_capture);
 
         previewView = findViewById(R.id.previewView);
-        MaterialButton shutter = findViewById(R.id.btnShutter);
+        shutter = findViewById(R.id.btnShutter);
         Toolbar toolbar = findViewById(R.id.receiptToolbar);
         toolbar.setNavigationIcon(R.drawable.ic_back_white_24);
         toolbar.setNavigationOnClickListener(v -> finish());
@@ -123,7 +128,7 @@ public class ReceiptCaptureActivity extends AppCompatActivity {
     }
 
     private void capturePhoto() {
-        if (imageCapture == null) {
+        if (imageCapture == null || captureInProgress) {
             return;
         }
         if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
@@ -137,39 +142,58 @@ public class ReceiptCaptureActivity extends AppCompatActivity {
 
         File out = new File(getCacheDir(), "mm_cap_" + System.currentTimeMillis() + ".jpg");
         ImageCapture.OutputFileOptions opts = new ImageCapture.OutputFileOptions.Builder(out).build();
-        imageCapture.takePicture(opts, ContextCompat.getMainExecutor(this),
+        captureInProgress = true;
+        if (shutter != null) {
+            shutter.setEnabled(false);
+        }
+        imageCapture.takePicture(opts, captureExecutor,
                 new ImageCapture.OnImageSavedCallback() {
                     @Override
                     public void onImageSaved(@NonNull ImageCapture.OutputFileResults outputFileResults) {
-                        Bitmap bmp;
+                        Bitmap bmp = null;
                         try {
                             bmp = ReceiptExifBitmapLoader.decodeUprightFromFile(out.getAbsolutePath());
-                        } catch (IOException e) {
-                            Toast.makeText(ReceiptCaptureActivity.this, R.string.receipt_ocr_failed, Toast.LENGTH_SHORT).show();
-                            return;
-                        }
-                        if (bmp == null) {
-                            Toast.makeText(ReceiptCaptureActivity.this, R.string.receipt_ocr_failed, Toast.LENGTH_SHORT).show();
-                            return;
-                        }
-                        try {
+                            if (bmp == null) {
+                                showCaptureFailure();
+                                return;
+                            }
                             Uri saved = MediaStoreReceiptSaver.saveJpeg(ReceiptCaptureActivity.this, bmp);
                             Intent data = new Intent();
                             data.putExtra(EXTRA_CAPTURE_MODE, selectedMode.name());
                             data.putExtra(EXTRA_SAVED_IMAGE_URI, saved.toString());
-                            setResult(RESULT_OK, data);
-                            finish();
+                            runOnUiThread(() -> {
+                                setResult(RESULT_OK, data);
+                                finish();
+                            });
                         } catch (IOException e) {
-                            Toast.makeText(ReceiptCaptureActivity.this, R.string.receipt_ocr_failed, Toast.LENGTH_LONG).show();
+                            showCaptureFailure();
                         } finally {
-                            bmp.recycle();
+                            if (bmp != null) {
+                                bmp.recycle();
+                            }
                         }
                     }
 
                     @Override
                     public void onError(@NonNull ImageCaptureException exception) {
-                        Toast.makeText(ReceiptCaptureActivity.this, R.string.receipt_ocr_failed, Toast.LENGTH_LONG).show();
+                        showCaptureFailure();
                     }
                 });
+    }
+
+    private void showCaptureFailure() {
+        runOnUiThread(() -> {
+            captureInProgress = false;
+            if (shutter != null) {
+                shutter.setEnabled(true);
+            }
+            Toast.makeText(ReceiptCaptureActivity.this, R.string.receipt_ocr_failed, Toast.LENGTH_LONG).show();
+        });
+    }
+
+    @Override
+    protected void onDestroy() {
+        captureExecutor.shutdownNow();
+        super.onDestroy();
     }
 }

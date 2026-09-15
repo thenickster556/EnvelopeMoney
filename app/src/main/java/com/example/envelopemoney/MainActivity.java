@@ -170,7 +170,7 @@ public class MainActivity extends AppCompatActivity {
     private View.OnClickListener receiptDialogSaveListener;
     private boolean receiptImportInProgress;
     private ActivityResultLauncher<Intent> receiptCaptureLauncher;
-    private ActivityResultLauncher<String[]> galleryPickLauncher;
+    private ActivityResultLauncher<String> galleryPickLauncher;
     private ActivityResultLauncher<String> receiptReadPermissionLauncher;
     private ActivityResultLauncher<Intent> receiptPreviewLauncher;
     private final java.util.concurrent.ExecutorService receiptRecoveryExecutor = Executors.newSingleThreadExecutor();
@@ -814,7 +814,7 @@ public class MainActivity extends AppCompatActivity {
                     }
                 });
         galleryPickLauncher = registerForActivityResult(
-                new ActivityResultContracts.OpenDocument(),
+                new ActivityResultContracts.GetContent(),
                 uri -> {
                     awaitingGalleryPick = false;
                     if (uri == null) {
@@ -1666,7 +1666,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * Reads picker bytes on the main thread, imports on a worker, attaches the stable URI, then OCR.
+     * Imports on a worker: reads picker bytes, copies into Pictures/Mountain Money, then OCR.
      */
     private void startReceiptImportAndOcr(Uri imageUri, ReceiptCaptureMode mode) {
         View host = resolveReceiptDialogHost();
@@ -1693,21 +1693,14 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        final byte[] pickedBytes;
-        try {
-            pickedBytes = readUriBytes(imageUri);
-        } catch (IOException e) {
-            handleReceiptImportFailure(host, status, e);
-            return;
-        }
-
         final Uri originalUri = imageUri;
-        final byte[] bytesForOcr = pickedBytes;
         Executors.newSingleThreadExecutor().execute(() -> {
             try {
+                byte[] pickedBytes = readUriBytes(originalUri);
                 ReceiptPickerUriNormalizer.ImportResult result =
                         ReceiptPickerUriNormalizer.normalizeImportFromBytes(
                                 MainActivity.this, pickedBytes, originalUri);
+                final byte[] bytesForOcr = pickedBytes;
                 runOnUiThread(() -> {
                     View activeHost = receiptDialogHostView != null
                             ? receiptDialogHostView
@@ -1953,7 +1946,7 @@ public class MainActivity extends AppCompatActivity {
             btnReceiptGallery.setOnClickListener(v -> {
                 receiptImportHostView = dialogView;
                 awaitingGalleryPick = true;
-                galleryPickLauncher.launch(new String[]{"image/*"});
+                galleryPickLauncher.launch("image/*");
             });
         }
         View btnPreview = dialogView.findViewById(R.id.btnReceiptPreview);

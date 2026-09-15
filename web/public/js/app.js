@@ -10,14 +10,15 @@ import {
   lastDayOfMonth,
   realCurrentMonth,
 } from '/domain/dates.js';
-import { createEnvelope, createTransaction, addTransaction, getTransactions, initializeMonth, calculateRemaining } from '/domain/envelopeModel.js';
-import { findByName, canonicalName } from '/domain/pondLookup.js';
+import { createEnvelope, getTransactions, initializeMonth, calculateRemaining } from '/domain/envelopeModel.js';
+import { canonicalName } from '/domain/pondLookup.js';
 import { computeAnchorDate } from '/domain/billsDayAnchor.js';
 import { roundToCents, splitIntegerPercentsFirstCeiling, splitTotalByPercents } from '/domain/moneyMath.js';
 import { excludingSource } from '/domain/transferDestinationList.js';
-import { validate as validateTransfer, allocatedTotal as transferAllocated } from '/domain/transferGroup.js';
+import { allocatedTotal as transferAllocated } from '/domain/transferGroup.js';
 import { validate as validateSplit, allocatedTotal as splitAllocated } from '/domain/splitPurchase.js';
-import { applyTransferGroup, detachTransferGroup, resolveAnchorTransaction, getAllocations } from '/domain/transferSync.js';
+import { detachTransferGroup, resolveAnchorTransaction, getAllocations } from '/domain/transferSync.js';
+import { saveSpendingOrTransfer, removePlainTransaction } from '/domain/transactionSave.js';
 import { applyGroup, removeGroup, isSplitPurchase, findTransactionsInGroup, resolveForEdit, formatBreakdownLine, groupTotal } from '/domain/splitSync.js';
 import { computeSliderMaximum, resolveAmountAtSliderMax, buildScaleLabels } from '/domain/transferBucketUi.js';
 import { parse as parseReceipt, ocrLine, ocrResult, ReceiptCaptureMode } from '/domain/receiptFieldParser.js';
@@ -740,34 +741,28 @@ function openTransactionDialog(existing) {
       }
       applyGroup(state.profile.envelopes, source?.splitPurchaseGroupId, date, comment, receiptUri, slices, month);
     } else {
-      let tx = source;
-      if (!tx || isSplitPurchase(source) || (source && source.envelopeName !== pondName && !source.transferId)) {
-        tx = createTransaction(pondName, amount, date, comment);
-        const env = findByName(state.profile.envelopes, pondName);
-        addTransaction(env, tx, month);
-        if (isEdit && existing && existing !== tx) {
-          removePlainTransaction(existing);
-        }
-      } else {
-        tx.amount = amount;
-        tx.date = date;
-        tx.month = date.slice(0, 7);
-        tx.comment = comment;
-        tx.envelopeName = pondName;
-      }
-      tx.receiptImageUri = receiptUri;
       if (type === 'transfer') {
         buckets.forEach((b) => { if (!b.toEnvelope) b.toEnvelope = excludingSource(state.profile.envelopes, pondName)[0]; });
-        const result = validateTransfer(amount, pondName, buckets);
-        if (!result.valid) {
-          err.hidden = false;
-          err.textContent = result.message;
-          return;
-        }
-        applyTransferGroup(state.profile.envelopes, tx, pondName, buckets);
-      } else if (tx.transferId) {
-        detachTransferGroup(state.profile.envelopes, tx);
       }
+      const result = saveSpendingOrTransfer(state.profile.envelopes, {
+        source,
+        existing,
+        isEdit,
+        type,
+        pondName,
+        amount,
+        date,
+        comment,
+        receiptUri,
+        month,
+        buckets,
+      });
+      if (!result.ok) {
+        err.hidden = false;
+        err.textContent = result.message;
+        return;
+      }
+      const tx = result.tx;
       if (type === 'spending' && timeMode === 'recurring') {
         tx.recurring = true;
         tx.recurringTemplate = true;
@@ -808,12 +803,6 @@ function openTransactionDialog(existing) {
   });
 }
 
-function removePlainTransaction(tx) {
-  for (const env of state.profile.envelopes) {
-    env.transactions = getTransactions(env).filter((t) => t !== tx);
-  }
-}
-
 async function deleteTransaction(tx) {
   if (isSplitPurchase(tx)) {
     openSheet(`<h3>${S.delete}</h3><p>${S.deleteSplit}</p>
@@ -831,7 +820,7 @@ async function deleteTransaction(tx) {
   }
   const source = resolveAnchorTransaction(state.profile.envelopes, tx);
   if (source.transferId) detachTransferGroup(state.profile.envelopes, source);
-  removePlainTransaction(source);
+  removePlainTransaction(state.profile.envelopes, source);
   await saveProfile();
 }
 

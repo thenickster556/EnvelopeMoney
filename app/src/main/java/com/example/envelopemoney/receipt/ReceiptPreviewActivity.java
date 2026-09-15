@@ -37,6 +37,7 @@ public class ReceiptPreviewActivity extends AppCompatActivity {
     public static final String EXTRA_REQUEST_SWAP = "receipt_request_swap";
     public static final String EXTRA_SWAP_REFERENCE = "receipt_swap_reference";
     private static final String STATE_CANDIDATE_INDEX = "receipt_candidate_index_state";
+    private static final String STATE_IMMERSIVE = "receipt_preview_immersive_state";
 
     /**
      * URI permission grants follow {@link android.content.Intent#setData}, not extras.
@@ -75,6 +76,10 @@ public class ReceiptPreviewActivity extends AppCompatActivity {
     private ImageButton btnRotRight;
     private ImageButton btnSaveRotation;
     private ImageButton btnChooseDifferent;
+    private ImageButton btnFullscreen;
+    private ImageButton btnExitFullscreen;
+    private View topChrome;
+    private View candidateBottomBar;
     private MaterialButton btnCandidateSelect;
     private ImageButton btnCandidatePrevious;
     private ImageButton btnCandidateNext;
@@ -96,6 +101,7 @@ public class ReceiptPreviewActivity extends AppCompatActivity {
     private String[] candidateReferences = new String[0];
     private int candidateIndex;
     private boolean gesturesHintDismissed;
+    private boolean immersive;
 
     private final OnBackPressedCallback backCallback = new OnBackPressedCallback(true) {
         @Override
@@ -117,6 +123,10 @@ public class ReceiptPreviewActivity extends AppCompatActivity {
         btnRotRight = findViewById(R.id.btnReceiptRotateRight);
         btnSaveRotation = findViewById(R.id.btnReceiptSaveRotation);
         btnChooseDifferent = findViewById(R.id.btnReceiptChooseDifferent);
+        btnFullscreen = findViewById(R.id.btnReceiptPreviewFullscreen);
+        btnExitFullscreen = findViewById(R.id.btnReceiptPreviewExitFullscreen);
+        topChrome = findViewById(R.id.receiptPreviewTopChrome);
+        candidateBottomBar = findViewById(R.id.candidateBottomBar);
         btnCandidateSelect = findViewById(R.id.btnCandidateSelect);
         btnCandidatePrevious = findViewById(R.id.btnCandidatePrevious);
         btnCandidateNext = findViewById(R.id.btnCandidateNext);
@@ -140,6 +150,8 @@ public class ReceiptPreviewActivity extends AppCompatActivity {
         });
         btnCandidateSelect.setOnClickListener(v -> returnPickedCandidate());
         btnChooseDifferent.setOnClickListener(v -> returnSwapRequest());
+        btnFullscreen.setOnClickListener(v -> setPreviewImmersive(true));
+        btnExitFullscreen.setOnClickListener(v -> setPreviewImmersive(false));
 
         if (isCandidateIntent(getIntent())) {
             enterCandidateMode(savedInstanceState);
@@ -162,6 +174,7 @@ public class ReceiptPreviewActivity extends AppCompatActivity {
     protected void onSaveInstanceState(@Nullable Bundle outState) {
         super.onSaveInstanceState(outState);
         outState.putInt(STATE_CANDIDATE_INDEX, candidateIndex);
+        outState.putBoolean(STATE_IMMERSIVE, immersive);
     }
 
     /** Read-only check chrome: transaction header, arrow bar, no rotate/save; restores index after rotation. */
@@ -179,8 +192,9 @@ public class ReceiptPreviewActivity extends AppCompatActivity {
         btnRotRight.setVisibility(View.GONE);
         btnSaveRotation.setVisibility(View.GONE);
         btnChooseDifferent.setVisibility(View.GONE);
+        btnFullscreen.setVisibility(View.VISIBLE);
         findViewById(R.id.candidateInfo).setVisibility(View.VISIBLE);
-        findViewById(R.id.candidateBottomBar).setVisibility(View.VISIBLE);
+        candidateBottomBar.setVisibility(View.VISIBLE);
         tvCandidateTitle.setText(getIntent().getStringExtra(EXTRA_CANDIDATE_TITLE));
         tvCandidateDetail.setText(getIntent().getStringExtra(EXTRA_CANDIDATE_DETAIL));
         tvGesturesHint.setText(R.string.receipt_preview_gestures_hint_candidates);
@@ -192,6 +206,15 @@ public class ReceiptPreviewActivity extends AppCompatActivity {
             showCandidate(candidateIndex + delta);
         });
         showCandidate(candidateIndex);
+        if (savedInstanceState != null && savedInstanceState.getBoolean(STATE_IMMERSIVE, false)) {
+            setPreviewImmersive(true);
+        }
+    }
+
+    private void setPreviewImmersive(boolean value) {
+        immersive = value;
+        ReceiptPreviewImmersive.apply(immersive, isCandidateMode(),
+                topChrome, candidateBottomBar, btnExitFullscreen);
     }
 
     private boolean isCandidateMode() {
@@ -257,6 +280,10 @@ public class ReceiptPreviewActivity extends AppCompatActivity {
     }
 
     private void tryClosePreview() {
+        if (ReceiptPreviewImmersive.consumeBack(immersive)) {
+            setPreviewImmersive(false);
+            return;
+        }
         if (!loadOk) {
             finish();
             return;

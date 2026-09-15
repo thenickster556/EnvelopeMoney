@@ -107,6 +107,8 @@
     <string name="receipt_preview_gestures_hint">Pinch to zoom · drag to pan · double-tap to refit</string>
     <string name="receipt_preview_gestures_hint_candidates">Swipe for other pictures · pinch to zoom · drag to pan · double-tap to refit</string>
     <string name="content_desc_close_receipt_preview">Close receipt preview</string>
+    <string name="content_desc_receipt_preview_fullscreen">Enter full screen</string>
+    <string name="content_desc_receipt_preview_exit_fullscreen">Exit full screen</string>
     <string name="receipt_permission_camera">Camera permission is needed to scan.</string>
     <string name="receipt_permission_storage">Storage permission is needed to save scans on this Android version.</string>
 

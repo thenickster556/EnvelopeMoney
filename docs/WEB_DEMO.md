@@ -35,7 +35,7 @@ npm run seed-demo
 
 ## Behavior
 
-Same as the Android app: ponds, transactions, Spending / Transfer / Split purchase, recurring, bills days vs paydays, payday Remaining = Account + unlocked Limit slices − month spend, bills-period filter, receipt camera/gallery + Tesseract.js OCR + `ReceiptFieldParser`, comment typeahead (3-row list), silent OCR amount-weight learning, preview rotate/save, **Analysis** charts (Last 3/6/12, pond chips, include-transfers).
+Same as the Android app: ponds, transactions, Spending / Transfer / Split purchase, recurring, bills days vs paydays, payday Remaining = Account + unlocked Limit slices − month spend, bills-period filter, receipt camera/gallery + Tesseract.js OCR + `ReceiptFieldParser`, comment typeahead (3-row list), silent OCR amount-weight learning, preview rotate/save (GridFS keeps the original id until the replacement exists), transfer save validates before insert and moves edited transfer sources between ponds, **Analysis** charts (Last 3/6/12, pond chips, include-transfers).
 
 ## Hosting later
 
@@ -43,4 +43,4 @@ Typical GoDaddy **shared** hosting cannot run Node + Mongo. Use a VPS (including
 
 ## Tests
 
-`npm test` in `web/` runs Node tests ported from the Android JUnit goldens.
+`npm test` in `web/` runs Node tests ported from the Android JUnit goldens, plus `transactionSave` (validate-before-insert / pond move) and `gridFsReplace` (temp-then-replace).

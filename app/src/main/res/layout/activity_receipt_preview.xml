@@ -121,6 +121,18 @@
                 android:padding="8dp"
                 android:scaleType="fitCenter"
                 android:src="@drawable/ic_rotate_right_white_24" />
+
+            <ImageButton
+                android:id="@+id/btnReceiptPreviewFullscreen"
+                android:layout_width="@dimen/receipt_preview_toolbar_icon_size"
+                android:layout_height="@dimen/receipt_preview_toolbar_icon_size"
+                android:layout_marginStart="@dimen/receipt_preview_toolbar_icon_gap"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/content_desc_receipt_preview_fullscreen"
+                android:padding="8dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_fullscreen_white_24"
+                android:visibility="gone" />
         </LinearLayout>
 
         <TextView
@@ -200,5 +212,18 @@
         android:layout_gravity="center"
         android:padding="24dp"
         android:textColor="@android:color/white"
+        android:visibility="gone" />
+
+    <ImageButton
+        android:id="@+id/btnReceiptPreviewExitFullscreen"
+        android:layout_width="@dimen/receipt_preview_toolbar_icon_size"
+        android:layout_height="@dimen/receipt_preview_toolbar_icon_size"
+        android:layout_gravity="top|end"
+        android:layout_margin="8dp"
+        android:background="#CC000000"
+        android:contentDescription="@string/content_desc_receipt_preview_exit_fullscreen"
+        android:padding="8dp"
+        android:scaleType="fitCenter"
+        android:src="@drawable/ic_fullscreen_exit_white_24"
         android:visibility="gone" />
 </FrameLayout>

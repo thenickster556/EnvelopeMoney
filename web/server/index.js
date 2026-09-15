@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { connectDb, getDb, getReceiptBucket, ObjectId } from './db.js';
+import { replaceGridFsFile } from './gridFsReplace.js';
 import { applyLaunchAndDisplay, emptyProfile, publicProfile, refreshBalances } from '../domain/profileEngine.js';
 import { buildDemoProfile, shouldSeedDemoProfile } from '../domain/demoSeed.js';
 import { parse as parseReceipt, ocrLine, ocrResult, ReceiptCaptureMode } from '../domain/receiptFieldParser.js';
@@ -244,12 +245,15 @@ app.put('/api/receipts/:id', requireAuth, upload.single('image'), async (req, re
       return;
     }
     const bucket = getReceiptBucket();
-    await bucket.delete(id);
-    const uploadStream = bucket.openUploadStreamWithId(id, file.filename, {
+    await replaceGridFsFile(bucket, id, req.file.buffer, {
+      filename: file.filename,
       contentType: req.file.mimetype || 'image/jpeg',
       metadata: { userId: req.session.userId },
+      originalExists: async (oid) => {
+        const stored = await db.collection('receipts.files').findOne({ _id: oid });
+        return !!stored;
+      },
     });
-    await pipeline(Readable.from(req.file.buffer), uploadStream);
     res.json({ id: String(id), uri: `/api/receipts/${id}` });
   } catch (err) {
     console.error('receipt replace failed', err.message);

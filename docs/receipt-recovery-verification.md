@@ -168,3 +168,16 @@ Packed 48dp icons with no gutter were easy to mis-tap. Top chrome close / swap /
 
 ## On-device check (recommended, not yet run)
 Open an attached receipt preview: tap each of swap / save / rotate-left / rotate-right without hitting the neighbor. Close remains easy to hit. On a narrow phone the four actions must remain fully on-screen.
+
+# Gallery picker + candidate fullscreen — 2026-09-15
+
+## Delivered behavior (delta)
+Add/edit **From gallery** launches `GetContent` (`image/*`) so the photo gallery opens, not Files. Import still copies into `Pictures/Mountain Money` and persists that album URI. Preview and recovery still never open a picker. Candidate slides have a 56dp fullscreen button that hides toolbar, hint, and Select; an exit overlay (or Back) restores chrome. Swipe/pinch still work; attach is still only **Use this picture**.
+
+## Automated results
+- Tests first: `ReceiptPreviewImmersiveTest` (4), `web/test/transactionSave.test.js` (3), `web/test/gridFsReplace.test.js` (3) failed before helpers existed, then passed.
+- Full `:app:testDebugUnitTest`: **274 tests, 271 passed, same 3 pre-existing failures** (baseline before this change: 270/3).
+- Recovery JaCoCo: 97.40% lines / 83.33% branches, gates pass. Lint: 43 baseline errors. `npm test`: 108 pass. `:app:assembleDebug` and `git diff --check` pass.
+
+## On-device check (recommended, not yet run)
+Add transaction → gallery icon → photo grid, not Files. Candidate slides: tap fullscreen → JPEG fills, exit/Back restores Select.
