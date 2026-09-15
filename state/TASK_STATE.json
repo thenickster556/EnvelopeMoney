@@ -21,6 +21,12 @@
   ],
   "completed_tasks": [
     {
+      "id": "receipt-unresolved-list-icon-2026-09-15",
+      "title": "Red history photo icon when a receipt is not uniquely loaded",
+      "status": "completed",
+      "intent": "After existing startup resolveAll, list photo icons tint colorError for MISSING/AMBIGUOUS/CORRUPT/PERMISSION_REQUIRED; RESOLVED and pre-repair stay colorControlNormal. No new Gson keys, no Files picker, no launch choosers. Always refresh history after repair even if apply is 0. Tests first. Full suite 287 / 3 baseline. Recovery 97.54% lines / 82.04% branches. Lint 43 baseline. assembleDebug + git diff --check pass. Device UI not re-run."
+    },
+    {
       "id": "receipt-immersive-cue-window-2026-09-15",
       "title": "Fullscreen pick cue and ranked ±1-day unused receipt options",
       "status": "completed",

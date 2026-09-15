@@ -28,4 +28,19 @@ public class ReceiptRowUiTest {
         t.setReceiptImageUri("content://example/1");
         assertFalse(ReceiptRowUi.showReceiptThumbnail(t));
     }
+
+    @Test
+    public void receiptNeedsAttention_trueWhenPictureIsNotUniquelyLoaded() {
+        assertTrue(ReceiptRowUi.receiptNeedsAttention(ReceiptReferenceResolver.Status.MISSING));
+        assertTrue(ReceiptRowUi.receiptNeedsAttention(ReceiptReferenceResolver.Status.AMBIGUOUS));
+        assertTrue(ReceiptRowUi.receiptNeedsAttention(ReceiptReferenceResolver.Status.CORRUPT));
+        assertTrue(ReceiptRowUi.receiptNeedsAttention(
+                ReceiptReferenceResolver.Status.PERMISSION_REQUIRED));
+    }
+
+    @Test
+    public void receiptNeedsAttention_falseWhenResolvedOrUnknown() {
+        assertFalse(ReceiptRowUi.receiptNeedsAttention(ReceiptReferenceResolver.Status.RESOLVED));
+        assertFalse(ReceiptRowUi.receiptNeedsAttention(null));
+    }
 }

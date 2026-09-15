@@ -81,6 +81,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.drawable.DrawableCompat;
+import androidx.core.widget.ImageViewCompat;
 
 import com.example.envelopemoney.BillsDayAnchor;
 import com.example.envelopemoney.Envelope;
@@ -187,6 +188,12 @@ public class MainActivity extends AppCompatActivity {
     private final Map<String, ReceiptReferenceResolver.Result> pendingCandidateResults = new HashMap<>();
     /** Open picker dialog, dismissed once a fullscreen pick is applied. */
     private AlertDialog receiptChooserDialog;
+    /**
+     * Last resolveAll status by fragment-stripped URI. In-memory only — not Gson.
+     * Missing keys mean repair has not finished for that pointer (list icon stays normal).
+     */
+    private final Map<String, ReceiptReferenceResolver.Status> receiptAttentionByReference =
+            new HashMap<>();
     private LearningDb learningDb;
     @Nullable
     private List<String> lastOcrLines;
@@ -1982,6 +1989,7 @@ public class MainActivity extends AppCompatActivity {
             if (ReceiptBitmapLoader.isReadable(getApplicationContext(), uri)) {
                 runOnUiThread(() -> {
                     if (isFinishing() || isDestroyed()) return;
+                    markReceiptResolved(reference);
                     launchReceiptPreviewActivity(uri);
                 });
                 return;
@@ -1992,14 +2000,17 @@ public class MainActivity extends AppCompatActivity {
                     : resolveReceiptEntries(entries);
             runOnUiThread(() -> {
                 if (isFinishing() || isDestroyed()) return;
+                recordReceiptAttention(entries, resolved, false);
                 ReceiptReferenceResolver.Result result = firstReceiptResult(entries, resolved);
                 if (result != null && result.status == ReceiptReferenceResolver.Status.RESOLVED) {
                     applyReceiptResolution(reference, entries, result);
                     launchReceiptPreviewActivity(Uri.parse(namedReceiptReference(result)));
                 } else if (result != null && result.status == ReceiptReferenceResolver.Status.AMBIGUOUS
                         && !result.alternatives.isEmpty()) {
+                    notifyReceiptAttentionChanged();
                     showReceiptCandidateChooser(reference, result.alternatives);
                 } else {
+                    notifyReceiptAttentionChanged();
                     showReceiptRecoveryFailure(reference, result != null
                             ? result.status
                             : ReceiptReferenceResolver.Status.MISSING);
@@ -2043,18 +2054,22 @@ public class MainActivity extends AppCompatActivity {
             ReceiptReferenceResolver.Result result = firstReceiptResult(entries, resolved);
             runOnUiThread(() -> {
                 if (isFinishing() || isDestroyed()) return;
+                recordReceiptAttention(entries, resolved, false);
                 if (result != null && result.status == ReceiptReferenceResolver.Status.RESOLVED) {
                     applyReceiptResolution(reference, entries, result);
                     launchReceiptPreviewActivity(Uri.parse(namedReceiptReference(result)));
                 } else if (requestPermission && new AndroidReceiptSource(this).needsReadPermission()
                         && result != null
                         && result.status == ReceiptReferenceResolver.Status.PERMISSION_REQUIRED) {
+                    notifyReceiptAttentionChanged();
                     pendingReceiptReference = reference;
                     receiptReadPermissionLauncher.launch(AndroidReceiptSource.readPermission());
                 } else if (result != null && result.status == ReceiptReferenceResolver.Status.AMBIGUOUS
                         && !result.alternatives.isEmpty()) {
+                    notifyReceiptAttentionChanged();
                     showReceiptCandidateChooser(reference, result.alternatives);
                 } else {
+                    notifyReceiptAttentionChanged();
                     showReceiptRecoveryFailure(reference, result != null
                             ? result.status
                             : ReceiptReferenceResolver.Status.MISSING);
@@ -2094,10 +2109,11 @@ public class MainActivity extends AppCompatActivity {
             runOnUiThread(() -> {
                 receiptRepairInProgress = false;
                 if (isFinishing() || isDestroyed()) return;
+                recordReceiptAttention(entries, results, true);
                 if (ReceiptReferenceRepair.apply(envelopes, entries, results) > 0) {
                     PrefManager.saveEnvelopes(this, envelopes);
-                    updateTransactionHistory();
                 }
+                updateTransactionHistory();
                 if (receiptRepairRequestedAgain) {
                     receiptRepairRequestedAgain = false;
                     startReceiptReferenceRepair();
@@ -2147,12 +2163,71 @@ public class MainActivity extends AppCompatActivity {
         for (ReceiptReferenceRepair.Entry entry : entries) results.put(entry.key(), result);
         if (ReceiptReferenceRepair.apply(envelopes, entries, results) > 0) {
             PrefManager.saveEnvelopes(this, envelopes);
-            updateTransactionHistory();
         }
+        recordReceiptAttention(entries, results, false);
+        markReceiptResolved(reference);
+        if (result != null && result.reference != null) {
+            markReceiptResolved(result.reference);
+        }
+        updateTransactionHistory();
         View host = resolveReceiptDialogHost();
         if (host != null && reference.equals(host.getTag(R.id.tag_receipt_image_uri))) {
             host.setTag(R.id.tag_receipt_image_uri, namedReceiptReference(result));
             syncReceiptActionUi(host);
+        }
+    }
+
+    /**
+     * Records last repair status by fragment-stripped URI so the list photo icon can tint.
+     * Whole-app passes replace the map; tap-path passes merge.
+     */
+    private void recordReceiptAttention(List<ReceiptReferenceRepair.Entry> entries,
+                                        Map<String, ReceiptReferenceResolver.Result> results,
+                                        boolean replaceAll) {
+        if (replaceAll) {
+            receiptAttentionByReference.clear();
+        }
+        if (entries == null || results == null) {
+            return;
+        }
+        for (ReceiptReferenceRepair.Entry entry : entries) {
+            if (entry == null || entry.reference == null) {
+                continue;
+            }
+            ReceiptReferenceResolver.Result result = results.get(entry.key());
+            if (result == null) {
+                continue;
+            }
+            putReceiptAttention(entry.reference, result.status);
+            if (result.status == ReceiptReferenceResolver.Status.RESOLVED && result.reference != null) {
+                putReceiptAttention(result.reference, ReceiptReferenceResolver.Status.RESOLVED);
+            }
+        }
+    }
+
+    private void markReceiptResolved(String reference) {
+        String key = stripReceiptFragment(reference);
+        if (key.isEmpty()) {
+            return;
+        }
+        ReceiptReferenceResolver.Status previous = receiptAttentionByReference.put(
+                key, ReceiptReferenceResolver.Status.RESOLVED);
+        if (ReceiptRowUi.receiptNeedsAttention(previous)) {
+            notifyReceiptAttentionChanged();
+        }
+    }
+
+    private void putReceiptAttention(String reference, ReceiptReferenceResolver.Status status) {
+        String key = stripReceiptFragment(reference);
+        if (key.isEmpty() || status == null) {
+            return;
+        }
+        receiptAttentionByReference.put(key, status);
+    }
+
+    private void notifyReceiptAttentionChanged() {
+        if (transactionAdapter != null) {
+            transactionAdapter.notifyDataSetChanged();
         }
     }
 
@@ -2618,7 +2693,19 @@ public class MainActivity extends AppCompatActivity {
                 btnSplitExpand.setOnClickListener(null);
             }
 
-            if (ReceiptRowUi.showReceiptThumbnail(transaction)) {
+            boolean showReceipt = ReceiptRowUi.showReceiptThumbnail(transaction);
+            ReceiptReferenceResolver.Status receiptStatus = showReceipt
+                    ? receiptAttentionByReference.get(stripReceiptFragment(transaction.getReceiptImageUri()))
+                    : null;
+            boolean receiptAttention = ReceiptRowUi.receiptNeedsAttention(receiptStatus);
+            int receiptTint = resolveThemeColor(receiptAttention
+                    ? com.google.android.material.R.attr.colorError
+                    : androidx.appcompat.R.attr.colorControlNormal);
+            ImageViewCompat.setImageTintList(btnReceipt, ColorStateList.valueOf(receiptTint));
+            btnReceipt.setContentDescription(getString(receiptAttention
+                    ? R.string.content_desc_transaction_receipt_unresolved
+                    : R.string.content_desc_transaction_receipt));
+            if (showReceipt) {
                 btnReceipt.setVisibility(View.VISIBLE);
                 btnReceipt.setOnClickListener(v -> {
                     String uriStr = transaction.getReceiptImageUri();

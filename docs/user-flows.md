@@ -25,7 +25,7 @@
 8. If **Split purchase** is selected, an empty **purchase total** may be prefilled from the spending **amount**; two default slices receive an even split of the purchase total when unset, and **Add slice** redistributes like transfer buckets. Scrolling dismisses slice dropdowns.
 9. Transfer and split bucket amounts can be adjusted by fixed `$0.50` slider/stepper controls or exact-cent manual entry; split slices at slider **100%** absorb odd-cent remainders automatically; validation stays quiet until the user interacts or attempts save.
 10. Validation runs without dismissing the dialog on errors.
-11. Transaction is persisted and visible in history (optional `receiptImageUri` stored when applicable). A non-empty comment is remembered for typeahead. Rows with a receipt show a **photo** icon; tap opens preview. **Split purchase** rows show a compact slice line by default; an expand control toggles the full allocation breakdown for that group (all sibling rows stay in sync).
+11. Transaction is persisted and visible in history (optional `receiptImageUri` stored when applicable). A non-empty comment is remembered for typeahead. Rows with a receipt show a **photo** icon; after startup repair that icon is **red** when the JPEG is not uniquely loaded. Tap opens preview (or the existing chooser/retry). **Split purchase** rows show a compact slice line by default; an expand control toggles the full allocation breakdown for that group (all sibling rows stay in sync).
 
 ## Edit Transaction Flow
 1. User opens **Edit** from the transaction list options.
@@ -36,7 +36,7 @@
 6. Other fields and validation behave as before.
 
 ## Receipt preview (list and dialogs)
-1. On the main transaction list, if a row has a stored receipt URI, a **photo** icon appears next to edit.
+1. On the main transaction list, if a row has a stored receipt URI, a **photo** icon appears next to edit. After the existing startup album repair, that icon tints **red** when the last pass could not uniquely load the JPEG (no unused file, several unused files, corrupt file, or photo access still required). Unique binds and rows whose repair has not finished stay the normal tint. Spends with no stored URI stay icon-less. Tap still opens the existing preview, chooser, or retry — red is a glanceable cue, not a new screen.
 2. **Preview** icon in add/edit dialogs, or the list **photo** icon, opens **ReceiptPreviewActivity** using the **stored** `receiptImageUri` as `EXTRA_IMAGE_URI` only (no second gallery import/move). Fullscreen image, **pinch to zoom**, **drag** to pan when zoomed, **double-tap** to refit. The pinch/pan hint sits under the top toolbar, never over bottom actions. **Rotate left / Rotate right** for 90° **view-only** steps. **Save rotation** is **enabled** (not merely visible) when the net angle mod 360° is non-zero; it prompts **Replace / Cancel**, then decodes from the same URI, **Matrix**-rotates pixels, overwrites the JPEG at quality **92**, **reloads** the image, and resets view rotation to **0°**. **Back** or **close** with unsaved rotation: **Keep editing** or **Discard**. Failed writes show a **Material** alert. Unreadable URIs show **Could not open this image.**
 
 ## Transfer Flow

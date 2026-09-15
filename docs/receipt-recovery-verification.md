@@ -196,3 +196,18 @@ Unique automatic binds are unchanged. When unique bind fails, unused `Pictures/M
 
 ## On-device check (recommended, not yet run)
 Candidate slides → `[FS]`: comment, pond, amount readable through the glass; exit still hits; Exit/Back restores Select. Dead receipt with several unused shots that day ±1: picker opens quickly, closest capture first. Unique one-file days still skip the picker.
+
+# Red list icon when a receipt is not uniquely loaded — 2026-09-15
+
+## Delivered behavior (delta)
+Startup still runs whole-app `resolveAll` and unique-binds readable files without opening a chooser. After that pass, history-row photo icons that still have no unique picture tint `?attr/colorError` (MISSING, AMBIGUOUS, CORRUPT, PERMISSION_REQUIRED). RESOLVED and pre-repair stay `colorControlNormal`. Rows without a stored URI stay icon-less. Tap flow is unchanged (preview, ranked chooser, or retry). Successful pick / unique apply returns the icon to normal. History always refreshes after repair even when `apply()` is 0. Status is in-memory only (no Gson keys). TalkBack: `content_desc_transaction_receipt_unresolved`. Adapter resets tint every bind so recycled rows stay correct.
+
+## Automated results
+- Tests first: `ReceiptRowUiTest.receiptNeedsAttention_*` failed to compile before the helper existed, then passed. `showReceiptThumbnail` rules unchanged.
+- Full `:app:testDebugUnitTest`: **287 tests, 284 passed, same 3 pre-existing failures** (baseline before this change: 285/3).
+- Recovery JaCoCo scope unchanged (matcher/resolver/repair/Android source): 97.54% lines (635/651) / 82.04% branches (530/646); gates pass. New `ReceiptRowUi` branches are unit-tested outside that gate.
+- `:app:lintDebug`: **43 existing errors** — unchanged.
+- `:app:assembleDebug` and `git diff --check`: passed.
+
+## On-device check (recommended, not yet run)
+Launch with one unique receipt, one ambiguous, one missing, one spend with no URI: only the middle two icons go red after repair; no dialogs appear by themselves. Recycle the list: red stays on the broken rows, healthy stay normal, edit icon never red. Tap red ambiguous → chooser → Use this picture → icon returns to normal. Grant photos when PERMISSION_REQUIRED: unique rows go normal; leftover failures stay red. Night mode: red still readable on the list background.

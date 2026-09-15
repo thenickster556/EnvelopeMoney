@@ -21,4 +21,15 @@ public final class ReceiptRowUi {
         String uri = transaction.getReceiptImageUri();
         return uri != null && !uri.isEmpty();
     }
+
+    /**
+     * True when the last repair pass could not uniquely load a readable JPEG for this row.
+     * Null (repair not finished) and {@link ReceiptReferenceResolver.Status#RESOLVED} stay quiet.
+     */
+    public static boolean receiptNeedsAttention(ReceiptReferenceResolver.Status status) {
+        return status == ReceiptReferenceResolver.Status.MISSING
+                || status == ReceiptReferenceResolver.Status.AMBIGUOUS
+                || status == ReceiptReferenceResolver.Status.CORRUPT
+                || status == ReceiptReferenceResolver.Status.PERMISSION_REQUIRED;
+    }
 }
