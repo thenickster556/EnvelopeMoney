@@ -125,3 +125,30 @@ With two renamed copies in the folder: tap the dead reference → picker (80dp r
 
 ## On-device check (recommended, not yet run)
 Attach picture X from an ambiguous pair, then tap the ⟷ icon twice: the first swap list must show Y (X excluded); pick Y, then tap ⟷ again — X must be back in the list. The toolbar shows only ✕ and ⟷ until a rotation makes ↺ ▭ ↻ meaningful; save stays dimmed until the rotation is dirty.
+
+---
+
+# Candidate swipe + top hint + themed Select — 2026-09-14
+
+## Delivered behavior (delta)
+- Candidate check: a one-finger **horizontal swipe at fit-scale** (48dp, `|dx| > |dy|`, finger left → next) calls the same `showCandidate` as the arrows. No wrap, no attach, no ViewPager. Zoomed pictures still pan; arrows still change pictures while zoomed. Swipe is ignored while a decode is in progress. The previous JPEG stays on screen until the next decode succeeds; Select stays disabled during that wait. A failed candidate decode keeps the zoom view visible (empty) so swipe/arrows still work; Select stays dimmed.
+- The pinch/pan hint is a **second row of the top chrome** (never a bottom overlay over Select). Candidate copy includes swipe. The hint hides after the first pinch, pan, swipe, double-tap, or arrow and stays gone for the activity instance.
+- **Use this picture** uses `@color/mountain_primary` fill and `@color/white` label (preview chrome is always black; night `colorOnPrimary` is not used). Disabled Select uses the same 40% alpha as toolbar icons.
+
+## Automated results
+- Tests first: `ReceiptCandidateSwipeTest` (10 cases) failed to compile before `ReceiptCandidateSwipe` existed, then passed.
+- Full `:app:testDebugUnitTest`: **267 tests, 264 passed, same 3 pre-existing failures** (baseline before this change: 257/3).
+- Recovery JaCoCo scope unchanged (matcher, resolver, repair, Android source): **562/577 lines (97.40%) and 480/576 branches (83.33%)**; `:app:verifyReceiptRecoveryCoverage` passes both 80% gates.
+- `:app:lintDebug`: **43 existing errors** — unchanged count and IDs. `:app:assembleDebug` and `:app:assembleDebugAndroidTest`: passed. `git diff --check`: passed.
+- Candidate-mode swipe/hint rendering has no JVM harness for `MainActivity`/activity views (recorded limitation as before): compile + resource lint + the checklist below.
+
+## On-device check (recommended, not yet run)
+- Two+ renamed copies → picker → row → fullscreen: hint is the second top row; Select fully visible; fill `#2E7D6E`; label white in day **and** night.
+- Swipe left/right at fit changes `n of m` and the JPEG; first/last do not wrap.
+- While the next JPEG loads, the previous JPEG stays until success; Select is disabled during that wait.
+- Failed candidate: error text, Select dimmed, swipe/arrows still move.
+- Pinch then drag pans and does **not** change pictures; arrows still do.
+- Double-tap refit, then swipe works again.
+- After first pinch/pan/swipe/double-tap/arrow, hint is gone for the rest of the activity.
+- Select is the only attach; back returns to the still-open picker.
+- Attached preview: hint under toolbar; rotate/save/swap unchanged; swipe does nothing.

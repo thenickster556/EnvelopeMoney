@@ -21,6 +21,12 @@
   ],
   "completed_tasks": [
     {
+      "id": "receipt-candidate-swipe-hint-2026-09-14",
+      "title": "Candidate check: swipe pictures, top gesture hint, themed Select",
+      "status": "completed",
+      "intent": "Candidate-mode ReceiptPreviewActivity: horizontal fit-scale swipe calls the same showCandidate as arrows (no wrap, no attach). Gesture hint is a second row of the top chrome so it cannot cover Use this picture. Select uses mountain_primary fill and white label (preview is always-black; night colorOnPrimary is not used). Keep last JPEG until next decode succeeds; candidate decode-fail keeps zoom visible for swipe. Tests first: ReceiptCandidateSwipeTest 10 cases red (class missing) then green. Full suite 267 tests / 3 baseline failures (baseline 257/3). Recovery coverage unchanged 97.40% lines / 83.33% branches, gates pass. Lint 43 baseline errors unchanged. assembleDebug + assembleDebugAndroidTest + git diff --check pass. Swipe/hint rendering verified by compile/resources/on-device checklist (no MainActivity JVM harness, as before)."
+    },
+    {
       "id": "receipt-swap-pool-icons-2026-09-14",
       "title": "Swap pool keeps previous candidates; icon-only preview toolbar",
       "status": "completed",

@@ -12,84 +12,104 @@
         android:contentDescription="@string/receipt_preview_title" />
 
     <LinearLayout
-        android:id="@+id/receiptPreviewToolbar"
+        android:id="@+id/receiptPreviewTopChrome"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="top"
         android:background="#CC000000"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:padding="8dp">
+        android:orientation="vertical">
 
-        <ImageButton
-            android:id="@+id/btnReceiptPreviewClose"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/content_desc_close_receipt_preview"
-            android:src="@drawable/ic_back_white_24"
-            android:tint="@android:color/white" />
-
-        <!-- Candidate check header: transaction context the user double-checks against. -->
         <LinearLayout
-            android:id="@+id/candidateInfo"
-            android:layout_width="0dp"
+            android:id="@+id/receiptPreviewToolbar"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:layout_weight="1"
-            android:orientation="vertical"
-            android:visibility="gone">
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:padding="8dp">
 
-            <TextView
-                android:id="@+id/tvCandidateTitle"
-                android:layout_width="match_parent"
+            <ImageButton
+                android:id="@+id/btnReceiptPreviewClose"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:ellipsize="end"
-                android:singleLine="true"
-                android:textColor="@color/white"
-                android:textStyle="bold" />
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/content_desc_close_receipt_preview"
+                android:src="@drawable/ic_back_white_24"
+                android:tint="@android:color/white" />
 
-            <TextView
-                android:id="@+id/tvCandidateDetail"
-                android:layout_width="match_parent"
+            <!-- Candidate check header: transaction context the user double-checks against. -->
+            <LinearLayout
+                android:id="@+id/candidateInfo"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:ellipsize="end"
-                android:singleLine="true"
-                android:textColor="@color/white"
-                android:textSize="12sp" />
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/tvCandidateTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:singleLine="true"
+                    android:textColor="@color/white"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvCandidateDetail"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:singleLine="true"
+                    android:textColor="@color/white"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <ImageButton
+                android:id="@+id/btnReceiptChooseDifferent"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/receipt_choose_different"
+                android:src="@drawable/ic_swap_white_24" />
+
+            <ImageButton
+                android:id="@+id/btnReceiptSaveRotation"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/receipt_preview_save_rotation"
+                android:src="@drawable/ic_save_white_24" />
+
+            <ImageButton
+                android:id="@+id/btnReceiptRotateLeft"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/receipt_preview_rotate_left"
+                android:src="@drawable/ic_rotate_left_white_24" />
+
+            <ImageButton
+                android:id="@+id/btnReceiptRotateRight"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/receipt_preview_rotate_right"
+                android:src="@drawable/ic_rotate_right_white_24" />
         </LinearLayout>
 
-        <ImageButton
-            android:id="@+id/btnReceiptChooseDifferent"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/receipt_choose_different"
-            android:src="@drawable/ic_swap_white_24" />
-
-        <ImageButton
-            android:id="@+id/btnReceiptSaveRotation"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/receipt_preview_save_rotation"
-            android:src="@drawable/ic_save_white_24" />
-
-        <ImageButton
-            android:id="@+id/btnReceiptRotateLeft"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/receipt_preview_rotate_left"
-            android:src="@drawable/ic_rotate_left_white_24" />
-
-        <ImageButton
-            android:id="@+id/btnReceiptRotateRight"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/receipt_preview_rotate_right"
-            android:src="@drawable/ic_rotate_right_white_24" />
+        <TextView
+            android:id="@+id/tvReceiptPreviewGesturesHint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:paddingStart="10dp"
+            android:paddingTop="4dp"
+            android:paddingEnd="10dp"
+            android:paddingBottom="8dp"
+            android:text="@string/receipt_preview_gestures_hint"
+            android:textColor="@android:color/white"
+            android:textSize="12sp" />
     </LinearLayout>
 
     <!-- Candidate check navigation: arrows, counter, and the deliberate attach action. -->
@@ -132,7 +152,9 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:text="@string/receipt_candidate_select" />
+                android:text="@string/receipt_candidate_select"
+                android:textColor="@color/white"
+                app:backgroundTint="@color/mountain_primary" />
         </LinearLayout>
 
         <ImageButton
@@ -154,19 +176,4 @@
         android:padding="24dp"
         android:textColor="@android:color/white"
         android:visibility="gone" />
-
-    <TextView
-        android:id="@+id/tvReceiptPreviewGesturesHint"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom|center_horizontal"
-        android:layout_marginBottom="12dp"
-        android:background="#88000000"
-        android:paddingStart="10dp"
-        android:paddingTop="6dp"
-        android:paddingEnd="10dp"
-        android:paddingBottom="6dp"
-        android:text="@string/receipt_preview_gestures_hint"
-        android:textColor="@android:color/white"
-        android:textSize="12sp" />
 </FrameLayout>

@@ -15,8 +15,13 @@ import androidx.appcompat.widget.AppCompatImageView;
 /**
  * Pinch-zoom, drag when zoomed, double-tap to reset fit. Host activity may call
  * {@link #setRotation(float)} on this view for 90° preview steps before persisting pixel rotation.
+ * Candidate mode may listen for a fit-scale horizontal swipe without adding a ViewPager.
  */
 public class ReceiptZoomImageView extends AppCompatImageView {
+
+    interface FitSwipeListener {
+        void onFitSwipe(int indexDelta);
+    }
 
     private final Matrix matrix = new Matrix();
     private final float[] matrixValues = new float[9];
@@ -25,11 +30,18 @@ public class ReceiptZoomImageView extends AppCompatImageView {
     private static final int DRAG = 1;
     private int mode = NONE;
     private final PointF lastTouch = new PointF();
+    private float downX;
+    private float downY;
+    private boolean swipeCancelled;
     private int viewW;
     private int viewH;
     private final ScaleGestureDetector scaleDetector;
     private final GestureDetector gestureDetector;
     private boolean layoutReady;
+    @Nullable
+    private FitSwipeListener fitSwipeListener;
+    @Nullable
+    private Runnable onUserTransformListener;
 
     public ReceiptZoomImageView(Context context) {
         this(context, null);
@@ -53,6 +65,7 @@ public class ReceiptZoomImageView extends AppCompatImageView {
                 float ratio = next / cur;
                 matrix.postScale(ratio, ratio, detector.getFocusX(), detector.getFocusY());
                 setImageMatrix(matrix);
+                notifyUserTransform();
                 return true;
             }
         });
@@ -60,11 +73,30 @@ public class ReceiptZoomImageView extends AppCompatImageView {
             @Override
             public boolean onDoubleTap(MotionEvent e) {
                 resetFit();
+                notifyUserTransform();
                 return true;
             }
         });
         gestureDetector.setIsLongpressEnabled(false);
         setOnTouchListener((v, event) -> handleTouch(event));
+    }
+
+    void setFitSwipeListener(@Nullable FitSwipeListener listener) {
+        this.fitSwipeListener = listener;
+    }
+
+    void setOnUserTransformListener(@Nullable Runnable listener) {
+        this.onUserTransformListener = listener;
+    }
+
+    private void notifyUserTransform() {
+        if (onUserTransformListener != null) {
+            onUserTransformListener.run();
+        }
+    }
+
+    private boolean atFitForSwipe() {
+        return getDrawable() == null || currentUniformScale() <= fitScale * 1.02f;
     }
 
     private boolean handleTouch(MotionEvent event) {
@@ -74,9 +106,13 @@ public class ReceiptZoomImageView extends AppCompatImageView {
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
                 lastTouch.set(curr);
+                downX = curr.x;
+                downY = curr.y;
+                swipeCancelled = false;
                 mode = DRAG;
                 break;
             case MotionEvent.ACTION_POINTER_DOWN:
+                swipeCancelled = true;
                 mode = NONE;
                 break;
             case MotionEvent.ACTION_MOVE:
@@ -89,11 +125,15 @@ public class ReceiptZoomImageView extends AppCompatImageView {
                         float dy = curr.y - lastTouch.y;
                         matrix.postTranslate(dx, dy);
                         setImageMatrix(matrix);
+                        notifyUserTransform();
                     }
                 }
                 lastTouch.set(curr);
                 break;
             case MotionEvent.ACTION_UP:
+                maybeDispatchFitSwipe(event);
+                mode = NONE;
+                break;
             case MotionEvent.ACTION_POINTER_UP:
             case MotionEvent.ACTION_CANCEL:
                 mode = NONE;
@@ -102,6 +142,23 @@ public class ReceiptZoomImageView extends AppCompatImageView {
                 break;
         }
         return true;
+    }
+
+    private void maybeDispatchFitSwipe(MotionEvent event) {
+        if (fitSwipeListener == null || swipeCancelled) {
+            return;
+        }
+        ReceiptCandidateSwipe.Direction direction = ReceiptCandidateSwipe.decide(
+                event.getX() - downX,
+                event.getY() - downY,
+                getResources().getDisplayMetrics().density,
+                atFitForSwipe(),
+                scaleDetector.isInProgress(),
+                1);
+        int delta = ReceiptCandidateSwipe.indexDelta(direction);
+        if (delta != 0) {
+            fitSwipeListener.onFitSwipe(delta);
+        }
     }
 
     private float currentUniformScale() {

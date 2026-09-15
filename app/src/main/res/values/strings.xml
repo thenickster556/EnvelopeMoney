@@ -105,6 +105,7 @@
     <string name="receipt_preview_discard">Discard</string>
     <string name="receipt_preview_save_failed">Could not save the rotated image. Check storage permissions or try again.</string>
     <string name="receipt_preview_gestures_hint">Pinch to zoom · drag to pan · double-tap to refit</string>
+    <string name="receipt_preview_gestures_hint_candidates">Swipe for other pictures · pinch to zoom · drag to pan · double-tap to refit</string>
     <string name="content_desc_close_receipt_preview">Close receipt preview</string>
     <string name="receipt_permission_camera">Camera permission is needed to scan.</string>
     <string name="receipt_permission_storage">Storage permission is needed to save scans on this Android version.</string>

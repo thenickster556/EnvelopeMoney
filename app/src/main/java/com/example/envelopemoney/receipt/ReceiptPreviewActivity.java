@@ -23,8 +23,8 @@ import java.io.IOException;
 /**
  * Full-screen receipt: pinch-zoom, pan, double-tap refit; 90° rotation is view-only until saved.
  * Save decodes from the URI, applies cumulative rotation to pixels via {@link android.graphics.Matrix}, overwrites the same URI as JPEG.
- * Candidate mode is the read-only check before attaching: transaction header, arrows between
- * candidates, and a "use this picture" result; rotate/save stay hidden there.
+ * Candidate mode is the read-only check before attaching: transaction header, arrows or a
+ * fit-scale swipe between candidates, and a "use this picture" result; rotate/save stay hidden there.
  */
 public class ReceiptPreviewActivity extends AppCompatActivity {
 
@@ -95,6 +95,7 @@ public class ReceiptPreviewActivity extends AppCompatActivity {
     /** Candidate check state; empty array means normal attached-receipt viewing. */
     private String[] candidateReferences = new String[0];
     private int candidateIndex;
+    private boolean gesturesHintDismissed;
 
     private final OnBackPressedCallback backCallback = new OnBackPressedCallback(true) {
         @Override
@@ -123,13 +124,20 @@ public class ReceiptPreviewActivity extends AppCompatActivity {
         tvCandidateDetail = findViewById(R.id.tvCandidateDetail);
         tvCandidateCount = findViewById(R.id.tvCandidateCount);
         tvGesturesHint = findViewById(R.id.tvReceiptPreviewGesturesHint);
+        zoomImage.setOnUserTransformListener(this::dismissGesturesHint);
 
         btnClose.setOnClickListener(v -> tryClosePreview());
         btnRotLeft.setOnClickListener(v -> applyViewRotation(-90f));
         btnRotRight.setOnClickListener(v -> applyViewRotation(90f));
         btnSaveRotation.setOnClickListener(v -> confirmReplaceThenSave());
-        btnCandidatePrevious.setOnClickListener(v -> showCandidate(candidateIndex - 1));
-        btnCandidateNext.setOnClickListener(v -> showCandidate(candidateIndex + 1));
+        btnCandidatePrevious.setOnClickListener(v -> {
+            dismissGesturesHint();
+            showCandidate(candidateIndex - 1);
+        });
+        btnCandidateNext.setOnClickListener(v -> {
+            dismissGesturesHint();
+            showCandidate(candidateIndex + 1);
+        });
         btnCandidateSelect.setOnClickListener(v -> returnPickedCandidate());
         btnChooseDifferent.setOnClickListener(v -> returnSwapRequest());
 
@@ -175,7 +183,26 @@ public class ReceiptPreviewActivity extends AppCompatActivity {
         findViewById(R.id.candidateBottomBar).setVisibility(View.VISIBLE);
         tvCandidateTitle.setText(getIntent().getStringExtra(EXTRA_CANDIDATE_TITLE));
         tvCandidateDetail.setText(getIntent().getStringExtra(EXTRA_CANDIDATE_DETAIL));
+        tvGesturesHint.setText(R.string.receipt_preview_gestures_hint_candidates);
+        zoomImage.setFitSwipeListener(delta -> {
+            if (pictureOperationInProgress) {
+                return;
+            }
+            dismissGesturesHint();
+            showCandidate(candidateIndex + delta);
+        });
         showCandidate(candidateIndex);
+    }
+
+    private boolean isCandidateMode() {
+        return candidateReferences.length > 0;
+    }
+
+    private void dismissGesturesHint() {
+        gesturesHintDismissed = true;
+        if (tvGesturesHint != null) {
+            tvGesturesHint.setVisibility(View.GONE);
+        }
     }
 
     private void showCandidate(int index) {
@@ -190,12 +217,17 @@ public class ReceiptPreviewActivity extends AppCompatActivity {
         btnCandidateNext.setEnabled(candidateIndex < candidateReferences.length - 1);
         loadOk = false;
         updateCandidateSelectEnabled();
+        if (gesturesHintDismissed && tvGesturesHint != null) {
+            tvGesturesHint.setVisibility(View.GONE);
+        }
         loadPictureInBackground(false);
     }
 
     private void updateCandidateSelectEnabled() {
+        boolean enabled = loadOk && !pictureOperationInProgress;
         if (btnCandidateSelect != null) {
-            btnCandidateSelect.setEnabled(loadOk && !pictureOperationInProgress);
+            btnCandidateSelect.setEnabled(enabled);
+            btnCandidateSelect.setAlpha(enabled ? 1f : 0.4f);
         }
     }
 
@@ -296,10 +328,15 @@ public class ReceiptPreviewActivity extends AppCompatActivity {
                     if (picture != null) picture.recycle();
                     return;
                 }
-                recycleDisplayBitmap();
                 if (picture == null) {
-                    if (afterSave) showErrorAfterSave(); else showError();
+                    if (afterSave) {
+                        recycleDisplayBitmap();
+                        showErrorAfterSave();
+                    } else {
+                        showError();
+                    }
                 } else {
+                    recycleDisplayBitmap();
                     displayBitmap = picture;
                     loadOk = true;
                     tvError.setVisibility(View.GONE);
@@ -354,6 +391,12 @@ public class ReceiptPreviewActivity extends AppCompatActivity {
         loadOk = false;
         tvError.setVisibility(View.VISIBLE);
         tvError.setText(R.string.receipt_preview_load_failed);
+        if (isCandidateMode()) {
+            recycleDisplayBitmap();
+            zoomImage.setImageDrawable(null);
+            zoomImage.setVisibility(View.VISIBLE);
+            return;
+        }
         zoomImage.setVisibility(View.GONE);
         hideChrome();
     }
