@@ -21,6 +21,12 @@
   ],
   "completed_tasks": [
     {
+      "id": "receipt-tap-nearby-picker-2026-09-16",
+      "title": "Tap a broken receipt: unused ±1-day OCR picker, not Retry",
+      "status": "completed",
+      "intent": "Tap/Retry offer unusedNearby ±1-day unused album files (minus reserved) instead of looping MISSING retry while those files exist. Capture time epoch→EXIF→DATE_TAKEN→DATE_ADDED; EXIF probed for non-epoch names even when DATE_TAKEN is set. Unique auto-bind and Use this picture unchanged. Tests first. Full suite 303 / 2 baseline. Recovery 97.60% lines / 80.79% branches. Lint 43. assembleDebug + git diff --check pass. Device UI not re-run."
+    },
+    {
       "id": "receipt-ocr-move-regression-2026-09-15",
       "title": "OCR-ranked candidates, EXIF capture dates, and the recurring gallery-move regression",
       "status": "completed",

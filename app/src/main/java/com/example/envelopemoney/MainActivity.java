@@ -2020,28 +2020,12 @@ public class MainActivity extends AppCompatActivity {
             Map<String, ReceiptReferenceResolver.Result> resolved = entries.isEmpty()
                     ? Collections.emptyMap()
                     : resolveReceiptEntries(entries);
+            ReceiptReferenceResolver.Result result = firstReceiptResult(entries, resolved);
+            List<ReceiptReferenceResolver.Result> nearby = nearbyChooserPool(reference, entries, result, false);
             runOnUiThread(() -> {
                 if (isFinishing() || isDestroyed()) return;
                 recordReceiptAttention(entries, resolved, false);
-                ReceiptReferenceResolver.Result result = firstReceiptResult(entries, resolved);
-                if (result == null || result.status != ReceiptReferenceResolver.Status.RESOLVED) {
-                    Log.d("EnvelopeMoney", "receipt chooser: status="
-                            + (result == null ? "null" : result.status)
-                            + ", alternatives=" + (result == null ? 0 : result.alternatives.size()));
-                }
-                if (result != null && result.status == ReceiptReferenceResolver.Status.RESOLVED) {
-                    applyReceiptResolution(reference, entries, result);
-                    launchReceiptPreviewActivity(Uri.parse(namedReceiptReference(result)));
-                } else if (result != null && result.status == ReceiptReferenceResolver.Status.AMBIGUOUS
-                        && !result.alternatives.isEmpty()) {
-                    notifyReceiptAttentionChanged();
-                    showReceiptCandidateChooser(reference, result.alternatives);
-                } else {
-                    notifyReceiptAttentionChanged();
-                    showReceiptRecoveryFailure(reference, result != null
-                            ? result.status
-                            : ReceiptReferenceResolver.Status.MISSING);
-                }
+                presentUnresolvedReceipt(reference, entries, result, nearby, false);
             });
         });
     }
@@ -2079,33 +2063,11 @@ public class MainActivity extends AppCompatActivity {
                     ? Collections.emptyMap()
                     : resolveReceiptEntries(entries);
             ReceiptReferenceResolver.Result result = firstReceiptResult(entries, resolved);
+            List<ReceiptReferenceResolver.Result> nearby = nearbyChooserPool(reference, entries, result, requestPermission);
             runOnUiThread(() -> {
                 if (isFinishing() || isDestroyed()) return;
                 recordReceiptAttention(entries, resolved, false);
-                if (result == null || result.status != ReceiptReferenceResolver.Status.RESOLVED) {
-                    Log.d("EnvelopeMoney", "receipt chooser: status="
-                            + (result == null ? "null" : result.status)
-                            + ", alternatives=" + (result == null ? 0 : result.alternatives.size()));
-                }
-                if (result != null && result.status == ReceiptReferenceResolver.Status.RESOLVED) {
-                    applyReceiptResolution(reference, entries, result);
-                    launchReceiptPreviewActivity(Uri.parse(namedReceiptReference(result)));
-                } else if (requestPermission && new AndroidReceiptSource(this).needsReadPermission()
-                        && result != null
-                        && result.status == ReceiptReferenceResolver.Status.PERMISSION_REQUIRED) {
-                    notifyReceiptAttentionChanged();
-                    pendingReceiptReference = reference;
-                    receiptReadPermissionLauncher.launch(AndroidReceiptSource.readPermission());
-                } else if (result != null && result.status == ReceiptReferenceResolver.Status.AMBIGUOUS
-                        && !result.alternatives.isEmpty()) {
-                    notifyReceiptAttentionChanged();
-                    showReceiptCandidateChooser(reference, result.alternatives);
-                } else {
-                    notifyReceiptAttentionChanged();
-                    showReceiptRecoveryFailure(reference, result != null
-                            ? result.status
-                            : ReceiptReferenceResolver.Status.MISSING);
-                }
+                presentUnresolvedReceipt(reference, entries, result, nearby, requestPermission);
             });
         });
     }
@@ -2183,6 +2145,93 @@ public class MainActivity extends AppCompatActivity {
             if (fallback == null) fallback = result;
         }
         return fallback;
+    }
+
+    /**
+     * Unique auto still first. When that fails, unused nearby (±1 day, not already linked)
+     * opens the existing chooser instead of looping the missing retry sheet.
+     */
+    private void presentUnresolvedReceipt(String reference, List<ReceiptReferenceRepair.Entry> entries,
+                                          ReceiptReferenceResolver.Result result,
+                                          List<ReceiptReferenceResolver.Result> nearby,
+                                          boolean requestPermission) {
+        if (result == null || result.status != ReceiptReferenceResolver.Status.RESOLVED) {
+            Log.d("EnvelopeMoney", "receipt chooser: status="
+                    + (result == null ? "null" : result.status)
+                    + ", alternatives=" + (result == null ? 0 : result.alternatives.size())
+                    + ", nearby=" + (nearby == null ? 0 : nearby.size()));
+        }
+        if (result != null && result.status == ReceiptReferenceResolver.Status.RESOLVED) {
+            applyReceiptResolution(reference, entries, result);
+            launchReceiptPreviewActivity(Uri.parse(namedReceiptReference(result)));
+            return;
+        }
+        if (requestPermission && new AndroidReceiptSource(this).needsReadPermission()
+                && result != null
+                && result.status == ReceiptReferenceResolver.Status.PERMISSION_REQUIRED) {
+            notifyReceiptAttentionChanged();
+            pendingReceiptReference = reference;
+            receiptReadPermissionLauncher.launch(AndroidReceiptSource.readPermission());
+            return;
+        }
+        if (nearby != null && !nearby.isEmpty()) {
+            notifyReceiptAttentionChanged();
+            showReceiptCandidateChooser(reference, nearby);
+            return;
+        }
+        notifyReceiptAttentionChanged();
+        showReceiptRecoveryFailure(reference, result != null
+                ? result.status
+                : ReceiptReferenceResolver.Status.MISSING);
+    }
+
+    /**
+     * Unused Pictures/Mountain Money files captured on the transaction day ±1, minus other
+     * rows' URIs and this session's picks. Empty when unique already won, permission is still
+     * missing, or the window is truly empty.
+     */
+    private List<ReceiptReferenceResolver.Result> nearbyChooserPool(String reference,
+            List<ReceiptReferenceRepair.Entry> entries, ReceiptReferenceResolver.Result result,
+            boolean requestPermission) {
+        if (result != null && result.status == ReceiptReferenceResolver.Status.RESOLVED) {
+            return Collections.emptyList();
+        }
+        if (requestPermission && new AndroidReceiptSource(this).needsReadPermission()
+                && result != null
+                && result.status == ReceiptReferenceResolver.Status.PERMISSION_REQUIRED) {
+            return Collections.emptyList();
+        }
+        Set<String> reserved = new HashSet<>(receiptChosenReferences);
+        Transaction tapped = entries == null || entries.isEmpty() ? null : entries.get(0).transaction;
+        String transactionDate = tapped != null ? tapped.getDate() : null;
+        if (envelopes != null) {
+            for (ReceiptReferenceRepair.Entry entry : ReceiptReferenceRepair.snapshot(envelopes)) {
+                if (entry == null || entry.transaction == tapped) continue;
+                if (entry.reference != null && !entry.reference.isEmpty()) {
+                    reserved.add(stripReceiptFragment(entry.reference));
+                }
+            }
+        }
+        List<ReceiptReferenceResolver.Result> nearby = ReceiptReferenceRepair.unusedNearby(
+                new AndroidReceiptSource(this), transactionDate, reserved, TimeZone.getDefault());
+        return unionNearbyWithAlternatives(nearby, result);
+    }
+
+    private static List<ReceiptReferenceResolver.Result> unionNearbyWithAlternatives(
+            List<ReceiptReferenceResolver.Result> nearby, ReceiptReferenceResolver.Result result) {
+        List<ReceiptReferenceResolver.Result> pool = nearby == null
+                ? new ArrayList<>() : new ArrayList<>(nearby);
+        Set<String> seen = new HashSet<>();
+        for (ReceiptReferenceResolver.Result picture : pool) {
+            if (picture != null && picture.reference != null) seen.add(picture.reference);
+        }
+        if (result != null) {
+            for (ReceiptReferenceResolver.Result alternative : result.alternatives) {
+                if (alternative == null || alternative.reference == null) continue;
+                if (seen.add(alternative.reference)) pool.add(alternative);
+            }
+        }
+        return pool;
     }
 
     private String namedReceiptReference(ReceiptReferenceResolver.Result result) {

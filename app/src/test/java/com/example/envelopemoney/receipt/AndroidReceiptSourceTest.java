@@ -204,18 +204,32 @@ public class AndroidReceiptSourceTest {
         assertTrue(receipt.exists());
     }
 
-    @Test public void captureTimePrefersFilenameThenDateTakenThenExifThenDateAdded() {
+    @Test public void captureTimePrefersFilenameThenExifThenDateTakenThenDateAdded() {
         long named = 1_783_776_000_000L;
         assertEquals(named, AndroidReceiptSource.captureTimeMs("MountainMoney_" + named + ".jpg", 50L, 30L, 2L));
-        assertEquals(50L, AndroidReceiptSource.captureTimeMs("IMG_001.jpg", 50L, 30L, 2L));
-        // The real capture instant beats the scan/copy day.
+        // Copied files often have a wrong DATE_TAKEN (import day); EXIF is the real capture instant.
+        assertEquals(30L, AndroidReceiptSource.captureTimeMs("IMG_001.jpg", 50L, 30L, 2L));
         assertEquals(30L, AndroidReceiptSource.captureTimeMs("IMG_001.jpg", 0L, 30L, 2L));
+        assertEquals(50L, AndroidReceiptSource.captureTimeMs("IMG_001.jpg", 50L, 0L, 2L));
         assertEquals(2000L, AndroidReceiptSource.captureTimeMs("IMG_001.jpg", 0L, 0L, 2L));
         assertEquals(1_700_000_000_000L, AndroidReceiptSource.captureTimeMs("IMG_001.jpg", 0L, 0L, 1_700_000_000_000L));
         assertEquals(0L, AndroidReceiptSource.captureTimeMs("IMG_001.jpg", 0L, 0L, 0L));
         assertEquals(0L, AndroidReceiptSource.captureTimeMs((File) null));
         File receipt = new File("MountainMoney_" + named + ".jpg");
         assertEquals(named, AndroidReceiptSource.captureTimeMs(receipt));
+    }
+
+    @Test public void albumRowsWithMisleadingDateTakenPreferExifCaptureTime() throws Exception {
+        gallery.file = pictureWithExifOriginal("2026:08:16 13:12:00");
+        gallery.taken = 1_760_000_000_000L;                  // copy/import day, milliseconds
+        gallery.added = 1_760_000_000L;
+        gallery.displayName = "IMG_0816.jpg";
+        List<ReceiptReferenceResolver.Result> album = new AndroidReceiptSource(context).readAlbum();
+        assertEquals(1, album.size());
+        Calendar expected = Calendar.getInstance();
+        expected.clear();
+        expected.set(2026, Calendar.AUGUST, 16, 13, 12, 0);
+        assertEquals(expected.getTimeInMillis(), album.get(0).captureTimeMs);
     }
 
     @Test public void albumRowsWithoutDatesFallBackToExifCaptureTime() throws Exception {

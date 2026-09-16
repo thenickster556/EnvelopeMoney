@@ -89,6 +89,41 @@ public final class ReceiptAlbumMatcher {
         return results;
     }
 
+    /**
+     * Unused album files whose capture local day is {@code transactionDate} or one day either
+     * side, ranked closer-to-target first. Reserved references (exact or fragment-stripped)
+     * stay out. Does not unique-bind.
+     */
+    public static List<ReceiptReferenceResolver.Result> unusedNearby(
+            List<ReceiptReferenceResolver.Result> album, String transactionDate,
+            Set<String> reservedReferences, TimeZone zone) {
+        TimeZone tz = zone != null ? zone : TimeZone.getDefault();
+        String day = normalizeDay(transactionDate);
+        if (day == null) return Collections.emptyList();
+        Set<String> bound = new HashSet<>();
+        if (reservedReferences != null) {
+            for (String reserved : reservedReferences) {
+                if (reserved == null || reserved.isEmpty()) continue;
+                bound.add(reserved);
+                int hash = reserved.indexOf('#');
+                bound.add(hash >= 0 ? reserved.substring(0, hash) : reserved);
+            }
+        }
+        Map<String, List<ReceiptReferenceResolver.Result>> unusedByDay =
+                unusedFilesByDay(new AlbumIndex(album), tz, bound);
+        List<ReceiptReferenceResolver.Result> pool = windowUnused(day, unusedByDay, bound);
+        List<ReceiptReferenceResolver.Result> unused = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (ReceiptReferenceResolver.Result picture : pool) {
+            if (picture == null || picture.reference == null) continue;
+            int hash = picture.reference.indexOf('#');
+            String bare = hash >= 0 ? picture.reference.substring(0, hash) : picture.reference;
+            if (bound.contains(picture.reference) || bound.contains(bare)) continue;
+            if (seen.add(bare)) unused.add(picture);
+        }
+        return rankByLikelihood(new Claim("nearby", null, transactionDate), unused, tz);
+    }
+
     /** Immutable filename inventory of the album, queried per identity tier. */
     private static final class AlbumIndex {
         private final List<ReceiptReferenceResolver.Result> files = new ArrayList<>();

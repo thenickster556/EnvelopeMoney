@@ -211,8 +211,9 @@ public final class AndroidReceiptSource implements ReceiptReferenceResolver.Sour
                 long taken = takenCol >= 0 && !cursor.isNull(takenCol) ? cursor.getLong(takenCol) : 0L;
                 long added = addedCol >= 0 && !cursor.isNull(addedCol) ? cursor.getLong(addedCol) : 0L;
                 long exifOriginalMs = 0L;
-                // Only rows that would otherwise fall back to the scan/copy day pay for a probe.
-                if (taken <= 0 && ReceiptAlbumMatcher.captureTimeMs(name) == null) {
+                // Copied/renamed JPEGs often have a wrong DATE_TAKEN (import day). Probe EXIF
+                // whenever the name has no epoch so the true capture day stays in the ±1 window.
+                if (ReceiptAlbumMatcher.captureTimeMs(name) == null) {
                     Long probed = exifCaptureTimeMs(context, uri);
                     if (probed != null && probed > 0) {
                         exifOriginalMs = probed;
@@ -275,15 +276,15 @@ public final class AndroidReceiptSource implements ReceiptReferenceResolver.Sour
     }
 
     /**
-     * Filename epoch first, then MediaStore {@code DATE_TAKEN} (ms), then the JPEG's EXIF
-     * {@code DateTimeOriginal} (the real capture instant for copied files), then {@code DATE_ADDED}
-     * (seconds unless the value is already milliseconds) — the scan/copy day as a last resort.
+     * Filename epoch first, then the JPEG's EXIF {@code DateTimeOriginal} (the real capture instant
+     * for copied files), then MediaStore {@code DATE_TAKEN}, then {@code DATE_ADDED} (seconds unless
+     * the value is already milliseconds) — the scan/copy day as a last resort.
      */
     static long captureTimeMs(String fileName, long dateTakenMs, long exifOriginalMs, long dateAddedRaw) {
         Long fromName = ReceiptAlbumMatcher.captureTimeMs(fileName);
         if (fromName != null && fromName > 0) return fromName;
-        if (dateTakenMs > 0) return dateTakenMs;
         if (exifOriginalMs > 0) return exifOriginalMs;
+        if (dateTakenMs > 0) return dateTakenMs;
         if (dateAddedRaw > 1_000_000_000_000L) return dateAddedRaw;
         if (dateAddedRaw > 0) return dateAddedRaw * 1000L;
         return 0L;

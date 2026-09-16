@@ -201,6 +201,25 @@ public final class ReceiptReferenceRepair {
         return others;
     }
 
+    /**
+     * Unused album files whose capture local day is {@code transactionDate} or one day either
+     * side, ranked closer-to-target first. Restricted or denied albums return empty so the caller
+     * can keep today's retry/permission path. Does not unique-bind or attach.
+     */
+    public static List<ReceiptReferenceResolver.Result> unusedNearby(
+            ReceiptReferenceResolver.Source source, String transactionDate,
+            Set<String> reservedReferences, TimeZone zone) {
+        if (source == null) return new ArrayList<>();
+        if (source.albumAccessRestricted()) return new ArrayList<>();
+        List<ReceiptReferenceResolver.Result> album;
+        try {
+            album = source.readAlbum();
+        } catch (SecurityException denied) {
+            return new ArrayList<>();
+        }
+        return ReceiptAlbumMatcher.unusedNearby(album, transactionDate, reservedReferences, zone);
+    }
+
     /** URI fragments carry a filename hint, not identity; compare the bare references. */
     private static String stripFragment(String reference) {
         int fragmentAt = reference.indexOf('#');

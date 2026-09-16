@@ -384,6 +384,67 @@ public class ReceiptReferenceRepairTest {
         assertTrue(others.isEmpty());
     }
 
+    @Test public void unusedNearbyKeepsPlusMinusOneDayMinusReserved() {
+        FakeAlbum album = new FakeAlbum();
+        TimeZone utc = TimeZone.getTimeZone("UTC");
+        String same = "content://media/external/images/media/same";
+        String before = "content://media/external/images/media/before";
+        String after = "content://media/external/images/media/after";
+        String far = "content://media/external/images/media/far";
+        String reserved = "content://media/external/images/media/reserved";
+        album.add(same, "IMG_same.jpg", utcNoon(2026, 9, 7));
+        album.add(before, "IMG_before.jpg", utcNoon(2026, 9, 6));
+        album.add(after, "IMG_after.jpg", utcNoon(2026, 9, 8));
+        album.add(far, "IMG_far.jpg", utcNoon(2026, 9, 5));
+        album.add(reserved, "IMG_taken.jpg", utcNoon(2026, 9, 7) + 3_600_000L);
+        List<ReceiptReferenceResolver.Result> nearby = ReceiptReferenceRepair.unusedNearby(
+                album, "2026-09-07", Collections.singleton(reserved), utc);
+        assertEquals(3, nearby.size());
+        assertEquals(same, nearby.get(0).reference);
+        assertEquals(after, nearby.get(1).reference);
+        assertEquals(before, nearby.get(2).reference);
+    }
+
+    @Test public void unusedNearbyEmptyWhenWindowEmptyOrDenied() {
+        TimeZone utc = TimeZone.getTimeZone("UTC");
+        FakeAlbum album = new FakeAlbum();
+        album.add(FRESH, "IMG_far.jpg", utcNoon(2026, 9, 5));
+        assertTrue(ReceiptReferenceRepair.unusedNearby(album, "2026-09-07",
+                Collections.emptySet(), utc).isEmpty());
+        assertTrue(ReceiptReferenceRepair.unusedNearby(null, "2026-09-07",
+                Collections.emptySet(), utc).isEmpty());
+        assertTrue(ReceiptReferenceRepair.unusedNearby(album, "not-a-date",
+                Collections.emptySet(), utc).isEmpty());
+        FakeAlbum denied = new FakeAlbum();
+        denied.denyAlbum = true;
+        denied.add(FRESH, "IMG_same.jpg", utcNoon(2026, 9, 7));
+        assertTrue(ReceiptReferenceRepair.unusedNearby(denied, "2026-09-07",
+                Collections.emptySet(), utc).isEmpty());
+        FakeAlbum restricted = new FakeAlbum();
+        restricted.restricted = true;
+        restricted.add(FRESH, "IMG_same.jpg", utcNoon(2026, 9, 7));
+        assertTrue(ReceiptReferenceRepair.unusedNearby(restricted, "2026-09-07",
+                Collections.emptySet(), utc).isEmpty());
+    }
+
+    @Test public void unusedNearbyStripsFragmentsAndIgnoresNullReserved() {
+        TimeZone utc = TimeZone.getTimeZone("UTC");
+        FakeAlbum album = new FakeAlbum();
+        String keep = "content://media/external/images/media/keep#keep.jpg";
+        String taken = "content://media/external/images/media/taken#taken.jpg";
+        album.add(keep, "IMG_keep.jpg", utcNoon(2026, 9, 7));
+        album.add(taken, "IMG_taken.jpg", utcNoon(2026, 9, 7) + 1_000L);
+        Set<String> reserved = new HashSet<>();
+        reserved.add(null);
+        reserved.add("");
+        reserved.add("content://media/external/images/media/taken");
+        List<ReceiptReferenceResolver.Result> nearby = ReceiptReferenceRepair.unusedNearby(
+                album, "2026-09-07", reserved, null);
+        assertEquals(1, nearby.size());
+        assertEquals(keep, nearby.get(0).reference);
+        assertEquals(2, ReceiptAlbumMatcher.unusedNearby(album.album, "2026-09-07", null, utc).size());
+    }
+
     @Test public void swapCandidatesUniqueSelfYieldsNone() {
         FakeAlbum album = new FakeAlbum();
         long noon = utcNoon(2026, 9, 7);
