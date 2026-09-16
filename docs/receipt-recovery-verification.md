@@ -264,3 +264,18 @@ When unique auto-bind fails, tap and Retry now call `ReceiptReferenceRepair.unus
 
 ## On-device check (recommended, not yet run)
 Tap the red camera on a dead Aug receipt that has unused album JPEGs **from any day**: chooser, not Retry. Copied/renamed JPEG whose MediaStore date is weeks later but EXIF is the receipt day appears in the chooser. Already-linked pictures stay out. Truly empty album: retry dialog. Rebuild/install this APK before judging the tap. No launch popup.
+
+# Append close OCR unused, then all leftover unused — 2026-09-16
+
+## Delivered behavior (delta)
+The first chooser list stays unused capture day **±1** (empty-window fallback already shipping). Unique auto-bind is still identity / ±1 only — a far file with a matching total is never auto-attached. While the picker is open, leftover unused (not selected) pictures run through the same `ReceiptOcrPipeline` + learned `currentOcrWeights()`. Those whose printed total is exact, within **$2 or 10%** (40), or within **$5 or 25%** (15) **append** and re-sort above capture proximity. `$20` vs `$21.66` is close; `$29.28` vs `$21.66` is not. **None of these** lists every remaining unused picture with the OCR'd `$` (Amount matches / Close amount / `$29.28` / No amount read) and hides once that full unused set is showing. **Use this picture** nudges `OcrAmountLearner` from the stored `ReceiptDraft`. No new Gson keys, no Files picker, no launch chooser.
+
+## Automated results
+- Tests first (compile-red for `amountTier` / `unusedNotReserved` / `shouldAppendByAmount`), then green: `ReceiptCandidateScorerTest.twentyVersusTwentyOneSixtySixIsCloseEnoughToAppend`; `ReceiptReferenceRepairTest.unusedNearbyKeepsPlusMinusOneDayMinusReserved` still excludes a two-day-away file; `unusedNotReservedKeepsFarFilesForSeeAllAndCloseAppend`; `OcrAmountLearnerTest` unchanged.
+- Full `:app:testDebugUnitTest`: **307 tests, 305 passed, same 2 baseline failures**.
+- Recovery JaCoCo: 97.59% lines (730/748) / 80.75% branches (604/748); gates pass.
+- `:app:lintDebug`: **43 existing errors**. `:app:assembleDebug` and `git diff --check`: passed.
+
+## On-device check (recommended, not yet run)
+Rebuild/install after this ranking commit, Gradle JDK **11**. Tap red camera: ±1 unused is the main list; a later unused JPEG with a close printed `$` appends and can rise to **Amount matches**. Neighbor-day leftover stays on the ±1 list. Already-linked pictures absent. **None of these** lists every leftover unused picture with the OCR'd number. Cancel leaves the red icon. **Use this picture** still required. Empty unused album: retry dialog. Night mode readable. No launch popup.
+

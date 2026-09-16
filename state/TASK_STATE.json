@@ -22,6 +22,12 @@
   ],
   "completed_tasks": [
     {
+      "id": "receipt-amount-rank-outside-day-2026-09-16",
+      "title": "Append close OCR unused then offer all leftover unused",
+      "status": "completed",
+      "intent": "Minor: chooser main list stays unusedNearby ±1. OCR leftover unused-not-selected with ReceiptOcrPipeline + currentOcrWeights(); append exact / $2-or-10% (40) / $5-or-25% (15). None of these lists remaining unused with printed OCR $. Use this picture nudges OcrAmountLearner from stored ReceiptDraft. Unique auto-bind, Use this picture, no Files picker, no new Gson, launch does not auto-open a chooser. Tests first. Full suite 307 / 2 baseline. Recovery 97.59% lines / 80.75% branches. Lint 43. assembleDebug + git diff --check pass. Device UI not re-run."
+    },
+    {
       "id": "receipt-tap-all-unused-fallback-2026-09-16",
       "title": "Tap still shows Open receipt picture; offer all unused album files",
       "status": "completed",
@@ -356,5 +362,5 @@
       "title": "Fullscreen zoomable rotatable ReceiptPreviewActivity; ReceiptZoomImageView; ReceiptBitmapLoader"
     }
   ],
-  "last_updated": "2026-09-15"
+  "last_updated": "2026-09-16"
 }

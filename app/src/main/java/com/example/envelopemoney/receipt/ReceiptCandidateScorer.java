@@ -18,14 +18,20 @@ public final class ReceiptCandidateScorer {
 
     public static final int AMOUNT_EXACT = 100;
     public static final int AMOUNT_CLOSE = 40;
+    /** Printed total is farther than close but still near enough to append to the shortlist. */
+    public static final int AMOUNT_NEAR = 15;
     public static final int MERCHANT_PER_TOKEN = 25;
     public static final int MERCHANT_TOKEN_CAP = 50;
     public static final int DATE_MATCH = 20;
 
-    /** Amount within this absolute difference still counts as a close match. */
-    private static final double CLOSE_ABSOLUTE_TOLERANCE = 0.50;
+    /** Amount within this absolute difference still counts as close (tier 40). */
+    private static final double CLOSE_ABSOLUTE_TOLERANCE = 2.00;
     /** Or within this fraction of the transaction amount, whichever is larger. */
-    private static final double CLOSE_FRACTION_TOLERANCE = 0.02;
+    private static final double CLOSE_FRACTION_TOLERANCE = 0.10;
+    /** Amount within this absolute difference still counts as near (tier 15). */
+    private static final double NEAR_ABSOLUTE_TOLERANCE = 5.00;
+    /** Or within this fraction of the transaction amount, whichever is larger. */
+    private static final double NEAR_FRACTION_TOLERANCE = 0.25;
     private static final int MINIMUM_MERCHANT_TOKEN_LENGTH = 3;
 
     private ReceiptCandidateScorer() {
@@ -42,19 +48,34 @@ public final class ReceiptCandidateScorer {
     public static int score(Double ocrTotal, String ocrMerchant, String ocrDate,
                             double transactionAmount, String transactionComment,
                             String transactionDate) {
-        return amountScore(ocrTotal, transactionAmount)
+        return amountTier(ocrTotal, transactionAmount)
                 + merchantScore(ocrMerchant, transactionComment)
                 + dateScore(ocrDate, transactionDate);
     }
 
-    private static int amountScore(Double ocrTotal, double transactionAmount) {
+    /**
+     * Amount-only band shared by ranking, leftover append, and chooser badges.
+     * Exact cents → 100; within $2 or 10% → 40; within $5 or 25% → 15; else 0.
+     */
+    public static int amountTier(Double ocrTotal, double transactionAmount) {
         if (ocrTotal == null) return 0;
         double difference = Math.abs(MoneyMath.roundToCents(ocrTotal)
                 - MoneyMath.roundToCents(transactionAmount));
         if (difference == 0d) return AMOUNT_EXACT;
-        double tolerance = Math.max(CLOSE_ABSOLUTE_TOLERANCE,
+        double closeTolerance = Math.max(CLOSE_ABSOLUTE_TOLERANCE,
                 CLOSE_FRACTION_TOLERANCE * Math.abs(transactionAmount));
-        return difference <= tolerance ? AMOUNT_CLOSE : 0;
+        if (difference <= closeTolerance) return AMOUNT_CLOSE;
+        double nearTolerance = Math.max(NEAR_ABSOLUTE_TOLERANCE,
+                NEAR_FRACTION_TOLERANCE * Math.abs(transactionAmount));
+        return difference <= nearTolerance ? AMOUNT_NEAR : 0;
+    }
+
+    /**
+     * Leftover unused pictures whose printed total is exact, close, or near join the ±1 shortlist.
+     * A miss (including no OCR total) waits for {@code None of these}.
+     */
+    public static boolean shouldAppendByAmount(Double ocrTotal, double transactionAmount) {
+        return amountTier(ocrTotal, transactionAmount) >= AMOUNT_NEAR;
     }
 
     private static int merchantScore(String ocrMerchant, String transactionComment) {

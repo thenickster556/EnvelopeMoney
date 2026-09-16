@@ -100,15 +100,7 @@ public final class ReceiptAlbumMatcher {
             List<ReceiptReferenceResolver.Result> album, String transactionDate,
             Set<String> reservedReferences, TimeZone zone) {
         TimeZone tz = zone != null ? zone : TimeZone.getDefault();
-        Set<String> bound = new HashSet<>();
-        if (reservedReferences != null) {
-            for (String reserved : reservedReferences) {
-                if (reserved == null || reserved.isEmpty()) continue;
-                bound.add(reserved);
-                int hash = reserved.indexOf('#');
-                bound.add(hash >= 0 ? reserved.substring(0, hash) : reserved);
-            }
-        }
+        Set<String> bound = reservedKeys(reservedReferences);
         AlbumIndex index = new AlbumIndex(album);
         String day = normalizeDay(transactionDate);
         List<ReceiptReferenceResolver.Result> pool = Collections.emptyList();
@@ -130,6 +122,56 @@ public final class ReceiptAlbumMatcher {
             if (seen.add(bare)) unused.add(picture);
         }
         return rankByLikelihood(new Claim("nearby", null, transactionDate), unused, tz);
+    }
+
+    /**
+     * Every unused album file minus reserved (exact or fragment-stripped), including undated rows.
+     * The first chooser list stays {@link #unusedNearby}; this pool feeds leftover OCR append
+     * and {@code None of these}.
+     */
+    public static List<ReceiptReferenceResolver.Result> unusedNotReserved(
+            List<ReceiptReferenceResolver.Result> album, Set<String> reservedReferences) {
+        return unusedAlbum(new AlbumIndex(album), reservedKeys(reservedReferences));
+    }
+
+    /**
+     * Unused files that are not already on the shortlist. Compare fragment-stripped references
+     * so a {@code #filename} hint does not hide a leftover.
+     */
+    public static List<ReceiptReferenceResolver.Result> unusedNotAlreadyListed(
+            List<ReceiptReferenceResolver.Result> unused,
+            List<ReceiptReferenceResolver.Result> alreadyListed) {
+        Set<String> seen = reservedKeys(null);
+        if (alreadyListed != null) {
+            for (ReceiptReferenceResolver.Result picture : alreadyListed) {
+                if (picture == null || picture.reference == null) continue;
+                seen.add(picture.reference);
+                int hash = picture.reference.indexOf('#');
+                seen.add(hash >= 0 ? picture.reference.substring(0, hash) : picture.reference);
+            }
+        }
+        List<ReceiptReferenceResolver.Result> leftovers = new ArrayList<>();
+        if (unused == null) return leftovers;
+        for (ReceiptReferenceResolver.Result picture : unused) {
+            if (picture == null || picture.reference == null) continue;
+            int hash = picture.reference.indexOf('#');
+            String bare = hash >= 0 ? picture.reference.substring(0, hash) : picture.reference;
+            if (seen.contains(picture.reference) || seen.contains(bare)) continue;
+            leftovers.add(picture);
+        }
+        return leftovers;
+    }
+
+    static Set<String> reservedKeys(Set<String> reservedReferences) {
+        Set<String> bound = new HashSet<>();
+        if (reservedReferences == null) return bound;
+        for (String reserved : reservedReferences) {
+            if (reserved == null || reserved.isEmpty()) continue;
+            bound.add(reserved);
+            int hash = reserved.indexOf('#');
+            bound.add(hash >= 0 ? reserved.substring(0, hash) : reserved);
+        }
+        return bound;
     }
 
     /** Every unused album row, including files with no capture day. */

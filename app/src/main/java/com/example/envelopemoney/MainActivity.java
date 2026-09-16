@@ -59,6 +59,7 @@ import com.example.envelopemoney.receipt.ReceiptCandidateSummary;
 import com.example.envelopemoney.receipt.AndroidReceiptSource;
 import com.example.envelopemoney.receipt.ReceiptReferenceResolver;
 import com.example.envelopemoney.receipt.ReceiptReferenceRepair;
+import com.example.envelopemoney.receipt.ReceiptAlbumMatcher;
 import com.example.envelopemoney.receipt.ReceiptCaptureActivity;
 import com.example.envelopemoney.receipt.ReceiptExifBitmapLoader;
 import com.example.envelopemoney.receipt.ReceiptPickerUriNormalizer;
@@ -198,6 +199,12 @@ public class MainActivity extends AppCompatActivity {
     private final Map<String, String> receiptChooserBadges = new HashMap<>();
     /** OCR content score per candidate reference; absent entries keep their capture-rank position. */
     private final Map<String, Integer> receiptChooserScores = new HashMap<>();
+    /** OCR drafts keyed by candidate reference so Use this picture can nudge learned weights. */
+    private final Map<String, ReceiptDraft> receiptChooserDrafts = new HashMap<>();
+    /** Unused pictures not on the ±1 shortlist; None of these appends these. */
+    private final List<ReceiptReferenceResolver.Result> receiptChooserLeftovers = new ArrayList<>();
+    /** True once the chooser is listing every leftover unused picture. */
+    private boolean receiptChooserShowingAllUnused;
     /** Gallery sources the user declined to delete; each photo is asked at most once per session. */
     private final Set<String> receiptDeclinedDeleteSources = new HashSet<>();
     private ActivityResultLauncher<androidx.activity.result.IntentSenderRequest> receiptDeleteRequestLauncher;
@@ -2148,8 +2155,9 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * Unique auto still first. When that fails, unused Mountain Money files open the existing
-     * chooser (±1 day first, then the rest of the unused album) instead of looping Retry.
+     * Unique auto still first. When that fails, unused Mountain Money files from capture day
+     * ±1 open the existing chooser; close OCR totals from other unused files append; None of
+     * these lists every leftover unused picture.
      */
     private void presentUnresolvedReceipt(String reference, List<ReceiptReferenceRepair.Entry> entries,
                                           ReceiptReferenceResolver.Result result,
@@ -2188,7 +2196,8 @@ public class MainActivity extends AppCompatActivity {
     /**
      * Unused Pictures/Mountain Money files for the tap chooser: capture day ±1 first, otherwise
      * every unused album file, minus other rows' URIs and this session's picks. Empty when unique
-     * already won, permission is still missing, or the album is truly empty.
+     * already won, permission is still missing, or the album is truly empty. Close OCR leftovers
+     * are appended later; this pool is the main list only.
      */
     private List<ReceiptReferenceResolver.Result> nearbyChooserPool(String reference,
             List<ReceiptReferenceRepair.Entry> entries, ReceiptReferenceResolver.Result result,
@@ -2201,9 +2210,17 @@ public class MainActivity extends AppCompatActivity {
                 && result.status == ReceiptReferenceResolver.Status.PERMISSION_REQUIRED) {
             return Collections.emptyList();
         }
-        Set<String> reserved = new HashSet<>(receiptChosenReferences);
         Transaction tapped = entries == null || entries.isEmpty() ? null : entries.get(0).transaction;
         String transactionDate = tapped != null ? tapped.getDate() : null;
+        Set<String> reserved = receiptChooserReserved(tapped);
+        List<ReceiptReferenceResolver.Result> nearby = ReceiptReferenceRepair.unusedNearby(
+                new AndroidReceiptSource(this), transactionDate, reserved, TimeZone.getDefault());
+        return unionNearbyWithAlternatives(nearby, result);
+    }
+
+    /** Other rows' URIs and this session's picks stay out of choosers. */
+    private Set<String> receiptChooserReserved(Transaction tapped) {
+        Set<String> reserved = new HashSet<>(receiptChosenReferences);
         if (envelopes != null) {
             for (ReceiptReferenceRepair.Entry entry : ReceiptReferenceRepair.snapshot(envelopes)) {
                 if (entry == null || entry.transaction == tapped) continue;
@@ -2212,9 +2229,7 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
         }
-        List<ReceiptReferenceResolver.Result> nearby = ReceiptReferenceRepair.unusedNearby(
-                new AndroidReceiptSource(this), transactionDate, reserved, TimeZone.getDefault());
-        return unionNearbyWithAlternatives(nearby, result);
+        return reserved;
     }
 
     private static List<ReceiptReferenceResolver.Result> unionNearbyWithAlternatives(
@@ -2336,10 +2351,11 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * AMBIGUOUS with known candidates becomes a picker. Candidates that fail a fresh verification
-     * never reach the user; every candidate — even a lone survivor — is confirmed on the
-     * fullscreen check screen before anything attaches. With several candidates, background OCR
-     * re-sorts the rows by content match while the dialog is already usable.
+     * AMBIGUOUS with known candidates becomes a picker. The main list is ±1 unused (or the
+     * empty-window fallback). Background OCR may append leftover unused pictures whose printed
+     * total is close. Candidates that fail a fresh verification never reach the user; every
+     * candidate — even a lone survivor with no leftovers — is confirmed on the fullscreen check
+     * before anything attaches.
      */
     private void showReceiptCandidateChooser(String reference,
                                              List<ReceiptReferenceResolver.Result> alternatives) {
@@ -2347,50 +2363,85 @@ public class MainActivity extends AppCompatActivity {
             AndroidReceiptSource source = new AndroidReceiptSource(this);
             List<ReceiptReferenceResolver.Result> readable = new ArrayList<>();
             for (ReceiptReferenceResolver.Result candidate : alternatives) {
-                if (candidate == null || candidate.reference == null
-                        || receiptChosenReferences.contains(candidate.reference)) continue;
-                ReceiptReferenceResolver.Result verified = source.inspect(candidate.reference);
-                if (verified.status == ReceiptReferenceResolver.Status.RESOLVED) {
-                    long capture = candidate.captureTimeMs > 0
-                            ? candidate.captureTimeMs : verified.captureTimeMs;
-                    String name = verified.fileName != null ? verified.fileName : candidate.fileName;
-                    readable.add(ReceiptReferenceResolver.Result.resolved(
-                            verified.reference, name, capture));
-                }
+                ReceiptReferenceResolver.Result verified = inspectChooserCandidate(source, candidate);
+                if (verified != null) readable.add(verified);
             }
+            Transaction tapped = receiptTransactionFor(reference);
+            List<ReceiptReferenceResolver.Result> leftoverListed =
+                    ReceiptAlbumMatcher.unusedNotAlreadyListed(
+                            ReceiptReferenceRepair.unusedNotReserved(source, receiptChooserReserved(tapped)),
+                            readable);
             runOnUiThread(() -> {
                 if (isFinishing() || isDestroyed()) return;
                 if (readable.isEmpty()) {
                     showReceiptRecoveryFailure(reference, ReceiptReferenceResolver.Status.AMBIGUOUS);
-                } else if (readable.size() == 1) {
+                } else if (readable.size() == 1 && leftoverListed.isEmpty()) {
                     launchReceiptCandidateCheck(reference, readable, 0);
                 } else {
                     final int generation = ++receiptChooserGeneration;
                     receiptChooserBadges.clear();
                     receiptChooserScores.clear();
+                    receiptChooserDrafts.clear();
+                    receiptChooserLeftovers.clear();
+                    receiptChooserLeftovers.addAll(leftoverListed);
+                    receiptChooserShowingAllUnused = false;
                     final List<ReceiptReferenceResolver.Result> ranked = new ArrayList<>(readable);
                     receiptChooserDialog = buildReceiptChooserDialog(reference, ranked);
                     receiptChooserDialog.show();
+                    final List<ReceiptReferenceResolver.Result> leftoverSnapshot =
+                            new ArrayList<>(leftoverListed);
                     receiptRecoveryExecutor.execute(() ->
-                            scoreReceiptCandidatesByOcr(reference, ranked, generation));
+                            scoreReceiptCandidatesByOcr(reference, ranked, leftoverSnapshot, generation));
                 }
             });
         });
+    }
+
+    /** Header-decode a chooser row so file:// album paths survive; skip session picks. */
+    private ReceiptReferenceResolver.Result inspectChooserCandidate(
+            AndroidReceiptSource source, ReceiptReferenceResolver.Result candidate) {
+        if (source == null || candidate == null || candidate.reference == null) return null;
+        if (receiptChosenReferences.contains(candidate.reference)
+                || receiptChosenReferences.contains(stripReceiptFragment(candidate.reference))) {
+            return null;
+        }
+        ReceiptReferenceResolver.Result verified = source.inspect(candidate.reference);
+        if (verified == null || verified.status != ReceiptReferenceResolver.Status.RESOLVED) {
+            return null;
+        }
+        long capture = candidate.captureTimeMs > 0 ? candidate.captureTimeMs : verified.captureTimeMs;
+        String name = verified.fileName != null ? verified.fileName : candidate.fileName;
+        return ReceiptReferenceResolver.Result.resolved(verified.reference, name, capture);
     }
 
     /** Rows browse; the fullscreen check (launched per row) is the only place a pick happens. */
     private AlertDialog buildReceiptChooserDialog(String reference,
                                                   List<ReceiptReferenceResolver.Result> candidates) {
         ViewGroup body = (ViewGroup) LayoutInflater.from(this).inflate(R.layout.dialog_receipt_chooser, null);
-        AlertDialog dialog = new MaterialAlertDialogBuilder(this)
+        MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(this)
                 .setTitle(R.string.receipt_chooser_title)
-                .setMessage(getString(R.string.receipt_chooser_message, candidates.size(),
-                        receiptChooserSummary(reference)))
+                .setMessage(receiptChooserMessage(reference, candidates.size()))
                 .setView(body)
-                .setNegativeButton(android.R.string.cancel, null)
-                .create();
+                .setNegativeButton(android.R.string.cancel, null);
+        if (!receiptChooserLeftovers.isEmpty()) {
+            builder.setNeutralButton(R.string.receipt_chooser_see_all_unused, null);
+        }
+        AlertDialog dialog = builder.create();
         populateReceiptChooserRows(reference, candidates, body.findViewById(R.id.receiptChooserRows));
+        dialog.setOnShowListener(shown -> {
+            Button noneOfThese = dialog.getButton(AlertDialog.BUTTON_NEUTRAL);
+            if (noneOfThese == null) return;
+            noneOfThese.setOnClickListener(v ->
+                    expandReceiptChooserToAllUnused(reference, candidates));
+        });
         return dialog;
+    }
+
+    private String receiptChooserMessage(String reference, int count) {
+        if (receiptChooserShowingAllUnused) {
+            return getString(R.string.receipt_chooser_all_unused_message, count);
+        }
+        return getString(R.string.receipt_chooser_message, count, receiptChooserSummary(reference));
     }
 
     /** One row per candidate; rebuilt in place when OCR scores re-order the list. */
@@ -2423,43 +2474,206 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * OCRs each candidate on the recovery executor and re-sorts the open dialog by content match:
-     * amount first, merchant tokens and date as secondary evidence. The dialog stays usable in
-     * capture-rank order while badges read "Reading receipt…"; each scored candidate settles the
-     * order a little more. A stale generation (dialog closed, replaced, or picked) drops updates.
+     * OCRs the ±1 shortlist first, then leftover unused pictures. Close printed totals append
+     * to the open dialog; the rest wait for None of these. Learned OCR weights come from
+     * {@link #currentOcrWeights()}. A stale generation drops updates.
      */
     private void scoreReceiptCandidatesByOcr(String reference,
                                              List<ReceiptReferenceResolver.Result> ranked,
+                                             List<ReceiptReferenceResolver.Result> leftoverSnapshot,
                                              int generation) {
         Transaction transaction = receiptTransactionFor(reference);
         if (transaction == null) return;
-        for (int index = 0; index < ranked.size(); index++) {
+        List<ReceiptReferenceResolver.Result> shortlist = new ArrayList<>(ranked);
+        for (ReceiptReferenceResolver.Result candidate : shortlist) {
+            scoreOneChooserCandidate(reference, transaction, candidate, ranked, generation, false);
+        }
+        AndroidReceiptSource source = new AndroidReceiptSource(this);
+        List<ReceiptReferenceResolver.Result> leftovers = leftoverSnapshot == null
+                ? Collections.emptyList() : leftoverSnapshot;
+        for (ReceiptReferenceResolver.Result leftover : leftovers) {
             if (receiptChooserGeneration != generation) return;
-            ReceiptReferenceResolver.Result candidate = ranked.get(index);
-            ReceiptDraft draft = ocrReceiptCandidateQuietly(candidate.reference);
-            int score = ReceiptCandidateScorer.score(
-                    draft != null ? draft.totalAmount : null,
-                    draft != null ? draft.merchantForComment : null,
-                    draft != null ? draft.dateYyyyMmDd : null,
-                    transaction.getAmount(), transaction.getComment(), transaction.getDate());
-            final int candidateScore = score;
-            final String badgeText = receiptChooserBadgeText(draft, score);
-            final int candidateIndex = index;
+            ReceiptReferenceResolver.Result verified = inspectChooserCandidate(source, leftover);
+            if (verified == null) {
+                runOnUiThread(() -> {
+                    if (receiptChooserGeneration != generation) return;
+                    removeChooserReference(receiptChooserLeftovers, leftover.reference);
+                    updateReceiptChooserChrome(reference, ranked);
+                });
+                continue;
+            }
+            final ReceiptReferenceResolver.Result inspected = verified;
+            runOnUiThread(() -> replaceChooserLeftover(leftover.reference, inspected));
+            scoreOneChooserCandidate(reference, transaction, inspected, ranked, generation, true);
+        }
+    }
+
+    private void scoreOneChooserCandidate(String reference, Transaction transaction,
+                                          ReceiptReferenceResolver.Result candidate,
+                                          List<ReceiptReferenceResolver.Result> ranked,
+                                          int generation, boolean leftover) {
+        if (receiptChooserGeneration != generation || candidate == null) return;
+        ReceiptDraft draft = ocrReceiptCandidateQuietly(candidate.reference);
+        Double ocrTotal = draft != null ? draft.totalAmount : null;
+        int score = ReceiptCandidateScorer.score(
+                ocrTotal,
+                draft != null ? draft.merchantForComment : null,
+                draft != null ? draft.dateYyyyMmDd : null,
+                transaction.getAmount(), transaction.getComment(), transaction.getDate());
+        int amountTier = ReceiptCandidateScorer.amountTier(ocrTotal, transaction.getAmount());
+        boolean append = leftover
+                && ReceiptCandidateScorer.shouldAppendByAmount(ocrTotal, transaction.getAmount());
+        runOnUiThread(() -> {
+            if (receiptChooserGeneration != generation
+                    || receiptChooserDialog == null || !receiptChooserDialog.isShowing()) return;
+            if (draft != null) {
+                receiptChooserDrafts.put(candidate.reference, draft);
+            }
+            receiptChooserScores.put(candidate.reference, score);
+            if (append && !receiptChooserShowingAllUnused
+                    && !containsChooserReference(ranked, candidate.reference)) {
+                ranked.add(candidate);
+                removeChooserReference(receiptChooserLeftovers, candidate.reference);
+            }
+            receiptChooserBadges.put(candidate.reference,
+                    receiptChooserBadgeText(draft, amountTier, receiptChooserShowingAllUnused));
+            List<ReceiptReferenceResolver.Result> sorted = ReceiptCandidateScorer.sortByScoreDesc(
+                    ranked, item -> receiptChooserScores.containsKey(item.reference)
+                            ? receiptChooserScores.get(item.reference) : 0);
+            ranked.clear();
+            ranked.addAll(sorted);
+            updateReceiptChooserChrome(reference, ranked);
+        });
+    }
+
+    /**
+     * None of these: keep the shortlist and append every remaining unused picture, then OCR
+     * any row that still has no score so each badge can show the printed dollar.
+     */
+    private void expandReceiptChooserToAllUnused(String reference,
+                                                 List<ReceiptReferenceResolver.Result> ranked) {
+        if (receiptChooserShowingAllUnused) return;
+        receiptChooserShowingAllUnused = true;
+        final List<ReceiptReferenceResolver.Result> leftoverSnapshot =
+                new ArrayList<>(receiptChooserLeftovers);
+        receiptChooserLeftovers.clear();
+        updateReceiptChooserChrome(reference, ranked);
+        final int generation = receiptChooserGeneration;
+        receiptRecoveryExecutor.execute(() -> {
+            AndroidReceiptSource source = new AndroidReceiptSource(this);
+            List<ReceiptReferenceResolver.Result> extra = new ArrayList<>();
+            for (ReceiptReferenceResolver.Result leftover : leftoverSnapshot) {
+                if (receiptChooserGeneration != generation) return;
+                ReceiptReferenceResolver.Result verified = inspectChooserCandidate(source, leftover);
+                if (verified != null && !containsChooserReference(extra, verified.reference)) {
+                    extra.add(verified);
+                }
+            }
             runOnUiThread(() -> {
                 if (receiptChooserGeneration != generation
                         || receiptChooserDialog == null || !receiptChooserDialog.isShowing()) return;
-                receiptChooserScores.put(candidate.reference, candidateScore);
-                receiptChooserBadges.put(candidate.reference, badgeText);
-                List<ReceiptReferenceResolver.Result> sorted = ReceiptCandidateScorer.sortByScoreDesc(
-                        ranked, item -> receiptChooserScores.containsKey(item.reference)
-                                ? receiptChooserScores.get(item.reference) : 0);
-                ranked.clear();
-                ranked.addAll(sorted);
-                ViewGroup body = (ViewGroup) receiptChooserDialog.findViewById(R.id.receiptChooserRows);
-                if (body != null) {
-                    populateReceiptChooserRows(reference, ranked, body);
+                for (ReceiptReferenceResolver.Result verified : extra) {
+                    if (!containsChooserReference(ranked, verified.reference)) {
+                        ranked.add(verified);
+                    }
+                }
+                receiptChooserLeftovers.clear();
+                refreshChooserPrintedAmountBadges(reference);
+                updateReceiptChooserChrome(reference, ranked);
+                final List<ReceiptReferenceResolver.Result> toScore = new ArrayList<>();
+                for (ReceiptReferenceResolver.Result candidate : ranked) {
+                    if (!receiptChooserScores.containsKey(candidate.reference)) {
+                        toScore.add(candidate);
+                    }
+                }
+                if (!toScore.isEmpty()) {
+                    receiptRecoveryExecutor.execute(() ->
+                            scoreUnscoredChooserCandidates(reference, ranked, toScore, generation));
                 }
             });
+        });
+    }
+
+    private void scoreUnscoredChooserCandidates(String reference,
+                                                List<ReceiptReferenceResolver.Result> ranked,
+                                                List<ReceiptReferenceResolver.Result> toScore,
+                                                int generation) {
+        Transaction transaction = receiptTransactionFor(reference);
+        if (transaction == null || toScore == null) return;
+        for (ReceiptReferenceResolver.Result candidate : toScore) {
+            if (receiptChooserGeneration != generation) return;
+            scoreOneChooserCandidate(reference, transaction, candidate, ranked, generation, false);
+        }
+    }
+
+    private void refreshChooserPrintedAmountBadges(String reference) {
+        Transaction transaction = receiptTransactionFor(reference);
+        if (transaction == null) return;
+        for (Map.Entry<String, ReceiptDraft> entry : receiptChooserDrafts.entrySet()) {
+            ReceiptDraft draft = entry.getValue();
+            int amountTier = ReceiptCandidateScorer.amountTier(
+                    draft != null ? draft.totalAmount : null, transaction.getAmount());
+            receiptChooserBadges.put(entry.getKey(),
+                    receiptChooserBadgeText(draft, amountTier, true));
+        }
+    }
+
+    private void updateReceiptChooserChrome(String reference,
+                                            List<ReceiptReferenceResolver.Result> ranked) {
+        if (receiptChooserDialog == null || !receiptChooserDialog.isShowing()) return;
+        receiptChooserDialog.setMessage(receiptChooserMessage(reference, ranked.size()));
+        Button noneOfThese = receiptChooserDialog.getButton(AlertDialog.BUTTON_NEUTRAL);
+        if (noneOfThese != null) {
+            noneOfThese.setVisibility(!receiptChooserShowingAllUnused && !receiptChooserLeftovers.isEmpty()
+                    ? View.VISIBLE : View.GONE);
+        }
+        ViewGroup body = (ViewGroup) receiptChooserDialog.findViewById(R.id.receiptChooserRows);
+        if (body != null) {
+            populateReceiptChooserRows(reference, ranked, body);
+        }
+    }
+
+    private static boolean containsChooserReference(
+            List<ReceiptReferenceResolver.Result> list, String reference) {
+        if (list == null || reference == null) return false;
+        String bare = stripReceiptFragment(reference);
+        for (ReceiptReferenceResolver.Result picture : list) {
+            if (picture == null || picture.reference == null) continue;
+            if (reference.equals(picture.reference)
+                    || bare.equals(stripReceiptFragment(picture.reference))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void removeChooserReference(
+            List<ReceiptReferenceResolver.Result> list, String reference) {
+        if (list == null || reference == null) return;
+        String bare = stripReceiptFragment(reference);
+        Iterator<ReceiptReferenceResolver.Result> iterator = list.iterator();
+        while (iterator.hasNext()) {
+            ReceiptReferenceResolver.Result picture = iterator.next();
+            if (picture == null || picture.reference == null) continue;
+            if (reference.equals(picture.reference)
+                    || bare.equals(stripReceiptFragment(picture.reference))) {
+                iterator.remove();
+            }
+        }
+    }
+
+    private void replaceChooserLeftover(String previousReference,
+                                        ReceiptReferenceResolver.Result verified) {
+        if (verified == null) return;
+        for (int index = 0; index < receiptChooserLeftovers.size(); index++) {
+            ReceiptReferenceResolver.Result picture = receiptChooserLeftovers.get(index);
+            if (picture == null || picture.reference == null) continue;
+            if (previousReference.equals(picture.reference)
+                    || stripReceiptFragment(previousReference)
+                    .equals(stripReceiptFragment(picture.reference))) {
+                receiptChooserLeftovers.set(index, verified);
+                return;
+            }
         }
     }
 
@@ -2495,14 +2709,21 @@ public class MainActivity extends AppCompatActivity {
         return draftOut[0];
     }
 
-    private String receiptChooserBadgeText(ReceiptDraft draft, int score) {
+    private String receiptChooserBadgeText(ReceiptDraft draft, int amountTier,
+                                           boolean showPrintedWhenNotClose) {
         if (draft == null || draft.totalAmount == null) {
             return getString(R.string.receipt_chooser_badge_no_amount);
         }
-        if (score >= ReceiptCandidateScorer.AMOUNT_EXACT) {
+        if (amountTier >= ReceiptCandidateScorer.AMOUNT_EXACT) {
             return getString(R.string.receipt_chooser_badge_amount_match, draft.totalAmount);
         }
-        return getString(R.string.receipt_chooser_badge_amount_close, draft.totalAmount);
+        if (amountTier >= ReceiptCandidateScorer.AMOUNT_NEAR) {
+            return getString(R.string.receipt_chooser_badge_amount_close, draft.totalAmount);
+        }
+        if (showPrintedWhenNotClose) {
+            return getString(R.string.receipt_chooser_badge_printed, draft.totalAmount);
+        }
+        return getString(R.string.receipt_chooser_badge_no_amount);
     }
 
     /** The transaction behind a reference, for content matching; null when the row is gone. */
@@ -2548,9 +2769,27 @@ public class MainActivity extends AppCompatActivity {
     private void attachChosenReceipt(String reference, ReceiptReferenceResolver.Result chosen) {
         List<ReceiptReferenceRepair.Entry> entries = receiptEntriesFor(reference);
         if (entries.isEmpty()) return;
+        persistChooserLearning(chosen, entries.get(0).transaction);
         applyReceiptResolution(reference, entries, chosen);
         Toast.makeText(this, R.string.receipt_picture_updated, Toast.LENGTH_SHORT).show();
         launchReceiptPreviewActivity(Uri.parse(namedReceiptReference(chosen)));
+    }
+
+    /**
+     * Same sidecar nudge as save-from-capture: when the row amount was printed on the OCR lines
+     * and differed from the guessed total, update {@code ocr_weight_vec}.
+     */
+    private void persistChooserLearning(ReceiptReferenceResolver.Result chosen, Transaction transaction) {
+        if (learningDb == null || chosen == null || transaction == null) return;
+        ReceiptDraft draft = receiptChooserDrafts.get(chosen.reference);
+        if (draft == null) {
+            draft = receiptChooserDrafts.get(stripReceiptFragment(chosen.reference));
+        }
+        if (draft == null || draft.sourceLines == null || draft.sourceLines.isEmpty()) return;
+        float[] next = OcrAmountLearner.learn(
+                draft.sourceLines, draft.totalAmount, transaction.getAmount(),
+                learningDb.getWeights(), ReceiptCaptureMode.AUTO);
+        learningDb.saveWeights(next);
     }
 
     /**

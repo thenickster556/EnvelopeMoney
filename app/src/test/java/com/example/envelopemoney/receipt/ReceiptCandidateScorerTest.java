@@ -7,6 +7,8 @@ import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 public class ReceiptCandidateScorerTest {
 
@@ -36,6 +38,25 @@ public class ReceiptCandidateScorerTest {
                 101.90, null, null, 100.00, null, null));
         assertEquals(0, ReceiptCandidateScorer.score(
                 30.00, null, null, 12.50, null, null));
+    }
+
+    @Test
+    public void twentyVersusTwentyOneSixtySixIsCloseEnoughToAppend() {
+        assertEquals(ReceiptCandidateScorer.AMOUNT_EXACT,
+                ReceiptCandidateScorer.amountTier(21.66, 21.66));
+        assertEquals(ReceiptCandidateScorer.AMOUNT_CLOSE,
+                ReceiptCandidateScorer.amountTier(20.00, 21.66));
+        assertEquals(ReceiptCandidateScorer.AMOUNT_CLOSE,
+                ReceiptCandidateScorer.score(20.00, null, null, 21.66, null, null));
+        assertEquals(ReceiptCandidateScorer.AMOUNT_NEAR,
+                ReceiptCandidateScorer.amountTier(17.00, 21.66));
+        assertEquals(0, ReceiptCandidateScorer.amountTier(29.28, 21.66));
+        assertEquals(0, ReceiptCandidateScorer.score(29.28, null, null, 21.66, null, null));
+        assertTrue(ReceiptCandidateScorer.shouldAppendByAmount(21.66, 21.66));
+        assertTrue(ReceiptCandidateScorer.shouldAppendByAmount(20.00, 21.66));
+        assertTrue(ReceiptCandidateScorer.shouldAppendByAmount(17.00, 21.66));
+        assertFalse(ReceiptCandidateScorer.shouldAppendByAmount(29.28, 21.66));
+        assertFalse(ReceiptCandidateScorer.shouldAppendByAmount(null, 21.66));
     }
 
     @Test

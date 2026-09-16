@@ -403,6 +403,42 @@ public class ReceiptReferenceRepairTest {
         assertEquals(same, nearby.get(0).reference);
         assertEquals(after, nearby.get(1).reference);
         assertEquals(before, nearby.get(2).reference);
+        for (ReceiptReferenceResolver.Result picture : nearby) {
+            assertFalse(far.equals(picture.reference));
+        }
+    }
+
+    @Test public void unusedNotReservedKeepsFarFilesForSeeAllAndCloseAppend() {
+        TimeZone utc = TimeZone.getTimeZone("UTC");
+        FakeAlbum album = new FakeAlbum();
+        String same = "content://media/external/images/media/same";
+        String before = "content://media/external/images/media/before";
+        String after = "content://media/external/images/media/after";
+        String far = "content://media/external/images/media/far";
+        String reserved = "content://media/external/images/media/reserved";
+        album.add(same, "IMG_same.jpg", utcNoon(2026, 9, 7));
+        album.add(before, "IMG_before.jpg", utcNoon(2026, 9, 6));
+        album.add(after, "IMG_after.jpg", utcNoon(2026, 9, 8));
+        album.add(far, "IMG_far.jpg", utcNoon(2026, 9, 5));
+        album.add(reserved, "IMG_taken.jpg", utcNoon(2026, 9, 7) + 3_600_000L);
+        Set<String> reservedSet = Collections.singleton(reserved);
+        List<ReceiptReferenceResolver.Result> nearby = ReceiptAlbumMatcher.unusedNearby(
+                album.album, "2026-09-07", reservedSet, utc);
+        List<ReceiptReferenceResolver.Result> allUnused = ReceiptAlbumMatcher.unusedNotReserved(
+                album.album, reservedSet);
+        assertEquals(4, allUnused.size());
+        List<ReceiptReferenceResolver.Result> leftovers = ReceiptAlbumMatcher.unusedNotAlreadyListed(
+                allUnused, nearby);
+        assertEquals(1, leftovers.size());
+        assertEquals(far, leftovers.get(0).reference);
+        assertEquals(4, ReceiptReferenceRepair.unusedNotReserved(album, reservedSet).size());
+        FakeAlbum denied = new FakeAlbum();
+        denied.denyAlbum = true;
+        denied.add(far, "IMG_far.jpg", utcNoon(2026, 9, 5));
+        assertTrue(ReceiptReferenceRepair.unusedNotReserved(denied, reservedSet).isEmpty());
+        assertTrue(ReceiptReferenceRepair.unusedNotReserved(null, reservedSet).isEmpty());
+        assertTrue(ReceiptAlbumMatcher.unusedNotReserved(null, null).isEmpty());
+        assertTrue(ReceiptAlbumMatcher.unusedNotAlreadyListed(null, nearby).isEmpty());
     }
 
     @Test public void unusedNearbyFallsBackToAllUnusedWhenPlusMinusOneEmpty() {

@@ -220,6 +220,22 @@ public final class ReceiptReferenceRepair {
         return ReceiptAlbumMatcher.unusedNearby(album, transactionDate, reservedReferences, zone);
     }
 
+    /**
+     * Every unused Pictures/Mountain Money file minus reserved. Denied albums return empty.
+     * Does not unique-bind or attach. Used for leftover OCR append and {@code None of these}.
+     */
+    public static List<ReceiptReferenceResolver.Result> unusedNotReserved(
+            ReceiptReferenceResolver.Source source, Set<String> reservedReferences) {
+        if (source == null) return new ArrayList<>();
+        List<ReceiptReferenceResolver.Result> album;
+        try {
+            album = source.readAlbum();
+        } catch (SecurityException denied) {
+            return new ArrayList<>();
+        }
+        return ReceiptAlbumMatcher.unusedNotReserved(album, reservedReferences);
+    }
+
     /** URI fragments carry a filename hint, not identity; compare the bare references. */
     private static String stripFragment(String reference) {
         int fragmentAt = reference.indexOf('#');
