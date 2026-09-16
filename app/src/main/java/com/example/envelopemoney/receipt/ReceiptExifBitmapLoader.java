@@ -82,12 +82,7 @@ public final class ReceiptExifBitmapLoader {
         if (bitmap == null) {
             return null;
         }
-        int rotation = 0;
-        try {
-            ExifInterface exif = new ExifInterface(path);
-            rotation = exifToDegrees(exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL));
-        } catch (IOException ignored) {
-        }
+        int rotation = readExifRotationDegreesFromFile(path);
         if (rotation == 0) {
             return bitmap;
         }
@@ -106,6 +101,18 @@ public final class ReceiptExifBitmapLoader {
         }
         ExifInterface exif = new ExifInterface(new ByteArrayInputStream(data));
         return exifToDegrees(exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL));
+    }
+
+    static int readExifRotationDegreesFromFile(String path) {
+        if (path == null) {
+            return 0;
+        }
+        try {
+            ExifInterface exif = new ExifInterface(path);
+            return exifToDegrees(exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL));
+        } catch (IOException ignored) {
+            return 0;
+        }
     }
 
     static int readExifRotationDegrees(Context context, Uri uri) throws IOException {

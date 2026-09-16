@@ -222,7 +222,7 @@ public final class ReceiptReferenceRepair {
 
     /**
      * Every unused Pictures/Mountain Money file minus reserved. Denied albums return empty.
-     * Does not unique-bind or attach. Used for leftover OCR append and {@code None of these}.
+     * Does not unique-bind or attach. Used for leftover OCR append and See all unused pictures.
      */
     public static List<ReceiptReferenceResolver.Result> unusedNotReserved(
             ReceiptReferenceResolver.Source source, Set<String> reservedReferences) {

@@ -279,3 +279,17 @@ The first chooser list stays unused capture day **±1** (empty-window fallback a
 ## On-device check (recommended, not yet run)
 Rebuild/install after this ranking commit, Gradle JDK **11**. Tap red camera: ±1 unused is the main list; a later unused JPEG with a close printed `$` appends and can rise to **Amount matches**. Neighbor-day leftover stays on the ±1 list. Already-linked pictures absent. **None of these** lists every leftover unused picture with the OCR'd number. Cancel leaves the red icon. **Use this picture** still required. Empty unused album: retry dialog. Night mode readable. No launch popup.
 
+# See all unused pictures in the list; load thumbs and amounts faster — 2026-09-16
+
+## Delivered behavior (delta)
+**See all unused pictures (N)** is a full-width row **inside** the chooser scroll after the last thumb (the Neutral **None of these** button next to Cancel is gone). If leftover unused pictures exist, the drawer **always** opens — even for a lone ±1 file — so that row is visible. Tap it: every leftover unused JPEG with the OCR'd `$`; the row hides once that full unused set is showing. Unique auto-bind, **Use this picture**, no Files picker, no new Gson, launch does not auto-open a chooser. Thumbs decode on a dedicated 2-thread pool plus LRU (~24); OCR re-sort updates badges and order in place. Ranking OCR uses `ReceiptBitmapLoader.decodeSampled(..., 1280)` plus learned `currentOcrWeights()`. `file://` two-pass subsample; `content://` still one-shot bytes. Preview first paint caps around **1600**.
+
+## Automated results
+- Tests first (compile-red for `ReceiptBitmapLoader.sampleSize`), then green: `ReceiptBitmapLoaderTest.sampleSizeFitsBothSidesInsideMaxDim` (512/64 = 16) and `decodeSampled_fileUriFitsInsideMaxDim`; `ReceiptReferenceRepairTest.unusedNearbyKeepsPlusMinusOneDayMinusReserved` still excludes a two-day-away file; `unusedNotReservedKeepsFarFilesForSeeAllAndCloseAppend`; `OcrAmountLearnerTest` unchanged.
+- Full `:app:testDebugUnitTest`: **309 tests, 307 passed, same 2 baseline failures**.
+- Recovery JaCoCo: 97.59% lines (730/748) / 80.75% branches (604/748); gates pass (scope unchanged: matcher / resolver / repair / Android source).
+- `:app:lintDebug`: **43 existing errors**. `:app:assembleDebug` and `git diff --check`: passed.
+
+## On-device check (recommended, not yet run)
+Rebuild/install this APK, Gradle JDK **11**. Tap red camera: if other unused pictures exist, the drawer opens even for one ±1 leftover. **See all unused pictures (N)** is in the list, not next to Cancel. Tap it: every leftover unused JPEG with OCR `$`. Thumbs appear immediately; dollars fill without the list blinking. Row tap fullscreen JPEG appears sooner. **Use this picture** still required. Empty unused album: retry dialog. Night mode readable. No launch popup.
+

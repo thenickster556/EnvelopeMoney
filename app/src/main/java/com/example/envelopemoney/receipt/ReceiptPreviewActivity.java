@@ -487,7 +487,6 @@ public class ReceiptPreviewActivity extends AppCompatActivity {
         DisplayMetrics dm = new DisplayMetrics();
         getWindowManager().getDefaultDisplay().getMetrics(dm);
         int longest = Math.max(dm.widthPixels, dm.heightPixels);
-        int target = Math.max(longest * 2, 2048);
-        return Math.min(target, 4096);
+        return Math.min(1600, Math.max(longest, 1));
     }
 }

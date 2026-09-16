@@ -170,6 +170,6 @@
     <string name="receipt_chooser_badge_amount_close">Close amount · $%1$.2f</string>
     <string name="receipt_chooser_badge_printed">$%1$.2f</string>
     <string name="receipt_chooser_badge_no_amount">No amount read</string>
-    <string name="receipt_chooser_see_all_unused">None of these</string>
+    <string name="receipt_chooser_see_all_unused">See all unused pictures (%1$d)</string>
     <string name="receipt_chooser_all_unused_message">%1$d unused pictures (not already used). OCR shows the printed $</string>
 </resources>

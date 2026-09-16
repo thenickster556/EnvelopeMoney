@@ -111,6 +111,32 @@ public class ReceiptBitmapLoaderTest {
         assertTrue(file.delete());
     }
 
+    @Test
+    public void decodeSampled_fileUriFitsInsideMaxDim() throws Exception {
+        org.robolectric.shadows.ShadowBitmapFactory.setAllowInvalidImageData(false);
+        File file = File.createTempFile("MountainMoney_large_", ".jpg",
+                RuntimeEnvironment.getApplication().getCacheDir());
+        Bitmap bitmap = Bitmap.createBitmap(512, 512, Bitmap.Config.ARGB_8888);
+        try (FileOutputStream out = new FileOutputStream(file)) {
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 92, out);
+        }
+        bitmap.recycle();
+        Bitmap decoded = ReceiptBitmapLoader.decodeSampled(
+                RuntimeEnvironment.getApplication(), Uri.fromFile(file), 64);
+        assertNotNull(decoded);
+        assertTrue(decoded.getWidth() <= 64);
+        assertTrue(decoded.getHeight() <= 64);
+        decoded.recycle();
+        assertTrue(file.delete());
+    }
+
+    @Test
+    public void sampleSizeFitsBothSidesInsideMaxDim() {
+        assertEquals(16, ReceiptBitmapLoader.sampleSize(512, 512, 64));
+        assertEquals(1, ReceiptBitmapLoader.sampleSize(40, 30, 64));
+        assertEquals(1, ReceiptBitmapLoader.sampleSize(64, 64, 64));
+    }
+
     public static class StoredUriProvider extends ContentProvider {
         File file;
         boolean oneShot;

@@ -180,6 +180,12 @@ public class MainActivity extends AppCompatActivity {
     private ActivityResultLauncher<String> receiptReadPermissionLauncher;
     private ActivityResultLauncher<Intent> receiptPreviewLauncher;
     private final java.util.concurrent.ExecutorService receiptRecoveryExecutor = Executors.newSingleThreadExecutor();
+    private final java.util.concurrent.ExecutorService receiptThumbExecutor = Executors.newFixedThreadPool(2);
+    private final android.util.LruCache<String, Bitmap> receiptChooserThumbCache =
+            new android.util.LruCache<>(24);
+    private static final int RECEIPT_CHOOSER_THUMB_MAX_DIM = 128;
+    private static final int RECEIPT_CHOOSER_OCR_MAX_DIM = 1280;
+    private static final Object RECEIPT_CHOOSER_SEE_ALL_TAG = "receipt-chooser-see-all";
     private boolean receiptRepairInProgress;
     private boolean receiptRepairRequestedAgain;
     private String pendingReceiptReference;
@@ -201,7 +207,7 @@ public class MainActivity extends AppCompatActivity {
     private final Map<String, Integer> receiptChooserScores = new HashMap<>();
     /** OCR drafts keyed by candidate reference so Use this picture can nudge learned weights. */
     private final Map<String, ReceiptDraft> receiptChooserDrafts = new HashMap<>();
-    /** Unused pictures not on the ±1 shortlist; None of these appends these. */
+    /** Unused pictures not on the ±1 shortlist; See all unused pictures appends these. */
     private final List<ReceiptReferenceResolver.Result> receiptChooserLeftovers = new ArrayList<>();
     /** True once the chooser is listing every leftover unused picture. */
     private boolean receiptChooserShowingAllUnused;
@@ -988,6 +994,7 @@ public class MainActivity extends AppCompatActivity {
 
     @Override protected void onDestroy() {
         receiptRecoveryExecutor.shutdownNow();
+        receiptThumbExecutor.shutdownNow();
         super.onDestroy();
     }
 
@@ -2353,9 +2360,10 @@ public class MainActivity extends AppCompatActivity {
     /**
      * AMBIGUOUS with known candidates becomes a picker. The main list is ±1 unused (or the
      * empty-window fallback). Background OCR may append leftover unused pictures whose printed
-     * total is close. Candidates that fail a fresh verification never reach the user; every
-     * candidate — even a lone survivor with no leftovers — is confirmed on the fullscreen check
-     * before anything attaches.
+     * total is close. If leftover unused pictures exist, the drawer always opens so
+     * See all unused pictures is visible — even for a lone ±1 file. A lone survivor with
+     * no leftovers still opens the fullscreen check. Candidates that fail a fresh verification
+     * never reach the user; attach still happens only after Use this picture.
      */
     private void showReceiptCandidateChooser(String reference,
                                              List<ReceiptReferenceResolver.Result> alternatives) {
@@ -2418,22 +2426,13 @@ public class MainActivity extends AppCompatActivity {
     private AlertDialog buildReceiptChooserDialog(String reference,
                                                   List<ReceiptReferenceResolver.Result> candidates) {
         ViewGroup body = (ViewGroup) LayoutInflater.from(this).inflate(R.layout.dialog_receipt_chooser, null);
-        MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(this)
+        AlertDialog dialog = new MaterialAlertDialogBuilder(this)
                 .setTitle(R.string.receipt_chooser_title)
                 .setMessage(receiptChooserMessage(reference, candidates.size()))
                 .setView(body)
-                .setNegativeButton(android.R.string.cancel, null);
-        if (!receiptChooserLeftovers.isEmpty()) {
-            builder.setNeutralButton(R.string.receipt_chooser_see_all_unused, null);
-        }
-        AlertDialog dialog = builder.create();
+                .setNegativeButton(android.R.string.cancel, null)
+                .create();
         populateReceiptChooserRows(reference, candidates, body.findViewById(R.id.receiptChooserRows));
-        dialog.setOnShowListener(shown -> {
-            Button noneOfThese = dialog.getButton(AlertDialog.BUTTON_NEUTRAL);
-            if (noneOfThese == null) return;
-            noneOfThese.setOnClickListener(v ->
-                    expandReceiptChooserToAllUnused(reference, candidates));
-        });
         return dialog;
     }
 
@@ -2444,38 +2443,82 @@ public class MainActivity extends AppCompatActivity {
         return getString(R.string.receipt_chooser_message, count, receiptChooserSummary(reference));
     }
 
-    /** One row per candidate; rebuilt in place when OCR scores re-order the list. */
+    /**
+     * One row per candidate. Existing rows keep their thumbnails; OCR re-sort only reorders
+     * views and updates badges. See all unused pictures sits after the last thumb.
+     */
     private void populateReceiptChooserRows(String reference,
                                             List<ReceiptReferenceResolver.Result> candidates,
                                             ViewGroup rows) {
-        rows.removeAllViews();
         SimpleDateFormat capturedAt = new SimpleDateFormat("MMM d, yyyy · h:mm a", Locale.getDefault());
+        Map<String, ViewGroup> existing = new HashMap<>();
+        View seeAll = null;
+        for (int index = 0; index < rows.getChildCount(); index++) {
+            View child = rows.getChildAt(index);
+            Object tag = child.getTag();
+            if (RECEIPT_CHOOSER_SEE_ALL_TAG.equals(tag)) {
+                seeAll = child;
+            } else if (tag instanceof String && child instanceof ViewGroup) {
+                existing.put((String) tag, (ViewGroup) child);
+            }
+        }
+        List<View> ordered = new ArrayList<>();
         for (int index = 0; index < candidates.size(); index++) {
             ReceiptReferenceResolver.Result candidate = candidates.get(index);
-            ViewGroup row = (ViewGroup) LayoutInflater.from(this).inflate(R.layout.item_receipt_chooser, rows, false);
-            String name = candidate.fileName != null ? candidate.fileName
-                    : getString(R.string.receipt_chooser_unnamed_picture);
-            TextView nameView = row.findViewById(R.id.receiptChooserName);
-            nameView.setText(name);
-            TextView dateView = row.findViewById(R.id.receiptChooserDate);
-            dateView.setText(candidate.captureTimeMs > 0
-                    ? capturedAt.format(new Date(candidate.captureTimeMs)) : "");
+            if (candidate == null || candidate.reference == null) continue;
+            ViewGroup row = existing.remove(candidate.reference);
+            if (row == null) {
+                row = (ViewGroup) LayoutInflater.from(this).inflate(R.layout.item_receipt_chooser, rows, false);
+                row.setTag(candidate.reference);
+                String name = candidate.fileName != null ? candidate.fileName
+                        : getString(R.string.receipt_chooser_unnamed_picture);
+                TextView nameView = row.findViewById(R.id.receiptChooserName);
+                nameView.setText(name);
+                TextView dateView = row.findViewById(R.id.receiptChooserDate);
+                dateView.setText(candidate.captureTimeMs > 0
+                        ? capturedAt.format(new Date(candidate.captureTimeMs)) : "");
+                ImageView thumbnail = row.findViewById(R.id.receiptChooserThumbnail);
+                thumbnail.setContentDescription(name);
+                loadReceiptChooserThumbnail(thumbnail, candidate.reference);
+            }
             TextView badge = row.findViewById(R.id.receiptChooserBadge);
             String badgeText = receiptChooserBadges.get(candidate.reference);
             badge.setText(badgeText != null ? badgeText
                     : getString(R.string.receipt_chooser_badge_reading));
-            ImageView thumbnail = row.findViewById(R.id.receiptChooserThumbnail);
-            thumbnail.setContentDescription(name);
-            loadReceiptChooserThumbnail(thumbnail, candidate.reference);
             final int checkIndex = index;
             row.setOnClickListener(v -> launchReceiptCandidateCheck(reference, candidates, checkIndex));
-            rows.addView(row);
+            ordered.add(row);
+        }
+        for (ViewGroup stale : existing.values()) {
+            rows.removeView(stale);
+        }
+        boolean showSeeAll = !receiptChooserShowingAllUnused && !receiptChooserLeftovers.isEmpty();
+        if (showSeeAll) {
+            if (seeAll == null) {
+                seeAll = LayoutInflater.from(this).inflate(R.layout.item_receipt_chooser_see_all, rows, false);
+                seeAll.setTag(RECEIPT_CHOOSER_SEE_ALL_TAG);
+            }
+            TextView label = seeAll.findViewById(R.id.receiptChooserSeeAll);
+            if (label != null) {
+                label.setText(getString(R.string.receipt_chooser_see_all_unused,
+                        receiptChooserLeftovers.size()));
+            }
+            seeAll.setOnClickListener(v -> expandReceiptChooserToAllUnused(reference, candidates));
+            ordered.add(seeAll);
+        } else if (seeAll != null) {
+            rows.removeView(seeAll);
+        }
+        for (View child : ordered) {
+            if (child.getParent() instanceof ViewGroup) {
+                ((ViewGroup) child.getParent()).removeView(child);
+            }
+            rows.addView(child);
         }
     }
 
     /**
      * OCRs the ±1 shortlist first, then leftover unused pictures. Close printed totals append
-     * to the open dialog; the rest wait for None of these. Learned OCR weights come from
+     * to the open dialog; the rest wait for See all unused pictures. Learned OCR weights come from
      * {@link #currentOcrWeights()}. A stale generation drops updates.
      */
     private void scoreReceiptCandidatesByOcr(String reference,
@@ -2547,7 +2590,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * None of these: keep the shortlist and append every remaining unused picture, then OCR
+     * See all unused pictures: keep the shortlist and append every remaining unused picture, then OCR
      * any row that still has no score so each badge can show the printed dollar.
      */
     private void expandReceiptChooserToAllUnused(String reference,
@@ -2622,11 +2665,6 @@ public class MainActivity extends AppCompatActivity {
                                             List<ReceiptReferenceResolver.Result> ranked) {
         if (receiptChooserDialog == null || !receiptChooserDialog.isShowing()) return;
         receiptChooserDialog.setMessage(receiptChooserMessage(reference, ranked.size()));
-        Button noneOfThese = receiptChooserDialog.getButton(AlertDialog.BUTTON_NEUTRAL);
-        if (noneOfThese != null) {
-            noneOfThese.setVisibility(!receiptChooserShowingAllUnused && !receiptChooserLeftovers.isEmpty()
-                    ? View.VISIBLE : View.GONE);
-        }
         ViewGroup body = (ViewGroup) receiptChooserDialog.findViewById(R.id.receiptChooserRows);
         if (body != null) {
             populateReceiptChooserRows(reference, ranked, body);
@@ -2681,7 +2719,8 @@ public class MainActivity extends AppCompatActivity {
     private ReceiptDraft ocrReceiptCandidateQuietly(String candidateReference) {
         Bitmap bitmap = null;
         try {
-            bitmap = ReceiptExifBitmapLoader.decodeUpright(this, Uri.parse(candidateReference));
+            bitmap = ReceiptBitmapLoader.decodeSampled(this, Uri.parse(candidateReference),
+                    RECEIPT_CHOOSER_OCR_MAX_DIM);
         } catch (IOException | RuntimeException unavailable) {
             Log.d("EnvelopeMoney", "receipt candidate decode for OCR unavailable");
         }
@@ -2748,18 +2787,33 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    /** Thumbnails decode on the recovery executor and pop in; a row stays usable without one. */
+    /** Thumbnails decode on a dedicated pool and reuse an LRU so OCR re-sort does not re-decode. */
     private void loadReceiptChooserThumbnail(ImageView thumbnail, String reference) {
-        receiptRecoveryExecutor.execute(() -> {
-            Bitmap decoded = null;
-            try {
-                decoded = ReceiptBitmapLoader.decodeSampled(this, Uri.parse(reference), 128);
-            } catch (IOException | RuntimeException unavailable) {
-                Log.d("EnvelopeMoney", "receipt chooser thumbnail unavailable");
+        thumbnail.setTag(R.id.tag_receipt_image_uri, reference);
+        Bitmap cached = receiptChooserThumbCache.get(reference);
+        if (cached != null && !cached.isRecycled()) {
+            thumbnail.setImageBitmap(cached);
+            return;
+        }
+        receiptThumbExecutor.execute(() -> {
+            Bitmap decoded = receiptChooserThumbCache.get(reference);
+            if (decoded == null || decoded.isRecycled()) {
+                try {
+                    decoded = ReceiptBitmapLoader.decodeSampled(this, Uri.parse(reference),
+                            RECEIPT_CHOOSER_THUMB_MAX_DIM);
+                } catch (IOException | RuntimeException unavailable) {
+                    Log.d("EnvelopeMoney", "receipt chooser thumbnail unavailable");
+                    decoded = null;
+                }
+                if (decoded != null) {
+                    receiptChooserThumbCache.put(reference, decoded);
+                }
             }
             Bitmap thumbnailBitmap = decoded;
             runOnUiThread(() -> {
-                if (thumbnailBitmap == null || thumbnail.getParent() == null) return;
+                if (thumbnailBitmap == null || thumbnailBitmap.isRecycled()) return;
+                if (!reference.equals(thumbnail.getTag(R.id.tag_receipt_image_uri))) return;
+                if (thumbnail.getParent() == null) return;
                 thumbnail.setImageBitmap(thumbnailBitmap);
             });
         });

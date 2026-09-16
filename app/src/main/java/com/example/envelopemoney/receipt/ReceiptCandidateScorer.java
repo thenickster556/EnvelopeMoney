@@ -72,7 +72,7 @@ public final class ReceiptCandidateScorer {
 
     /**
      * Leftover unused pictures whose printed total is exact, close, or near join the ±1 shortlist.
-     * A miss (including no OCR total) waits for {@code None of these}.
+     * A miss (including no OCR total) waits for See all unused pictures.
      */
     public static boolean shouldAppendByAmount(Double ocrTotal, double transactionAmount) {
         return amountTier(ocrTotal, transactionAmount) >= AMOUNT_NEAR;

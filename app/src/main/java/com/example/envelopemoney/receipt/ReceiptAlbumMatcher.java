@@ -127,7 +127,7 @@ public final class ReceiptAlbumMatcher {
     /**
      * Every unused album file minus reserved (exact or fragment-stripped), including undated rows.
      * The first chooser list stays {@link #unusedNearby}; this pool feeds leftover OCR append
-     * and {@code None of these}.
+     * and See all unused pictures.
      */
     public static List<ReceiptReferenceResolver.Result> unusedNotReserved(
             List<ReceiptReferenceResolver.Result> album, Set<String> reservedReferences) {

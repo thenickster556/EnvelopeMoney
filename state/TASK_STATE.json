@@ -22,6 +22,12 @@
   ],
   "completed_tasks": [
     {
+      "id": "receipt-see-all-faster-2026-09-16",
+      "title": "See all unused pictures in the list; load thumbs and amounts faster",
+      "status": "completed",
+      "intent": "Minor: in-list See all unused pictures (N) so leftover unused is unmissable; never skip the drawer when leftovers exist. Thumbs on a dedicated pool + LRU so OCR re-sort does not re-decode; ranking OCR uses decodeSampled 1280 not full decodeUpright; file:// two-pass subsample; content:// still one-shot bytes; preview first paint ~1600. Unique auto-bind, Use this picture, no Files picker, no new Gson, launch does not auto-open a chooser. Tests first. Full suite 309 / 2 baseline. Recovery 97.59% lines / 80.75% branches. Lint 43. assembleDebug + git diff --check pass. Device UI not re-run."
+    },
+    {
       "id": "receipt-amount-rank-outside-day-2026-09-16",
       "title": "Append close OCR unused then offer all leftover unused",
       "status": "completed",
