@@ -45,5 +45,28 @@
             android:hint="Monthly Remainder"
             android:inputType="numberDecimal" />
 
+        <TextView
+            android:id="@+id/tvEnvelopeAccountLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/pond_account_label"
+            android:labelFor="@id/etEnvelopeAccount" />
+
+        <EditText
+            android:id="@+id/etEnvelopeAccount"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="@string/pond_account_hint"
+            android:inputType="numberDecimal|numberSigned" />
+
+        <TextView
+            android:id="@+id/tvBankReconcilePreview"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:textColor="?android:attr/textColorSecondary"
+            android:textSize="14sp"
+            android:visibility="gone" />
+
     </LinearLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>

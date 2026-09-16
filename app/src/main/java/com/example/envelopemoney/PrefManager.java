@@ -18,6 +18,11 @@ public class PrefManager {
     private static final String LAST_ADD_TRANSACTION_ENVELOPE_KEY = "last_add_transaction_envelope";
     private static final String LAST_ADD_TRANSFER_DESTINATION_PREFIX = "last_add_transfer_destination_";
     private static final String LAST_TRANSFER_TOTALS_OPTION_KEY = "last_transfer_totals_option";
+    private static final String BILLS_DAYS_JSON_KEY = "bills_days_json";
+    private static final String PAYDAYS_JSON_KEY = "paydays_json";
+    private static final String BILLS_FILTER_ACTIVE_KEY = "bills_filter_active";
+    private static final String BILLS_FILTER_SAVED_START_KEY = "bills_filter_saved_start_display";
+    private static final String BILLS_FILTER_SAVED_END_KEY = "bills_filter_saved_end_display";
     private String name;
     private double limit;
     private double remaining;
@@ -104,6 +109,84 @@ public class PrefManager {
     public static void clearLastTransferTotalsOptionKey(Context context) {
         SharedPreferences.Editor editor = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit();
         editor.remove(LAST_TRANSFER_TOTALS_OPTION_KEY);
+        editor.apply();
+    }
+
+    public static void saveBillsDays(Context context, List<Integer> days) {
+        saveDayList(context, BILLS_DAYS_JSON_KEY, days);
+    }
+
+    public static List<Integer> getBillsDays(Context context) {
+        return getDayList(context, BILLS_DAYS_JSON_KEY);
+    }
+
+    public static void savePaydays(Context context, List<Integer> days) {
+        saveDayList(context, PAYDAYS_JSON_KEY, days);
+    }
+
+    public static List<Integer> getPaydays(Context context) {
+        return getDayList(context, PAYDAYS_JSON_KEY);
+    }
+
+    private static void saveDayList(Context context, String key, List<Integer> days) {
+        SharedPreferences.Editor editor = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit();
+        if (days == null || days.isEmpty()) {
+            editor.remove(key);
+        } else {
+            editor.putString(key, new Gson().toJson(days));
+        }
+        editor.apply();
+    }
+
+    private static List<Integer> getDayList(Context context, String key) {
+        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        String json = prefs.getString(key, null);
+        if (json == null || json.isEmpty()) {
+            return new ArrayList<>();
+        }
+        try {
+            Type type = new TypeToken<ArrayList<Integer>>() {
+            }.getType();
+            List<Integer> list = new Gson().fromJson(json, type);
+            return list != null ? list : new ArrayList<>();
+        } catch (RuntimeException e) {
+            return new ArrayList<>();
+        }
+    }
+
+    public static void setBillsFilterActive(Context context, boolean active) {
+        SharedPreferences.Editor editor = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit();
+        editor.putBoolean(BILLS_FILTER_ACTIVE_KEY, active);
+        editor.apply();
+    }
+
+    public static boolean isBillsFilterActive(Context context) {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .getBoolean(BILLS_FILTER_ACTIVE_KEY, false);
+    }
+
+    /** Persists the user's start/end labels before enabling the bills-period filter; restored when the filter is turned off. */
+    public static void saveBillsFilterSavedRange(Context context, String startDisplay, String endDisplay) {
+        SharedPreferences.Editor editor = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit();
+        editor.putString(BILLS_FILTER_SAVED_START_KEY, startDisplay);
+        editor.putString(BILLS_FILTER_SAVED_END_KEY, endDisplay);
+        editor.apply();
+    }
+
+    public static String getBillsFilterSavedStartDisplay(Context context) {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .getString(BILLS_FILTER_SAVED_START_KEY, null);
+    }
+
+    public static String getBillsFilterSavedEndDisplay(Context context) {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .getString(BILLS_FILTER_SAVED_END_KEY, null);
+    }
+
+    public static void clearBillsFilterSavedRange(Context context) {
+        SharedPreferences.Editor editor = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit();
+        editor.remove(BILLS_FILTER_SAVED_START_KEY);
+        editor.remove(BILLS_FILTER_SAVED_END_KEY);
         editor.apply();
     }
 

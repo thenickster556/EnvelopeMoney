@@ -1,35 +1,19 @@
-# Project Index
+# Project index
 
-## Repository Structure
-```text
-EnvelopeMoney/
-+-- docs/
-¦   +-- PROJECT_INDEX.md
-¦   +-- ARCHITECTURE.md
-¦   +-- DATA_SCHEMA.md
-¦   +-- features.md
-¦   +-- user-flows.md
-¦   +-- AI_CHANGE_PROTOCOL.md
-+-- state/
-¦   +-- TASK_STATE.json
-+-- prompts/
-¦   +-- codex_rules.md
-+-- app/
-¦   +-- src/main/java/com/example/envelopemoney/
-+-- README.md
-```
+This file maps the **repository memory system**: what each document is for and where to read first.
 
-## Key Runtime Areas
-- `MainActivity.java`: primary activity, transaction UI, envelope UI, month navigation, transfers, recurring transactions.
-- `Envelope.java`: envelope domain model, monthly data, transfer metadata, remaining balance calculations.
-- `Transaction.java`: transaction domain model with transfer and recurring metadata.
-- `MonthTracker.java`: persisted month state and rollover detection.
-- `PrefManager.java`: persisted envelopes and UI preferences.
+| File | Purpose |
+|------|---------|
+| [PROJECT_INDEX.md](PROJECT_INDEX.md) | **This file** ï¿½ structure of docs, state, prompts, and pointers into the rest of memory. |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | System architecture: main components, boundaries, startup/rollover flow, risks. |
+| [DATA_SCHEMA.md](DATA_SCHEMA.md) | **Persistence schema** (SharedPreferences / Gson envelopes, plus sidecar SQLite `mountain_money_learning.db` for comments and OCR weights). |
+| [features.md](features.md) | User-facing features and expected behavior. |
+| [user-flows.md](user-flows.md) | How users move through screens and dialogs. |
+| [receipt-ocr.md](receipt-ocr.md) | Receipt capture: CameraX, MediaStore **Mountain Money**, OCR slot, fullscreen `ReceiptPreviewActivity` (zoom/rotate), `ReceiptRowUi`, parser tests. |
+| [AI_CHANGE_PROTOCOL.md](AI_CHANGE_PROTOCOL.md) | Mandatory AI workflow: load memory ? intent ? verify ? implement ? test ? docs ? commit. |
+| [../state/TASK_STATE.json](../state/TASK_STATE.json) | Active and completed tasks; update when work starts or finishes. |
+| [../prompts/codex_rules.md](../prompts/codex_rules.md) | Prompt discipline and **context-loading block** appended to AI instructions. |
+| [WEB_DEMO.md](WEB_DEMO.md) | Localhost HTML/CSS + Node/Express + MongoDB demo (per-account profiles). |
+| [../README.md](../README.md) | Project entry point, expectations, and **change log** (session log when context resets). |
 
-## Memory Files
-- `ARCHITECTURE.md`: module boundaries and runtime responsibilities.
-- `DATA_SCHEMA.md`: persisted JSON/shared-preferences model shape.
-- `features.md`: user-facing behavior definitions.
-- `user-flows.md`: navigation and interaction flows.
-- `AI_CHANGE_PROTOCOL.md`: mandatory AI change workflow.
-- `TASK_STATE.json`: current active/completed tasks.
+[Receipt recovery verification](receipt-recovery-verification.md) records automatic folder recovery, regression/coverage evidence, emulator checks and pre-existing verification limitations.

@@ -114,6 +114,12 @@ public final class MonthRolloverHelper {
         }
     }
 
+    /**
+     * Applies month transition on one envelope. Invariant: the user-facing monthly budget
+     * ({@link Envelope#getLimit()}) stays equal to {@code originalLimit}; carry increases the
+     * available pool via {@link Envelope#setRemaining}, {@link Envelope#setManualRemaining},
+     * baselines, and {@link Envelope#replaceMonthData} — not by inflating {@code limit}.
+     */
     private static void applyRollover(Envelope envelope,
                                       String sourceMonth,
                                       String targetMonth,
@@ -128,6 +134,7 @@ public final class MonthRolloverHelper {
         targetLimit = safeFinite(targetLimit, originalLimit);
 
         envelope.setOriginalLimit(originalLimit);
+        // Keep envelope.limit at the base monthly budget; targetLimit is the effective pool for the new month.
         envelope.setLimit(originalLimit);
         envelope.setBaselineLimit(targetLimit);
         envelope.setBaselineRemaining(targetLimit);

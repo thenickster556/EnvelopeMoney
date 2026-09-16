@@ -1,12 +1,316 @@
 {
   "active_tasks": [
+    {"id":"receipt-reference-recovery-2026-09-08","title":"Automatic receipt-folder recovery implemented; final UI verification blocked","status":"verification_blocked","intent":"Automatic exact-folder discovery replaces manual selection. Implementation, history backfill, metadata copying and restart recovery are complete. Photo-library prompt for legacy search is included (launch/resume). Build and 80% recovery coverage gate pass (96.76% lines, 83.87% branches). Full suite: 192/195 passed; three failures reproduced in baseline. Lint: same 43 baseline errors. API 36 startup/restart/render test passes from prior work. Permission-dialog UI on a device was not re-run in this patch. See docs/receipt-recovery-verification.md."},
+    {"id":"receipt-reference-recovery-2026-09-08","title":"Automatic receipt-folder recovery implemented; final UI verification blocked","status":"verification_blocked","intent":"Automatic exact-folder discovery replaces manual selection. Implementation, history backfill, metadata copying and restart recovery are complete. Photo-library prompt for legacy search is included (launch/resume). Build and 80% recovery coverage gate pass (96.76% lines, 83.87% branches). Full suite: 192/195 passed; three failures reproduced in baseline. Lint: same 43 baseline errors. API 36 startup/restart/render test passes from prior work. Permission-dialog UI on a device was not re-run in this patch. See docs/receipt-recovery-verification.md."},
+    {
+      "id": "transfer-dialog-ux-polish-2026-05",
+      "title": "Polish grouped transfer dialog scrolling, dropdowns, and slider readability",
+      "status": "verification_blocked",
+      "intent": "Replace in-dialog transfer spinners with anchored dropdowns, improve bucket slider readability, defer early validation, auto-scroll the transfer section, and keep the transaction dialog modal-focused while grouped-transfer persistence stays unchanged."
+    },
     {
       "id": "month-rollover-hardening",
       "title": "Verify month rollover hardening on a Gradle-compatible JDK",
       "status": "verification_blocked"
+    },
+    {
+      "id": "multi-bucket-transfer-groups-2026-05",
+      "title": "Add grouped multi-bucket transfers from one source total",
+      "status": "verification_blocked",
+      "intent": "Replace single-destination transfer UI with grouped transfer buckets; persist transferBucketId and bucketed TransferData; keep one source summary transaction with one mirror row per destination bucket; add helper tests and update repo memory."
     }
   ],
   "completed_tasks": [
+    {
+      "id": "receipt-see-all-faster-2026-09-16",
+      "title": "See all unused pictures in the list; load thumbs and amounts faster",
+      "status": "completed",
+      "intent": "Minor: in-list See all unused pictures (N) so leftover unused is unmissable; never skip the drawer when leftovers exist. Thumbs on a dedicated pool + LRU so OCR re-sort does not re-decode; ranking OCR uses decodeSampled 1280 not full decodeUpright; file:// two-pass subsample; content:// still one-shot bytes; preview first paint ~1600. Unique auto-bind, Use this picture, no Files picker, no new Gson, launch does not auto-open a chooser. Tests first. Full suite 309 / 2 baseline. Recovery 97.59% lines / 80.75% branches. Lint 43. assembleDebug + git diff --check pass. Device UI not re-run."
+    },
+    {
+      "id": "receipt-amount-rank-outside-day-2026-09-16",
+      "title": "Append close OCR unused then offer all leftover unused",
+      "status": "completed",
+      "intent": "Minor: chooser main list stays unusedNearby ±1. OCR leftover unused-not-selected with ReceiptOcrPipeline + currentOcrWeights(); append exact / $2-or-10% (40) / $5-or-25% (15). None of these lists remaining unused with printed OCR $. Use this picture nudges OcrAmountLearner from stored ReceiptDraft. Unique auto-bind, Use this picture, no Files picker, no new Gson, launch does not auto-open a chooser. Tests first. Full suite 307 / 2 baseline. Recovery 97.59% lines / 80.75% branches. Lint 43. assembleDebug + git diff --check pass. Device UI not re-run."
+    },
+    {
+      "id": "receipt-tap-all-unused-fallback-2026-09-16",
+      "title": "Tap still shows Open receipt picture; offer all unused album files",
+      "status": "completed",
+      "intent": "Device still hit Open receipt picture because unusedNearby required capture-day ±1 and emptied out when albumAccessRestricted. Unique auto-bind stays ±1-only. Tap/Retry: ±1 first, then all unused Pictures/Mountain Money files (minus reserved), including restricted-but-listable albums and undated rows. inspect() reads file:// via ReceiptBitmapLoader. Tests first. Full suite 305 / 2 baseline. Recovery 97.50% lines / 81.02% branches. Lint 43. assembleDebug + git diff --check pass. Device UI not re-run — rebuild the APK."
+    },
+    {
+      "id": "receipt-tap-nearby-picker-2026-09-16",
+      "title": "Tap a broken receipt: unused ±1-day OCR picker, not Retry",
+      "status": "completed",
+      "intent": "Tap/Retry offer unusedNearby ±1-day unused album files (minus reserved) instead of looping MISSING retry while those files exist. Capture time epoch→EXIF→DATE_TAKEN→DATE_ADDED; EXIF probed for non-epoch names even when DATE_TAKEN is set. Unique auto-bind and Use this picture unchanged. Tests first. Full suite 303 / 2 baseline. Recovery 97.60% lines / 80.79% branches. Lint 43. assembleDebug + git diff --check pass. Device UI not re-run."
+    },
+    {
+      "id": "receipt-ocr-move-regression-2026-09-15",
+      "title": "OCR-ranked candidates, EXIF capture dates, and the recurring gallery-move regression",
+      "status": "completed",
+      "intent": "(1) Empty-picker root cause: copied/renamed album files fell back to DATE_ADDED (the copy day), emptying the day-±1 window into the MISSING retry dialog. Fixed with EXIF DateTimeOriginal precedence (name epoch > DATE_TAKEN > EXIF header-only probe for undated rows, exif=K logged > DATE_ADDED) in AndroidReceiptSource (4-arg captureTimeMs + exifCaptureTimeMs + diskCaptureTimeMs) plus a 'receipt chooser: status=…, alternatives=N' tap log. (2) OCR-ranked candidates: pure ReceiptCandidateScorer (exact amount 100 / close ±$0.50-or-2% 40 / merchant tokens ≤50 / date 20; stable sort) fed by the existing ReceiptOcrPipeline/ReceiptFieldParser (mode AUTO, learned weights) on the recovery executor; dialog opens immediately in capture-rank order, badges (Amount matches · $… / Close amount · $… / No amount read / Reading receipt…) fill in as each scan lands, rows re-sort live behind generation+isShowing guards; attach still only Use this picture; ±1/unused/reserved rules unchanged; no new Gson keys. (3) RECURRING REGRESSION (third occurrence: 2026-07 move fix, 2026-07-03 DocumentsContract delete, 2026-09-12 OpenDocument restore, 2026-09-15 GetContent swap) — gallery imports duplicated because GetContent URIs satisfy neither delete path. Fixed: dead takePersistableUriPermission removed; isMediaStoreImagesUri recognizes the media documents provider (long-failing baseline test now green — baseline failures 3→2, noted in README/verification doc); ReceiptSourceDeleter.needsSystemDeleteConsent (API 30+ media images only); ImportResult.deleteNeedsConsent set in finishImportMoveOrRollback; MainActivity offers MediaStore.createDeleteRequest via StartIntentSenderForResult once per photo per session (declined set), Allow = move complete, Cancel = both kept. Tests first (ReceiptCandidateScorerTest 5 cases; EXIF-dated row + precedence; needsSystemDeleteConsent tiers; consent flag via a refusing provider). Full suite 298 tests / 2 baseline failures (baseline 287/3). Coverage 97.49% lines / 80.38% branches, gates pass. Lint 43 baseline unchanged. assembleDebug + git diff --check pass. Recurring-regression notation added to features/user-flows/ARCHITECTURE/verification/README. Chooser OCR + consent sheet UI verified by compile/resources/on-device checklist (no MainActivity JVM harness, as before)."
+    },
+    {
+      "id": "receipt-unresolved-list-icon-2026-09-15",
+      "title": "Red history photo icon when a receipt is not uniquely loaded",
+      "status": "completed",
+      "intent": "After existing startup resolveAll, list photo icons tint colorError for MISSING/AMBIGUOUS/CORRUPT/PERMISSION_REQUIRED; RESOLVED and pre-repair stay colorControlNormal. No new Gson keys, no Files picker, no launch choosers. Always refresh history after repair even if apply is 0. Tests first. Full suite 287 / 3 baseline. Recovery 97.54% lines / 82.04% branches. Lint 43 baseline. assembleDebug + git diff --check pass. Device UI not re-run."
+    },
+    {
+      "id": "receipt-immersive-cue-window-2026-09-15",
+      "title": "Fullscreen pick cue and ranked ±1-day unused receipt options",
+      "status": "completed",
+      "intent": "Candidate immersive only: bottom translucent comment/pond/amount cue. Unique auto-match unchanged; failed unique bind offers unused Pictures/Mountain Money shots from tx date ±1, ranked by capture time. Tests first. Full suite 285 / 3 baseline. Recovery 97.54% lines / 82.04% branches. Lint 43 baseline. assembleDebug + git diff --check pass. Device UI not re-run."
+    },
+    {
+      "id": "codex-p1-gallery-picker-2026-09-15",
+      "title": "Gallery photo picker, off-thread receipt IO, web transfer save, GridFS rotate, preview fullscreen",
+      "status": "completed",
+      "intent": "GetContent gallery (not Files); persist album URI; picker bytes and camera decode/save off main; web validate-before-insert and transfer pond relocate; GridFS temp-then-replace; candidate chrome-hiding fullscreen. Tests first. Full suite 274 / 3 baseline. Recovery 97.40% lines / 83.33% branches. Lint 43 baseline. npm test 108 pass. assembleDebug + git diff --check pass. Device gallery/camera/fullscreen UI not re-run."
+    },
+    {
+      "id": "receipt-preview-toolbar-touch-2026-09-14",
+      "title": "Larger spaced preview toolbar icons to prevent fat-finger taps",
+      "status": "completed",
+      "intent": "Top chrome icons packed at 48dp with no gutter were easy to mis-tap. 56dp targets, 8dp gutters, fitCenter glyphs, close in a weighted cluster with the title so attached-mode actions stay right. Tests first: ReceiptPreviewToolbarMetricsTest 3 cases red (class missing) then green. Full suite 270 / 3 baseline. Recovery coverage gates pass. assembleDebug + git diff --check pass. Layout verified by compile/resources/on-device checklist (no MainActivity JVM harness)."
+    },
+    {
+      "id": "receipt-candidate-swipe-hint-2026-09-14",
+      "title": "Candidate check: swipe pictures, top gesture hint, themed Select",
+      "status": "completed",
+      "intent": "Candidate-mode ReceiptPreviewActivity: horizontal fit-scale swipe calls the same showCandidate as arrows (no wrap, no attach). Gesture hint is a second row of the top chrome so it cannot cover Use this picture. Select uses mountain_primary fill and white label (preview is always-black; night colorOnPrimary is not used). Keep last JPEG until next decode succeeds; candidate decode-fail keeps zoom visible for swipe. Tests first: ReceiptCandidateSwipeTest 10 cases red (class missing) then green. Full suite 267 tests / 3 baseline failures (baseline 257/3). Recovery coverage unchanged 97.40% lines / 83.33% branches, gates pass. Lint 43 baseline errors unchanged. assembleDebug + assembleDebugAndroidTest + git diff --check pass. Swipe/hint rendering verified by compile/resources/on-device checklist (no MainActivity JVM harness, as before)."
+    },
+    {
+      "id": "receipt-swap-pool-icons-2026-09-14",
+      "title": "Swap pool keeps previous candidates; icon-only preview toolbar",
+      "status": "completed",
+      "intent": "Fixed 'Choose different' losing earlier candidates: after a pick the stored filename names the picked file, so the single matcher pass resolved the identity tier to the attached file (empty pool -> 'No other pictures match' toast) and the session set never released replaced picks. swapCandidates rebuilt: identity scan (exact UNION normalized UNION epoch token, no tier short-circuit) UNION one nameless-claim date pass, deduped by reference, minus attached file and minus reserved references of other transactions (new Set param, fragment-stripped; reserved built in reopenReceiptChooserForSwap from snapshot minus this row); handleReceiptCandidatePicked releases the replaced reference when its rows move. Toolbar de-jumbled: four text MaterialButtons -> 48dp white vector ImageButtons (ic_swap/ic_save/ic_rotate_left/ic_rotate_right_white_24) matching the close-icon theme, contentDescription = existing label strings (TalkBack unchanged, no orphaned resources), setIconEnabled dims disabled icons to 40% alpha, 'Use this picture' stays the single text action. Tests first: 3 rewritten to the 6-arg signature + 4 new red cases (post-pick same-day, epoch sibling other day, normalized copy sibling, reserved exclusion). Full suite 257 tests / 3 baseline failures (baseline 254/3). Coverage 97.40% lines / 83.33% branches, gates pass. Lint 43 baseline errors unchanged. assembleDebug + git diff --check pass. Icon rendering and release/reserved wiring verified by compile/resources/on-device checklist (no MainActivity JVM harness, as before)."
+    },
+    {
+      "id": "receipt-candidate-check-swap-2026-09-14",
+      "title": "Fullscreen candidate check with arrows/select and change-it-later swap",
+      "status": "completed",
+      "intent": "User feedback: thumbnails too small to judge and taps attached blindly; no way back after a wrong pick. Delivered: picker thumbs 56->80dp with transaction summary in the message (ReceiptCandidateSummary.titleLine/detailLine: comment-first 'Lunch · $12.50', pond+display date detail, negatives '-$3.20', unparseable dates pass through); row tap and lone readable survivor open a fullscreen candidate check (ReceiptPreviewActivity candidate mode: read-only with rotate/save hidden, header info, '<'/'>' arrows disabled at ends + 'n of m' counter, 'Use this picture' enabled only when decoded, close/back minimizes, index survives config rotation, decode failure keeps navigation alive); picks return RESULT_OK+EXTRA_PICKED_REFERENCE through one shared receiptPreviewLauncher (ClipData grants every content:// candidate per ARCHITECTURE launch rule; stale results ignored) into handleReceiptCandidatePicked -> attachChosenReceipt (apply+persist+toast+normal preview); normal preview gains 'Choose different' -> ReceiptReferenceRepair.swapCandidates (one-claim matcher pool minus attached file, fragment-insensitive, denied/empty -> empty) -> same picker/check flow; empty pool toasts 'No other pictures match this receipt.'. No new Gson keys; Cancel/back/minimize never mutate. Tests first (6 added; red-state bugs caught and fixed: '$-3.20' format, getStringExtra vs String[] extra). Full suite 254 tests / 3 baseline failures (baseline 248/3). Coverage 97.13% lines / 83.83% branches, gates pass. Lint 43 baseline errors unchanged (only Overdraw warnings of existing pattern). assembleDebug + git diff --check pass. Candidate-mode rendering verified by compile/resources/on-device checklist (no MainActivity JVM harness, as before)."
+    },
+    {
+      "id": "receipt-ambiguous-picker-speed-2026-09-14",
+      "title": "Picker for ambiguous receipt matches and sub-second recovery search",
+      "status": "completed",
+      "intent": "(1) AMBIGUOUS recovery dead-ended in a message-only retry dialog. Result.alternatives now carries the competing files from ReceiptAlbumMatcher (identity collisions, same-day multi-file, adjacent windows/contests) through ReceiptReferenceRepair; the tap flow re-verifies candidates, drops unreadable ones, auto-applies a lone survivor, and otherwise shows a picker (dialog_receipt_chooser + item_receipt_chooser: 56dp thumbnail via ReceiptBitmapLoader.decodeSampled(128) on the recovery executor, filename, MMM d yyyy h:mm a capture time) where a tap applies via applyReceiptResolution, persists, toasts receipt_picture_updated, and previews; Cancel changes nothing; receiptChosenReferences session set prevents double-assigns; restricted access still strips alternatives into PERMISSION_REQUIRED. (2) 10+ s searches: inspect now verifies with one stream open + header decode (second sampled pixel decode removed; corrupt test guards garbage detection), tap paths resolve only receiptEntriesFor(reference) instead of every app receipt, and each pass logs 'receipt repair: N entries in Xms' plus album duration under EnvelopeMoney. Tests first (8 added: alternatives x5, repair pass-through x2, provider opens counter x1). Full suite 248 tests / 3 baseline failures (baseline 240/3). Coverage 97.19% lines / 84.63% branches, gates pass. Lint 43 baseline unchanged (chooser adds one pre-existing-pattern Overdraw warning). assembleDebug passes. Chooser dialog verified by compile/resources/on-device checklist (no MainActivity JVM harness, consistent with prior records)."
+    },
+    {
+      "id": "receipt-album-match-recovery-2026-09-14",
+      "title": "Widen automatic album matching so renamed/copied Mountain Money photos recover",
+      "status": "completed",
+      "intent": "Root cause: resolveAll vetoed every date match whose album filename differed from the stale stored name, so renamed/copied photos could never recover. Fix: identity tiers in ReceiptAlbumMatcher (exact name, normalized name folding case/.jpeg/percent-encoding/(1) copy suffix, shared epoch digit-run), each requiring a unique candidate and no date evidence; veto replaced by a listing-vs-inspection race guard that persists the verified album filename; lone claims retry one day either side; Pictures/Mountain Money path compare case-insensitive; best-effort MediaScannerConnection rescan when the granted index is empty; Android 14 READ_MEDIA_VISUAL_USER_SELECTED partial access is restricted-but-listable and stops prompting; album inventory logs under EnvelopeMoney tag. Files: ReceiptAlbumMatcher, ReceiptReferenceRepair, AndroidReceiptSource, ReceiptReferenceResolver, MainActivity launcher, AndroidManifest. Tests first: 19 added. Full suite 240 tests / 3 pre-existing failures (baseline 221/3). Recovery coverage 97.00% lines / 84.11% branches, 80% gates pass. Lint 43 baseline errors unchanged. assembleDebug passes. SDK 34 Robolectric sandbox impossible on JDK 11; partial access tested at 33. On-device check documented in receipt-recovery-verification.md."
+    },
+    {
+      "id": "receipt-album-unique-day-2026-09-12",
+      "title": "Port preview path and unique same-day album matching to transfer-patch",
+      "status": "completed",
+      "intent": "Keep stored-URI one-shot open (OpenDocument persistable read grant, content-only Intent data, no re-import). Add ReceiptAlbumMatcher: unique MountainMoney filename wins; leftover unnamed receipts take the only unused album file whose capture local day equals Transaction.date. Two leftovers that day stay AMBIGUOUS. Capture time from filename epoch or DATE_TAKEN/DATE_ADDED. Repair and tap-after-fail share one-pass resolveAll. No new Gson keys. Receipt unit tests: 135, 1 baseline ReceiptSourceDeleter failure. Recovery coverage 97.61% lines / 84.86% branches."
+    },
+    {
+      "id": "receipt-stored-uri-open-2026-09-12",
+      "title": "Restore stored-URI preview open; filename-first was the wrong diagnosis",
+      "status": "completed",
+      "intent": "Revert de4f52a filename-first lookup. Preview launches the stored URI on the UI thread with content:// Intent data + FLAG_GRANT_READ only (write grants can throw). Decode reads bytes once like 0afe24a ReceiptUriStreams so one-shot providers work; leftover file:// uses FileInputStream. No re-import on tap. OpenDocument persistable grants restored. Tests: ReceiptBitmapLoaderTest.decodeSampled_readsUriThatAllowsOnlyOneOpen, ReceiptPreviewActivityTest.intentDataUri_onlyContentScheme."
+    },
+    {
+      "id": "receipt-gallery-access-legacy-2026-09-10",
+      "title": "Request photo access so automatic recovery can find legacy Pictures/Mountain Money files",
+      "status": "completed",
+      "intent": "Launch/resume requests READ_MEDIA_IMAGES or READ_EXTERNAL_STORAGE when stored receipts exist. Partial owned-only MediaStore lists are restricted: unique owned matches still resolve, missing names are permission-required. RELATIVE_PATH matches with or without a trailing slash. Tests: ReceiptReferenceResolverTest, AndroidReceiptSourceTest. JVM: 192/195 passed (3 baseline). Recovery coverage 96.76% lines / 83.87% branches. Device permission-sheet UI not re-run."
+    },
+    {
+      "id": "receipt-persist-album-uri-2026-09",
+      "title": "Always persist Mountain Money MediaStore URI after import",
+      "status": "completed",
+      "intent": "Never roll back to a picker grant when source delete fails. Persist MediaStore content:// insert URI with optional #MountainMoney_*.jpg fragment. Preview opens ContentResolver, leftover file://, then DISPLAY_NAME lookup. No re-import on preview. Tests: persistUriAfterImport_keepsAlbumCopyWhenPickerSourceRemains, albumDisplayName_fromFragmentAndFilePath."
+    },
+    {
+      "id": "restore-upstream-preview-2026-09",
+      "title": "Restore origin/transfer-patch MediaStore content:// receipt preview",
+      "status": "completed",
+      "intent": "Revert folder-open file:// persist. Restore MediaStore insert URI + EXTRA_IMAGE_URI-only preview from origin/transfer-patch. FileInputStream fallback only for leftover file:// MountainMoney URIs. Tests: ReceiptBitmapLoaderTest.usesFilePathFallback_onlyFileScheme."
+    },
+    {
+      "id": "receipt-preview-compile-launch-2026-09",
+      "title": "Fix MainActivity compile and file:// preview launch",
+      "status": "completed",
+      "intent": "Remove stray character causing compileDebugJavaWithJavac ';' expected. Do not put folder file:// on Intent.setData (FileUriExposedException). Pass EXTRA_IMAGE_URI; content:// may still be Intent data. Tests: ReceiptFolderOpenerTest.canPutOnIntentData_onlyContentScheme."
+    },
+    {
+      "id": "receipt-folder-open-2026-09",
+      "title": "Open receipt preview from Pictures/Mountain Money by filename",
+      "status": "completed",
+      "intent": "Preview finds and decodes the JPEG already in Pictures/Mountain Money instead of a dead picker/MediaStore id. Persist file://…/MountainMoney_*.jpg. Reverted ReceiptAlbumUris. Tests: ReceiptFolderOpenerTest. Local ./gradlew blocked on Java 25 / Gradle 6.7.1 (unsupported class file major version 65)."
+    },
+    {
+      "id": "receipt-album-uri-after-move-2026-09",
+      "title": "Keep receiptImageUri pointed at Pictures/Mountain Money after move",
+      "status": "completed",
+      "intent": "After import/move into Pictures/Mountain Money, persist the album MediaStore URI for that MountainMoney_*.jpg file (not the picker grant). Preview looks up the file in that folder by display name if the stored id is stale."
+    },
+    {
+      "id": "receipt-preview-open-2026-08",
+      "title": "Fix Could not open this image on receipt preview",
+      "status": "completed",
+      "intent": "Persist the Mountain Money album URI after gallery import even when the picker source cannot be deleted; open preview from the stored URI with grants and no re-import; decode via ReceiptUriStreams; request READ_MEDIA_IMAGES on API 33+; web preview fetch with credentials."
+    },
+    {
+      "id": "spend-analysis-2026-08",
+      "title": "Spend analysis charts for last-N months vs Limit",
+      "status": "completed",
+      "intent": "Add a filterable Analysis dialog/sheet (Last 3/6/12, pond chips, include-transfers) showing spend-over-time bars, over-Limit pond-months, by-pond bars, and this-month snapshot. Pure SpendAnalysisHelper + JS port; Canvas/CSS bars; no new Gson/SQLite keys. Top-bar chart icon between bills calendar and recalc. History Start/End and bills filter unchanged. Over budget uses Envelope.limit only (not payday Remaining or MonthData.limit). Systems: SpendAnalysisHelper, MainActivity Analysis dialog, web top bar + sheet. Expected files: helper + tests, dialog_analysis.xml, SpendBarChartView, app_bar_main, MainActivity, web domain/app/css/i18n, features user-flows ARCHITECTURE README TASK_STATE. Impact: new screen only."
+    },
+    {
+      "id": "comment-ocr-learning-2026-08",
+      "title": "Comment typeahead and OCR amount learning sidecar SQLite",
+      "status": "completed",
+      "intent": "Add comments-only typeahead (3 visible rows) on Android and web add/edit transaction dialogs. Persist remembered comments and OCR amount-correction weights in sidecar mountain_money_learning.db (float32 vector), not Envelope Gson or Mongo profiles. OCR still fills comment only when empty; amount learning is silent when the saved amount is a receipt money candidate. Systems: CommentHistory, OcrAmountLearner, LearningDb, ReceiptFieldParser weights, MainActivity dialogs, web sheet, /api/learning. Expected files: Java helpers + tests, web/domain + tests, dialog layouts, MainActivity, web server/app/css, DATA_SCHEMA ARCHITECTURE features user-flows receipt-ocr WEB_DEMO PROJECT_INDEX README TASK_STATE. Impact: add/edit transaction only; ponds/history unchanged."
+    },
+    {
+      "id": "web-demo-seed-2026-08",
+      "title": "Demo seed data and empty transaction list",
+      "status": "completed",
+      "intent": "Seed 5 ponds and 12 prior months plus current of spending/transfers/splits; auto-fill empty accounts and alice-demo; show No transactions to display when the list is empty."
+    },
+    {
+      "id": "web-mongo-demo-2026-08",
+      "title": "Mountain Money web demo (localhost + MongoDB)",
+      "status": "completed",
+      "intent": "Add web/ Node+Express+Mongo demo: register/login per profile, mobile-first HTML/CSS matching Android ponds/transactions/transfers/splits/receipts/OCR, JS ports of domain helpers + tests. Android unchanged. Localhost now; GoDaddy shared hosting later is out of scope."
+    },
+    {
+      "id": "receipt-preview-reopen-2026-07",
+      "title": "Fix gallery receipt preview reopen after move",
+      "status": "completed",
+      "intent": "Context-aware Mountain Money ownership; preview opens stored URI without re-import/move; tests + docs + commit."
+    },
+    {
+      "id": "payday-remaining-formula-2026-07",
+      "title": "Fix payday Remaining / Still-to-deposit formula",
+      "status": "completed",
+      "intent": "Remaining = Account + unlocked payday slices - month spend; Still to deposit = unpassed Limit slices; monthly reset; helper tests + docs + commit."
+    },
+    {
+      "id": "gallery-receipt-move-2026-07",
+      "title": "Fix gallery receipt import move + reliable save",
+      "status": "completed",
+      "intent": "Main-thread import before OCR; save guard; move via ReceiptSourceDeleter; tests + docs + commit."
+    },
+    {
+      "id": "bills-anchor-unified-2026-06",
+      "title": "Fix bills-period anchor nearest previous bills day",
+      "status": "completed",
+      "intent": "Unified BillsDayAnchor month walk; remove single-day prev-month bug; multi-day period-end adjustment; tests + docs + commit."
+    },
+    {
+      "id": "gallery-receipt-save-fix-2026-06",
+      "title": "Fix gallery receipt save to pond",
+      "status": "completed",
+      "intent": "Always copy gallery URIs to Mountain Money; toast on lost dialog; OCR date filter hint; tests + docs + commit."
+    },
+    {
+      "id": "pond-header-single-row-2026-06",
+      "title": "Consolidate pond header into single icon toolbar row",
+      "status": "completed",
+      "intent": "Single-row pond header: title + count left; select/reorder/collapse/add icons right; ImageButton state; auto-exit reorder on collapse; docs + commit."
+    },
+    {
+      "id": "pond-payday-receipt-polish-2026-06",
+      "title": "Pond reorder/selection, payday reconciliation, split cents, receipt OCR",
+      "status": "completed",
+      "intent": "RecyclerView pond reorder + select all/unselect all; schedule-gap still-to-deposit; split slider remainder cents; EXIF upright capture; OCR brand/total heuristics; docs/tests/commit."
+    },
+    {
+      "id": "fix-no-pond-found-false-positive-2026-05",
+      "title": "Fix false 'No pond found' on transaction save",
+      "status": "completed",
+      "intent": "PondLookup + requireSelectedPond; error string; PondLookupTest; features/README."
+    },
+    {
+      "id": "remove-reconcile-target-label-2026-05",
+      "title": "Remove duplicate Target from pond reconciliation UI",
+      "status": "completed",
+      "intent": "pond_*_reconcile strings + MainActivity 3 sites; docs/README updated."
+    },
+    {
+      "id": "ocr-top-line-brand-fallback-2026-05",
+      "title": "Receipt OCR: top-line first-word fallback instead of Unknown merchant",
+      "status": "completed",
+      "intent": "guessMerchantFromTopLine; remove Unknown merchant; ReceiptFieldParserTest; docs + commit."
+    },
+    {
+      "id": "ocr-brand-comment-2026-05",
+      "title": "Receipt OCR: brand-only comment from top prominent store name",
+      "status": "completed",
+      "intent": "OcrLine lineHeightPx; MlKitLatinOcrEngine Y-sort; ReceiptFieldParser brand scoring + normalizeBrandDisplay; applyReceiptDraft empty comment; tests + docs + commit."
+    },
+    {
+      "id": "ocr-tip-inclusive-total-2026-05",
+      "title": "Receipt OCR: prefer amount spent including tips",
+      "status": "completed",
+      "intent": "ReceiptFieldParser tip composition + total paid labels; ReceiptFieldParserTest; receipt-ocr.md + features.md + README."
+    },
+    {
+      "id": "transaction-tab-draft-preservation-2026-05",
+      "title": "Preserve transaction dialog drafts across type tabs + transfer/split defaults",
+      "status": "completed",
+      "intent": "Split rows no longer cleared on tab hide; transfer 100% + add-bucket redistribute; split even defaults; MoneyMathTest; docs/README. Gradle verify blocked (Java 25)."
+    },
+    {
+      "id": "payday-bank-reconciliation-2026-05",
+      "title": "Payday bank reconciliation + tabbed bills/paydays settings",
+      "status": "completed",
+      "intent": "MoneyMath + PondBankReconciliationHelper + paydays_json; tabbed settings; footer/edit 3-value lines; auto-sync remaining. Gradle verify blocked (Java 25 only)."
+    },
+    {
+      "id": "bills-day-anchor-previous-month-2026-05",
+      "title": "BillsDayAnchor: single bills day always uses previous month",
+      "status": "completed",
+      "intent": "Filter start = prior month bills day (e.g. May 13 + day 12 → Apr 12); BillsDayAnchorTest + docs."
+    },
+    {
+      "id": "transaction-type-tabs-below-comment-2026-05",
+      "title": "Transaction dialog: Spending/Transfer/Split type tabs below comment",
+      "status": "completed",
+      "intent": "dialog_new_transaction + dialog_transaction: move tabTransactionType (+ tabTransactionTime) after etEditTransactionComment for end-of-form mode choice UX; docs/README."
+    },
+    {
+      "id": "recurring-chrome-hidden-until-tab-2026-05",
+      "title": "Transaction dialog: hide recurring frequency/day chrome until Spending + Recurring",
+      "status": "completed",
+      "intent": "TabLayout pre-select skips onTabSelected; sync visibility after programmatic tab select; time-tab listener uses isTransactionDialogRecurringSelected; XML defaults gone for recurring block."
+    },
+    {
+      "id": "remove-recurring-checkbox-2026-05",
+      "title": "Transaction dialog: drop This is recurring checkbox; One-time/Recurring tabs only",
+      "status": "completed",
+      "intent": "Layouts + MainActivity: recurring driven only by TabLayout plus isTransactionDialogRecurringSelected(); dialog_transaction.xml synced to dialog_new_transaction.xml."
+    },
+    {
+      "id": "split-purchase-tabbed-dialog-2026-05",
+      "title": "Split purchase + tabbed transaction dialog (Spending/Transfer/Split tabs; split group sync; history expand)",
+      "status": "completed",
+      "intent": "Transaction splitPurchaseGroupId/BucketId; SplitPurchaseSyncHelper + draft validation tests; TabLayout dialogs; MainActivity save/edit/delete; item_transaction expand for split only; docs. Local Gradle verify blocked (Java 25 vs Gradle 6.7.1)."
+    },
+    {
+      "id": "transaction-dialog-scroll-icons-2026-04",
+      "title": "Add/edit transaction dialogs: BoundedNestedScrollView + receipt icon toolbar",
+      "intent": "dialog_new_transaction / dialog_transaction: icon toolbar + HorizontalScrollView; BoundedNestedScrollView + dimen max height; MainActivity receipt wiring as View; strings content descriptions; ic_receipt_delete."
+    },
+    {
+      "id": "receipt-preview-rotation-overwrite-2026-04",
+      "title": "Receipt preview: persist rotation (JPEG overwrite same Uri, OCR parser verify + tests)",
+      "intent": "Verify ReceiptFieldParser merchant junk/title-case and restaurant/receipt pickTotal; extend goldens; ReceiptPreviewActivity dirty tracking when net rotation mod 360 != 0, Save overwrites Pictures/Mountain Money file via ContentResolver at JPEG 92, Matrix pixel rotate + reload; back/close discard confirm."
+    },
+    {
+      "id": "ocr-merchant-restaurant-2026-04",
+      "title": "ReceiptFieldParser: merchant line + title case; restaurant final total (amount due / last total)"
+    },
     {
       "id": "repo-memory-bootstrap",
       "title": "Create repository memory files and AI change protocol"
@@ -14,7 +318,55 @@
     {
       "id": "month-rollover-refactor",
       "title": "Add sanitized deep-copy month rollover helper and startup integration"
+    },
+    {
+      "id": "mountain-money-bills-ponds-2026-04",
+      "title": "Mountain Money: custom top bar, bills days, pond account, rebrand, docs, tests"
+    },
+    {
+      "id": "repo-protocol-and-theme-alignment-2026-04",
+      "title": "AI protocol docs refresh + Material-themed buttons, spinners, dialogs"
+    },
+    {
+      "id": "theme-buttons-dropdowns-daynight-2026-04",
+      "title": "Theme-aligned ImageButtons, spinner night colors, programmatic chips/calendars"
+    },
+    {
+      "id": "custom-top-bar-daynight-2026-04",
+      "title": "Custom top bar fill/stroke night colors; title colorPrimary"
+    },
+    {
+      "id": "bills-period-filter-start-anchor-end-today-2026-04",
+      "title": "Bills-period filter: start = anchor, end = today; docs and strings"
+    },
+    {
+      "id": "recurring-dialog-theme-icon-actions-2026-04",
+      "title": "Transaction dialogs: recurring theme chips, check/X actions, API 21 ripple fallbacks"
+    },
+    {
+      "id": "carry-over-limit-invariant-2026-04",
+      "title": "Carry-over: keep Envelope.limit stable; align initializeMonth; fix reset(true); docs/tests"
+    },
+    {
+      "id": "transfer-dest-bills-anchor-2026-04",
+      "title": "Exclude source pond from transfer destination list; BillsDayAnchor prior month when single bills day equals today"
+    },
+    {
+      "id": "transfer-totals-to-only-2026-04",
+      "title": "Transaction header transfer spinner: destinations (to) only, not from"
+    },
+    {
+      "id": "receipt-ocr-mm-2026-04",
+      "title": "Receipt capture: CameraX, gallery, OCR slot, parser, MediaStore Mountain Money, MainActivity"
+    },
+    {
+      "id": "receipt-preview-ux-2026-04",
+      "title": "Receipt preview/remove/list row; edit dialog capture; recurring chip DayNight contrast; ReceiptRowUiTest"
+    },
+    {
+      "id": "receipt-preview-fullscreen-2026-04",
+      "title": "Fullscreen zoomable rotatable ReceiptPreviewActivity; ReceiptZoomImageView; ReceiptBitmapLoader"
     }
   ],
-  "last_updated": "2026-03-21"
+  "last_updated": "2026-09-16"
 }

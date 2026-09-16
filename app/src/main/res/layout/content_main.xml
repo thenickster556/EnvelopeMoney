@@ -12,14 +12,17 @@
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center"
-        android:paddingTop="?attr/actionBarSize"
+        android:paddingTop="8dp"
         android:paddingBottom="3dp">
 
         <ImageButton
             android:id="@+id/btnPrevMonth"
             android:layout_width="40dp"
             android:layout_height="30dp"
-            android:src="@android:drawable/ic_media_previous" />
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/content_desc_prev_month"
+            android:src="@android:drawable/ic_media_previous"
+            android:tint="?attr/colorControlNormal" />
 
         <TextView
             android:id="@+id/tvCurrentMonth"
@@ -33,7 +36,10 @@
             android:id="@+id/btnNextMonth"
             android:layout_width="40dp"
             android:layout_height="30dp"
-            android:src="@android:drawable/ic_media_next" />
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/content_desc_next_month"
+            android:src="@android:drawable/ic_media_next"
+            android:tint="?attr/colorControlNormal" />
     </LinearLayout>
 
     <LinearLayout
@@ -71,19 +77,31 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Transaction History"
+            android:text="@string/transaction_history_title"
             android:textSize="18sp"
             android:textStyle="bold"
             android:layout_marginStart="8dp"
             android:layout_marginLeft="8dp" />
 
         <ImageButton
+            android:id="@+id/btnBillsPeriodFilter"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:src="@drawable/ic_bills_period_filter"
+            android:tint="?attr/colorControlNormal"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/content_desc_bills_period_filter"
+            android:layout_marginEnd="4dp"
+            android:layout_marginRight="4dp" />
+
+        <ImageButton
             android:id="@+id/btnToggleTransfers"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:src="@drawable/ic_transfers_toggle"
+            android:tint="?attr/colorControlNormal"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="Toggle transfers"
+            android:contentDescription="@string/content_desc_toggle_transfers"
             android:layout_marginEnd="8dp"
             android:layout_marginRight="8dp" />
 
@@ -92,8 +110,9 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:src="@android:drawable/ic_menu_add"
+            android:tint="?attr/colorControlNormal"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="Add Transaction"
+            android:contentDescription="@string/content_desc_add_transaction"
             android:layout_marginEnd="8dp"
             android:layout_marginRight="8dp" />
     </LinearLayout>
@@ -112,7 +131,7 @@
         android:orientation="horizontal"
         android:gravity="center_vertical"
         android:padding="8dp"
-        android:background="@android:color/holo_green_light">
+        android:background="@color/totals_row_background">
 
         <TextView
             android:id="@+id/tvTransactionsTotal"
@@ -136,7 +155,8 @@
                 android:id="@+id/spinnerTransferTotals"
                 android:layout_width="170dp"
                 android:layout_height="wrap_content"
-                android:minWidth="170dp" />
+                android:minWidth="170dp"
+                android:theme="@style/ThemeOverlay.MountainMoney.Spinner" />
 
             <TextView
                 android:id="@+id/tvTransferTotalsSummary"
@@ -160,32 +180,84 @@
 
         <TextView
             android:id="@+id/tvEnvelopesTitle"
-            android:layout_width="0dp"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Envelopes"
+            android:text="@string/ponds_section_title"
             android:textSize="18sp"
             android:textStyle="bold"
             android:layout_marginStart="8dp"
             android:layout_marginLeft="8dp" />
 
-        <ImageButton
-            android:id="@+id/btnToggleEnvelopes"
+        <TextView
+            android:id="@+id/tvPondSelectedCount"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:src="@android:drawable/arrow_up_float"
+            android:layout_marginStart="8dp"
+            android:layout_marginLeft="8dp"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:textSize="13sp"
+            android:textColor="?android:attr/textColorSecondary"
+            tools:text="2 selected" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <ImageButton
+            android:id="@+id/btnPondSelectToggle"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:src="@drawable/ic_pond_select_all"
+            android:tint="?attr/colorControlNormal"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="Collapse envelopes"
-            android:layout_marginEnd="8dp"
-            android:layout_marginRight="8dp" />
+            android:padding="10dp"
+            android:scaleType="centerInside"
+            android:clickable="true"
+            android:focusable="true"
+            android:contentDescription="@string/content_desc_pond_select_toggle"
+            android:layout_marginEnd="4dp"
+            android:layout_marginRight="4dp" />
+
+        <ImageButton
+            android:id="@+id/btnPondReorder"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:src="@drawable/ic_pond_reorder"
+            android:tint="?attr/colorControlNormal"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:padding="10dp"
+            android:scaleType="centerInside"
+            android:clickable="true"
+            android:focusable="true"
+            android:contentDescription="@string/content_desc_pond_reorder"
+            android:layout_marginEnd="4dp"
+            android:layout_marginRight="4dp" />
+
+        <ImageButton
+            android:id="@+id/btnToggleEnvelopes"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:src="@android:drawable/arrow_up_float"
+            android:tint="?attr/colorControlNormal"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:padding="10dp"
+            android:scaleType="centerInside"
+            android:clickable="true"
+            android:focusable="true"
+            android:contentDescription="@string/content_desc_collapse_ponds"
+            android:layout_marginEnd="4dp"
+            android:layout_marginRight="4dp" />
 
         <ImageButton
             android:id="@+id/btnAddEnvelope"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:src="@android:drawable/ic_menu_add"
+            android:tint="?attr/colorControlNormal"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="Add Envelope"
+            android:contentDescription="@string/content_desc_add_pond"
             android:layout_marginEnd="8dp"
             android:layout_marginRight="8dp" />
     </LinearLayout>
@@ -197,11 +269,22 @@
         android:layout_weight="1"
         android:orientation="vertical">
 
-        <ListView
-            android:id="@+id/listViewEnvelopes"
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/recyclerViewEnvelopes"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
             android:layout_marginTop="8dp"/>
+
+        <TextView
+            android:id="@+id/tvPondTotalsFooter"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="12sp"
+            android:paddingTop="6dp"
+            android:paddingBottom="4dp"
+            android:textColor="?android:attr/textColorSecondary"
+            tools:text="Account sum: $0 | Remaining sum: $0 | Diff: $0" />
     </LinearLayout>
 
 </LinearLayout>

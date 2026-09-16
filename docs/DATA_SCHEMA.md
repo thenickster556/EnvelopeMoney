@@ -1,7 +1,22 @@
 # Data Schema
 
+> **Note:** Pond/transaction **business state** is still SharedPreferences + Gson (no SQL for envelopes). In protocol terms those “tables” = **preference keys and model types**. A **sidecar SQLite** file `mountain_money_learning.db` stores comment typeahead and OCR amount weights only. The **web demo** stores Envelope/Transaction JSON per user in MongoDB and the same learning schema in `web/data/learning/<userId>.db`.
+
 ## Persistence Store
 The app persists most business state via SharedPreferences.
+
+## Learning sidecar (SQLite)
+
+File: `mountain_money_learning.db` (Android `getFilesDir()`; web `web/data/learning/<userId>.db`). Not part of `envelopes` JSON. Copyable between Mountain Money clients.
+
+```text
+meta(key TEXT PRIMARY KEY, value TEXT)           -- version = 1
+comments(text TEXT PRIMARY KEY, last_used_ms INTEGER NOT NULL)
+ocr_weight_vec(id INTEGER PRIMARY KEY CHECK (id = 1), n INTEGER, floats BLOB)
+```
+
+- **comments:** unique notes, most-recent first, cap 50. Case-insensitive merge keeps the latest casing. Empty/whitespace is not stored. Cancel does not write.
+- **ocr_weight_vec:** one row, `n = 5`, `floats` = little-endian float32 vector `[dollarSign, strongTotalLabel, totalLabel, bottomHalf, orderOrPointsPenalty]`. Defaults `50, 80, 60, 25, -100`. Corrupt or missing blob falls back to those defaults.
 
 ## SharedPreferences Areas
 - `app_prefs`
@@ -12,10 +27,14 @@ The app persists most business state via SharedPreferences.
   - `last_add_transaction_envelope`
   - `last_add_transfer_destination_<sourceEnvelope>`
   - `last_transfer_totals_option`
+  - `bills_days_json`: Gson-serialized list of integers (day-of-month 1–31); empty means none configured
+  - `paydays_json`: Gson-serialized list of integers (day-of-month 1–31); global pay schedule for bank reconciliation
+  - `bills_filter_active`: whether the bills-period filter is on (UI start = anchor, end = today)
+  - `bills_filter_saved_start_display` / `bills_filter_saved_end_display`: `MMM d, yyyy` strings for the user's range **before** enabling the filter, restored when disabling
 
 ## Envelope Model
 - `name: String`
-- `limit: double`
+- `limit: double` — **user-defined monthly budget** for the pond (same meaning as `originalLimit` after edits; **not** inflated by month carry-over; carry increases **remaining** and per-month pools instead).
 - `originalLimit: double`
 - `remaining: double`
 - `transactions: List<Transaction>`
@@ -25,9 +44,19 @@ The app persists most business state via SharedPreferences.
 - `manualRemaining: Double?`
 - `baselineLimit: double`
 - `baselineRemaining: double`
+- `accountBalance: Double?` — optional real-world bank slice for this pond (not the budget remainder)
+
+### Bank reconciliation mode (optional)
+When `paydays_json` is non-empty **and** a pond has `accountBalance` set:
+- **In bank** = `accountBalance` (user checkpoint; not auto-updated on payday).
+- **Still to deposit** = Limit money for paydays **not yet arrived** this month (`fair Limit shares × unpassed count`).
+- **Remaining** (estimated spendable) = `Account + unlocked payday shares − month spending`, where unlocked shares are Limit slices for paydays on or before today in the visible month (past months = all passed; future months = none — monthly reset).
+- Payday day itself counts as passed (`dayOfMonth <= today`). Limit is never inflated by unlocks.
+- Pond row shows **Payday progress** (`N/M reached`). Footer and edit preview show **In bank | Still to deposit**.
+- Pond order is the `envelopes` JSON array order. Manual remainder override is cleared when reconciliation applies. Ponds without paydays or without Account keep transaction-driven `remaining` via `calculateRemaining`.
 
 ## MonthData Model
-- `limit: double`
+- `limit: double` — **effective budget ceiling for that calendar month** in snapshots (may equal base + unused from the prior month when carry-over applies); distinct from envelope `limit` above.
 - `remaining: double`
 - `transactions: List<Transaction>`
 
@@ -35,16 +64,51 @@ The app persists most business state via SharedPreferences.
 - `envelopeName: String`
 - `amount: double`
 - `date: String`
-- `comment: String`
+- `comment: String` — for receipt capture, OCR may prefill with **merchant name only** (amount stays in `amount`).
 - `month: String`
 - `transferId: String?`
+- `transferBucketId: String?` — `null` on the source summary transaction; set on mirrored destination rows so one source total can feed many transfer buckets
+- `splitPurchaseGroupId: String?` — when set, this row is one slice of a **split purchase** (multi-pond expense); all slices share the same group id
+- `splitPurchaseBucketId: String?` — stable id for that slice within the group (for edit/replace)
 - `recurring: boolean`
 - `recurringFrequency: String?`
 - `recurringDays: List<Integer>`
 - `recurringSeriesId: String?`
 - `recurringTemplate: boolean`
+- `receiptImageUri: String?` — optional MediaStore `content://` URI for a JPEG under **Pictures/Mountain Money** after camera/gallery import. The insert URI is always persisted (never a picker grant). A `#MountainMoney_*.jpg` fragment may be present as filename metadata. Preview opens this stored URI with `ContentResolver` (no re-import) and, for `content://`, Intent data plus a read grant. If the stored pointer is unreadable, a unique album filename or unique same-day leftover may replace **only** `receiptImageUri` / `receiptImageFileName` after a successful decode. Gallery pick uses `GetContent` (`image/*`, photo gallery, not Files) and still imports into the album before persist. Background folder recovery of older files still needs runtime `READ_MEDIA_IMAGES` (API 33+) or `READ_EXTERNAL_STORAGE` (API 23–32).
 
 ## TransferData Model
 - `id: String`
+- `bucketId: String?` â€” stable per-bucket id inside a grouped transfer; legacy single-destination transfers may deserialize without it
 - `toEnvelope: String`
 - `amount: double`
+
+## Grouped transfer semantics
+- One source transaction may reserve part of its total into multiple destination transfer buckets.
+- The source summary transaction keeps the full user-entered amount.
+- Each `TransferData` row stores one reserved bucket amount for that transfer group.
+- Each mirrored destination transaction stores both `transferId` and `transferBucketId` so edit/delete can target one grouped transfer while keeping bucket rows distinct.
+
+## Split purchase semantics
+- Each slice is a normal positive `Transaction` in its pond (`amount` is that pond’s portion of the purchase).
+- Slices in one purchase share `splitPurchaseGroupId` and are distinguished by `splitPurchaseBucketId`.
+- A transaction must not combine a non-empty `splitPurchaseGroupId` with a non-empty `transferId` (UI enforces mutual exclusion). Split purchases do not use `Envelope.TransferData` or negative mirror rows.
+- Recurring is not supported for split purchases in v1 (dialog hides time/recurring on non-Spending tabs).
+
+## Pond totals footer
+- **Reconciliation mode** (paydays configured + at least one Account): one line, two values — **In bank** (sum of accounts), **Still to deposit** (sum of unpassed payday Limit slices per pond with Account). Monthly **limit** is shown separately on each pond row / edit dialog (not repeated as Target). All amounts cent-rounded.
+- **Legacy** (otherwise): **Account (entered)** sum, **Remaining** sum, **Difference** when any Account exists; or Remaining only when none.
+
+## Web demo (MongoDB)
+
+Database `mountain_money` (localhost). One profile per registered account; Envelope/Transaction JSON matches the Gson models above.
+
+- `users`: `_id`, `login` (normalized username or email), `passwordHash` (bcrypt), `createdAt`
+- `profiles`: `userId`, `currentMonth`, `displayedMonth`, `envelopes`, `envelopesCollapsed`, `billsDays`, `paydays`, `billsFilterActive`, `billsFilterSavedStartDisplay`, `billsFilterSavedEndDisplay`, `dateFilterStartDisplay`, `dateFilterEndDisplay`, `transfersVisible`, last-add pond prefs
+- `sessions`: express-session store
+- `receipts` GridFS: JPEG files tagged with `metadata.userId`; transaction `receiptImageUri` is `/api/receipts/:id`
+
+Web and Android stores are independent (no SharedPreferences sync). Learning `.db` files are also independent per platform/user unless the user copies the file.
+
+### Receipt recovery compatibility
+`Transaction.receiptImageFileName: String?` is an optional Gson filename identity alongside the existing `receiptImageUri`. Legacy JSON without the field continues to load. New named saves and verified repairs populate it. URI replacement/removal clears obsolete filename metadata; unchanged URI assignments retain it. Transfer mirrors and split-group edits preserve the verified filename. Repair updates current transactions and `MonthData.transactions` without changing financial fields, preference keys, or the learning SQLite database. Failed or ambiguous recovery never clears the original association. Matching binds by unique identity first (exact filename, normalized filename folding case/`.jpeg`/percent-encoding/` (1)` copy suffixes, or a shared epoch digit-run), and only then by date: the only unused album file captured on `Transaction.date` (`yyyy-MM-dd`) — or one day either side when that day holds no file — with exactly one unmatched receipt. A renamed-but-verified match replaces `receiptImageFileName` with the album filename; no new Gson keys are added. Verified means a successful header decode (one stream open); the fullscreen preview performs the full pixel decode. A user-confirmed candidate pick — initial or later swap via "Choose different" — is stored exactly like an automatic match (`receiptImageUri` + `receiptImageFileName`), so user picks survive restart with no extra fields.

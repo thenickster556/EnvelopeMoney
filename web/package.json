@@ -1,0 +1,25 @@
+{
+  "name": "mountain-money-web",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Mountain Money localhost web demo (Express + MongoDB)",
+  "scripts": {
+    "start": "node server/index.js",
+    "test": "node --test",
+    "seed-demo": "node scripts/seedDemo.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "connect-mongo": "^5.1.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "express-session": "^1.18.1",
+    "mongodb": "^6.12.0",
+    "multer": "^2.2.0",
+    "sql.js": "^1.14.2"
+  }
+}

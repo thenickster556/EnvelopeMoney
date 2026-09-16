@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Full-width action at the bottom of the unused-picture list so leftover unused
+     files are obvious; not a dialog Neutral button next to Cancel. -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/receiptChooserSeeAll"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/selectableItemBackground"
+    android:clickable="true"
+    android:focusable="true"
+    android:gravity="center"
+    android:minHeight="48dp"
+    android:paddingStart="12dp"
+    android:paddingTop="12dp"
+    android:paddingEnd="12dp"
+    android:paddingBottom="12dp"
+    android:textColor="?attr/colorControlNormal"
+    android:textSize="15sp"
+    android:textStyle="bold" />

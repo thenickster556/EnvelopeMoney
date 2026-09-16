@@ -20,24 +20,33 @@ public class Envelope {
     public static class TransferData {
         @SerializedName("id")
         private String id;
+        @SerializedName("bucketId")
+        private String bucketId;
         @SerializedName("toEnvelope")
         private String toEnvelope;
         @SerializedName("amount")
         private double amount;
 
         public TransferData(String toEnvelope, double amount) {
-            this(UUID.randomUUID().toString(), toEnvelope, amount);
+            this(UUID.randomUUID().toString(), UUID.randomUUID().toString(), toEnvelope, amount);
         }
 
         public TransferData(String id, String toEnvelope, double amount) {
+            this(id, UUID.randomUUID().toString(), toEnvelope, amount);
+        }
+
+        public TransferData(String id, String bucketId, String toEnvelope, double amount) {
             this.id = id;
+            this.bucketId = bucketId;
             this.toEnvelope = toEnvelope;
             this.amount = amount;
         }
 
         public String getId() { return id; }
+        public String getBucketId() { return bucketId; }
         public String getToEnvelope() { return toEnvelope; }
         public double getAmount() { return amount; }
+        public void setBucketId(String bucketId) { this.bucketId = bucketId; }
         public void setToEnvelope(String toEnvelope) { this.toEnvelope = toEnvelope; }
         public void setAmount(double amount) { this.amount = amount; }
     }
@@ -70,6 +79,9 @@ public class Envelope {
     private Map<String, MonthData> monthlyData = new HashMap<>();
     @SerializedName("transfers")
     private List<TransferData> transfers = new ArrayList<>();
+    /** Optional real-world bank slice for this pond (not the budget remainder). */
+    @SerializedName("accountBalance")
+    private Double accountBalance = null;
 
     private Double manualRemaining = null;     // if null => no manual override
     private double baselineLimit = 0;         // the limit at the moment of manual override
@@ -89,6 +101,14 @@ public class Envelope {
     public double getRemaining() { return remaining; }
     public double getOriginalLimit(){ return originalLimit; }
     public Double getManualRemaining() { return manualRemaining; }
+
+    public Double getAccountBalance() {
+        return accountBalance;
+    }
+
+    public void setAccountBalance(Double accountBalance) {
+        this.accountBalance = accountBalance;
+    }
     public Boolean hasBaseline() {
         return Double.isFinite(baselineLimit) && Double.isFinite(baselineRemaining);
     }
@@ -135,6 +155,11 @@ public class Envelope {
         this.manualRemaining   = newRemaining;
         this.baselineRemaining = newRemaining; // seed for future recomputes
         this.remaining         = newRemaining;
+    }
+
+    /** Clears manual remainder override (e.g. when bank reconciliation auto-sync takes over). */
+    public void clearManualRemainingOverride() {
+        this.manualRemaining = null;
     }
 
     // Adjust limit and remaining based on new limit
@@ -253,6 +278,10 @@ public class Envelope {
         getTransfers().add(new TransferData(id, toEnvelope, amount));
     }
 
+    public void addTransfer(String id, String bucketId, String toEnvelope, double amount) {
+        getTransfers().add(new TransferData(id, bucketId, toEnvelope, amount));
+    }
+
     public void updateTransfer(String id, String toEnvelope, double amount) {
         for (TransferData transfer : getTransfers()) {
             if (Objects.equals(transfer.getId(), id)) {
@@ -292,20 +321,20 @@ public class Envelope {
     }
 
     /**
-     * Resets for a new month.
-     * If carryOver==true, new limit = base allowance + leftover,
-     * and remaining = that new limit.
-     * Otherwise both reset to base allowance only.
+     * Resets availability for a new month. Does not change the user-defined monthly
+     * budget ({@link #limit} / {@link #originalLimit}) when {@code carryOver} is true — carry is applied
+     * to {@link #remaining} only, matching {@link MonthRolloverHelper} semantics.
+     * When {@code carryOver} is false, syncs {@code limit} to {@code originalLimit} and clears manual state.
      */
     public void reset(boolean carryOver) {
-        double prevRemaining = this.remaining;        // e.g. $200
+        double prevRemaining = this.remaining;
         if (carryOver) {
-            // new limit should be base allowance + leftover
-            this.limit     = this.originalLimit + prevRemaining; // 100 + 200 = 300
-            this.remaining = this.limit;                          // start month at full
+            double base = Double.isFinite(originalLimit) ? originalLimit : 0d;
+            double prev = Double.isFinite(prevRemaining) ? prevRemaining : 0d;
+            this.remaining = base + prev;
         } else {
-            this.limit     = this.originalLimit;  // back to 100
-            this.remaining = this.limit;          // remaining = 100
+            this.limit = this.originalLimit;
+            this.remaining = this.limit;
         }
         this.manualRemaining = null;
     }
@@ -328,8 +357,12 @@ public class Envelope {
             String previousMonth = getPreviousMonth(month);
             MonthData previousData = monthlyData.get(previousMonth);
             if (carryOver && previousData != null) {
-                double newLimit = previousData.limit + previousData.remaining;
-                monthlyData.put(month, new MonthData(newLimit, newLimit));
+                // Match MonthRolloverHelper: effective pool = base monthly budget + unused from prior month,
+                // not previousData.limit + remaining (avoids double-count when prior month limit included carry).
+                double base = Double.isFinite(originalLimit) ? originalLimit : 0d;
+                double prevLeft = Double.isFinite(previousData.remaining) ? previousData.remaining : 0d;
+                double effectivePool = base + prevLeft;
+                monthlyData.put(month, new MonthData(effectivePool, effectivePool));
             } else {
                 monthlyData.put(month, new MonthData(originalLimit, originalLimit));
             }

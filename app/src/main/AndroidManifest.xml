@@ -2,6 +2,21 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.example.envelopemoney">
 
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <!-- Android 14 partial access: lets the system offer "Select photos" so chosen album files stay listable. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
+
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/envelope_money"
@@ -11,6 +26,7 @@
         android:theme="@style/Theme.EnvelopeMoney">
         <activity
             android:name=".MainActivity"
+            android:exported="true"
             android:label="@string/app_name"
             android:theme="@style/Theme.EnvelopeMoney.NoActionBar">
             <intent-filter>
@@ -19,6 +35,15 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".receipt.ReceiptCaptureActivity"
+            android:exported="false"
+            android:label="@string/receipt_scan_title"
+            android:theme="@style/Theme.EnvelopeMoney.NoActionBar" />
+        <activity
+            android:name=".receipt.ReceiptPreviewActivity"
+            android:exported="false"
+            android:theme="@style/Theme.EnvelopeMoney.ReceiptPreview" />
     </application>
 
 </manifest>

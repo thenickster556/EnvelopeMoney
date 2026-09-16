@@ -2,33 +2,103 @@ package com.example.envelopemoney;
 
 import android.app.DatePickerDialog;
 import android.content.Context;
+import android.content.Intent;
+import android.content.res.ColorStateList;
+import android.content.res.Resources;
+import android.graphics.Bitmap;
+import android.net.Uri;
 import android.os.Build;
+import android.provider.MediaStore;
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.SpannableString;
+import android.text.Spanned;
+import android.text.TextWatcher;
+import android.text.style.ForegroundColorSpan;
 import android.util.Log;
+import android.util.TypedValue;
+import android.graphics.PorterDuff;
+import android.graphics.Rect;
+import android.graphics.drawable.Drawable;
+import android.view.Gravity;
 import android.view.LayoutInflater;
-import android.view.Menu;
-import android.view.MenuItem;
+import android.view.MotionEvent;
+import android.view.TouchDelegate;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.Window;
+import android.view.WindowManager;
+import android.widget.Button;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
+import android.widget.ScrollView;
+import android.widget.TableLayout;
+import android.widget.TableRow;
+import android.widget.Toast;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
+import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.Spinner;
 import android.widget.TextView;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.appcompat.widget.Toolbar;
+
+import com.example.envelopemoney.receipt.PaddleOcrAdapter;
+import com.example.envelopemoney.receipt.ReceiptBitmapLoader;
+import com.example.envelopemoney.receipt.ReceiptCandidateScorer;
+import com.example.envelopemoney.receipt.ReceiptCandidateSummary;
+import com.example.envelopemoney.receipt.AndroidReceiptSource;
+import com.example.envelopemoney.receipt.ReceiptReferenceResolver;
+import com.example.envelopemoney.receipt.ReceiptReferenceRepair;
+import com.example.envelopemoney.receipt.ReceiptAlbumMatcher;
+import com.example.envelopemoney.receipt.ReceiptCaptureActivity;
+import com.example.envelopemoney.receipt.ReceiptExifBitmapLoader;
+import com.example.envelopemoney.receipt.ReceiptPickerUriNormalizer;
+import com.example.envelopemoney.receipt.ReceiptPreviewActivity;
+import com.example.envelopemoney.receipt.ReceiptCaptureMode;
+import com.example.envelopemoney.receipt.ReceiptDateFilterHelper;
+import com.example.envelopemoney.receipt.ReceiptDraft;
+import com.example.envelopemoney.receipt.ReceiptOcrPipeline;
+import com.example.envelopemoney.receipt.OcrAmountLearner;
+import com.example.envelopemoney.receipt.OcrAmountWeights;
+import com.example.envelopemoney.receipt.ReceiptRowUi;
+import com.example.envelopemoney.ui.BoundedNestedScrollView;
+import com.example.envelopemoney.ui.SpendBarChartView;
+import com.google.android.material.chip.Chip;
+import com.google.android.material.chip.ChipGroup;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.google.android.material.slider.Slider;
+import com.google.android.material.tabs.TabLayout;
+import com.google.android.material.textfield.MaterialAutoCompleteTextView;
+import androidx.recyclerview.widget.ItemTouchHelper;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 import androidx.core.content.ContextCompat;
+import androidx.core.graphics.drawable.DrawableCompat;
+import androidx.core.widget.ImageViewCompat;
+
+import com.example.envelopemoney.BillsDayAnchor;
+import com.example.envelopemoney.Envelope;
+import com.example.envelopemoney.MonthRolloverHelper;
+import com.example.envelopemoney.MonthTracker;
+import com.example.envelopemoney.PrefManager;
+import com.example.envelopemoney.R;
+import com.example.envelopemoney.Transaction;
 
 import java.lang.reflect.Field;
 import java.text.ParseException;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -37,21 +107,46 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.Objects;
+import java.util.TimeZone;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 public class MainActivity extends AppCompatActivity {
-    private ListView listViewEnvelopes;
+    private static final double TRANSFER_STEP_AMOUNT = 0.50d;
+    private static final int TAB_TYPE_SPENDING = 0;
+    private static final int TAB_TYPE_TRANSFER = 1;
+    private static final int TAB_TYPE_SPLIT = 2;
+    private static final int TAB_TIME_ONE_TIME = 0;
+    private static final int TAB_TIME_RECURRING = 1;
+
+    private boolean isTransactionDialogRecurringSelected(TabLayout tabTransactionType,
+                                                         TabLayout tabTransactionTime) {
+        return tabTransactionType.getSelectedTabPosition() == TAB_TYPE_SPENDING
+                && tabTransactionTime.getSelectedTabPosition() == TAB_TIME_RECURRING;
+    }
+
+    private final Set<String> expandedSplitGroupIds = new HashSet<>();
+    private RecyclerView recyclerViewEnvelopes;
     private List<Envelope> envelopes;
     private boolean monthRolloverInProgress = false;
     private ListView listViewTransactions;
     private TransactionAdapter transactionAdapter;
     private List<Transaction> allTransactions = new ArrayList<>();
     private EnvelopeAdapter envelopeAdapter;
+    private TextView tvPondSelectedCount;
+    private ImageButton btnPondSelectToggle;
+    private ImageButton btnPondReorder;
+    private boolean pondReorderMode = false;
+    @Nullable
+    private ItemTouchHelper pondItemTouchHelper;
     private TextView tvTransactionsTotal;
     private LinearLayout layoutTransferTotals;
     private Spinner spinnerTransferTotals;
@@ -63,7 +158,75 @@ public class MainActivity extends AppCompatActivity {
     private LinearLayout layoutEnvelopesSection;
     private ImageButton btnToggleEnvelopes;
     private boolean envelopesCollapsed = false;
+    private boolean billsPeriodFilterActive = false;
+    private TextView tvPondTotalsFooter;
 
+    /** Non-null while add or edit transaction dialog is open and owns receipt capture state. */
+    @Nullable
+    private View receiptDialogHostView;
+    /** Host kept while the system gallery picker is open (dialog may briefly detach). */
+    @Nullable
+    private View receiptImportHostView;
+    private boolean awaitingGalleryPick;
+    @Nullable
+    private Button receiptDialogSaveButton;
+    @Nullable
+    private AlertDialog activeReceiptTransactionDialog;
+    @Nullable
+    private View.OnClickListener receiptDialogSaveListener;
+    private boolean receiptImportInProgress;
+    private ActivityResultLauncher<Intent> receiptCaptureLauncher;
+    private ActivityResultLauncher<String> galleryPickLauncher;
+    private ActivityResultLauncher<String> receiptReadPermissionLauncher;
+    private ActivityResultLauncher<Intent> receiptPreviewLauncher;
+    private final java.util.concurrent.ExecutorService receiptRecoveryExecutor = Executors.newSingleThreadExecutor();
+    private final java.util.concurrent.ExecutorService receiptThumbExecutor = Executors.newFixedThreadPool(2);
+    private final android.util.LruCache<String, Bitmap> receiptChooserThumbCache =
+            new android.util.LruCache<>(24);
+    private static final int RECEIPT_CHOOSER_THUMB_MAX_DIM = 128;
+    private static final int RECEIPT_CHOOSER_OCR_MAX_DIM = 1280;
+    private static final Object RECEIPT_CHOOSER_SEE_ALL_TAG = "receipt-chooser-see-all";
+    private boolean receiptRepairInProgress;
+    private boolean receiptRepairRequestedAgain;
+    private String pendingReceiptReference;
+    private boolean receiptLibraryAccessMissing;
+    private boolean receiptPhotoAccessPromptPending;
+    /** Receipt files picked in this session stay out of later choosers so two rows cannot take one picture. */
+    private final Set<String> receiptChosenReferences = new HashSet<>();
+    /** Tapped reference awaiting a fullscreen candidate pick; null means no check is open. */
+    private String pendingCandidateReference;
+    /** Verified candidates by reference for the open check, so a pick needs no extra lookups. */
+    private final Map<String, ReceiptReferenceResolver.Result> pendingCandidateResults = new HashMap<>();
+    /** Open picker dialog, dismissed once a fullscreen pick is applied. */
+    private AlertDialog receiptChooserDialog;
+    /** Bumped whenever a chooser closes or is replaced; late OCR results check it before reordering. */
+    private int receiptChooserGeneration;
+    /** Badge text per candidate reference for the open chooser (OCR results fill this in). */
+    private final Map<String, String> receiptChooserBadges = new HashMap<>();
+    /** OCR content score per candidate reference; absent entries keep their capture-rank position. */
+    private final Map<String, Integer> receiptChooserScores = new HashMap<>();
+    /** OCR drafts keyed by candidate reference so Use this picture can nudge learned weights. */
+    private final Map<String, ReceiptDraft> receiptChooserDrafts = new HashMap<>();
+    /** Unused pictures not on the ±1 shortlist; See all unused pictures appends these. */
+    private final List<ReceiptReferenceResolver.Result> receiptChooserLeftovers = new ArrayList<>();
+    /** True once the chooser is listing every leftover unused picture. */
+    private boolean receiptChooserShowingAllUnused;
+    /** Gallery sources the user declined to delete; each photo is asked at most once per session. */
+    private final Set<String> receiptDeclinedDeleteSources = new HashSet<>();
+    private ActivityResultLauncher<androidx.activity.result.IntentSenderRequest> receiptDeleteRequestLauncher;
+    private Uri pendingDeleteSourceUri;
+    /**
+     * Last resolveAll status by fragment-stripped URI. In-memory only — not Gson.
+     * Missing keys mean repair has not finished for that pointer (list icon stays normal).
+     */
+    private final Map<String, ReceiptReferenceResolver.Status> receiptAttentionByReference =
+            new HashMap<>();
+    private LearningDb learningDb;
+    @Nullable
+    private List<String> lastOcrLines;
+    @Nullable
+    private Double lastOcrAmount;
+    private ReceiptCaptureMode lastOcrMode = ReceiptCaptureMode.AUTO;
 
     private static class TransferTotalsOption {
         final String optionKey;
@@ -78,11 +241,642 @@ public class MainActivity extends AppCompatActivity {
             this.total = total;
         }
     }
+
+    private static final class TransferDialogViews {
+        final View section;
+        final BoundedNestedScrollView scrollView;
+        final MaterialAutoCompleteTextView sourceDropdown;
+        final TextView allocatedSummary;
+        final TextView spentHereSummary;
+        final TextView remainingSummary;
+        final TextView validationMessage;
+        final LinearLayout bucketsContainer;
+        final View addBucketButton;
+        final List<TransferBucketRowController> bucketControllers = new ArrayList<>();
+        boolean hasMeaningfulInteraction = false;
+        boolean saveAttempted = false;
+        boolean skipDefaultAllocations = false;
+        @Nullable Button positiveButton;
+
+        TransferDialogViews(View section,
+                            BoundedNestedScrollView scrollView,
+                            MaterialAutoCompleteTextView sourceDropdown,
+                            TextView allocatedSummary,
+                            TextView spentHereSummary,
+                            TextView remainingSummary,
+                            TextView validationMessage,
+                            LinearLayout bucketsContainer,
+                            View addBucketButton) {
+            this.section = section;
+            this.scrollView = scrollView;
+            this.sourceDropdown = sourceDropdown;
+            this.allocatedSummary = allocatedSummary;
+            this.spentHereSummary = spentHereSummary;
+            this.remainingSummary = remainingSummary;
+            this.validationMessage = validationMessage;
+            this.bucketsContainer = bucketsContainer;
+            this.addBucketButton = addBucketButton;
+        }
+    }
+
+    private final class TransferBucketRowController {
+        private final View rootView;
+        private final TextView titleView;
+        private final MaterialAutoCompleteTextView destinationDropdown;
+        private final View removeButton;
+        private final View decreaseButton;
+        private final View increaseButton;
+        private final TextView amountView;
+        private final Slider amountSlider;
+        private final EditText manualAmountView;
+        private final List<TextView> scaleLabelViews = new ArrayList<>();
+        private final TransferBucketAllocation allocation;
+        private boolean suppressCallbacks = false;
+        private List<String> availableDestinations = new ArrayList<>();
+
+        TransferBucketRowController(View rootView, TransferBucketAllocation allocation) {
+            this.rootView = rootView;
+            this.allocation = allocation;
+            this.titleView = rootView.findViewById(R.id.tvTransferBucketTitle);
+            this.destinationDropdown = rootView.findViewById(R.id.spinnerTransferBucketDestination);
+            this.removeButton = rootView.findViewById(R.id.btnRemoveTransferBucket);
+            this.decreaseButton = rootView.findViewById(R.id.btnTransferBucketDecrease);
+            this.increaseButton = rootView.findViewById(R.id.btnTransferBucketIncrease);
+            this.amountView = rootView.findViewById(R.id.tvTransferBucketAmount);
+            this.amountSlider = rootView.findViewById(R.id.sliderTransferBucketAmount);
+            this.manualAmountView = rootView.findViewById(R.id.etTransferBucketManualAmount);
+            scaleLabelViews.add(rootView.findViewById(R.id.tvTransferScaleLabelStart));
+            scaleLabelViews.add(rootView.findViewById(R.id.tvTransferScaleLabelQuarter));
+            scaleLabelViews.add(rootView.findViewById(R.id.tvTransferScaleLabelHalf));
+            scaleLabelViews.add(rootView.findViewById(R.id.tvTransferScaleLabelThreeQuarter));
+            scaleLabelViews.add(rootView.findViewById(R.id.tvTransferScaleLabelEnd));
+            configureDialogDropdown(destinationDropdown, () -> {
+                if (activeTransferDialogViews != null) {
+                    prepareDialogDropdownForOpen(activeTransferDialogViews, destinationDropdown, rootView);
+                }
+            });
+            manualAmountView.setOnFocusChangeListener((view, hasFocus) -> {
+                if (hasFocus && activeTransferDialogViews != null) {
+                    scrollTransferDialogToView(activeTransferDialogViews, rootView, false);
+                }
+            });
+            bindCallbacks();
+            setAmountInternal(allocation.getAmount(), false);
+        }
+
+        TransferBucketAllocation getAllocation() {
+            return allocation;
+        }
+
+        View getRootView() {
+            return rootView;
+        }
+
+        void dismissDropdown() {
+            destinationDropdown.dismissDropDown();
+        }
+
+        void setIndex(int index, boolean canRemove) {
+            titleView.setText(String.format(Locale.getDefault(), "Bucket %d", index + 1));
+            removeButton.setVisibility(canRemove ? View.VISIBLE : View.GONE);
+        }
+
+        void bindDestinations(String sourceEnvelopeName, @Nullable String selectedDestination) {
+            availableDestinations = TransferDestinationList.excludingSource(envelopes, sourceEnvelopeName);
+            ArrayAdapter<String> adapter = new ArrayAdapter<>(MainActivity.this,
+                    android.R.layout.simple_list_item_1, availableDestinations);
+            destinationDropdown.setAdapter(adapter);
+            destinationDropdown.setEnabled(!availableDestinations.isEmpty());
+
+            String targetDestination = selectedDestination;
+            if (targetDestination == null || !availableDestinations.contains(targetDestination)) {
+                targetDestination = availableDestinations.isEmpty() ? null : availableDestinations.get(0);
+            }
+            suppressCallbacks = true;
+            if (targetDestination != null) {
+                destinationDropdown.setText(targetDestination, false);
+                allocation.setToEnvelope(targetDestination);
+            } else {
+                destinationDropdown.setText("", false);
+                allocation.setToEnvelope(null);
+            }
+            suppressCallbacks = false;
+        }
+
+        void refreshSliderBounds(double totalAmount) {
+            double maxAmountForBucket = Math.max(0d, totalAmount - allocatedExcluding(this));
+            double sliderMaximum = Math.floor((maxAmountForBucket + 0.0001d) / TRANSFER_STEP_AMOUNT) * TRANSFER_STEP_AMOUNT;
+            boolean sliderEnabled = sliderMaximum >= TRANSFER_STEP_AMOUNT;
+            suppressCallbacks = true;
+            amountSlider.setValueFrom(0f);
+            amountSlider.setStepSize((float) TRANSFER_STEP_AMOUNT);
+            amountSlider.setEnabled(sliderEnabled);
+            amountSlider.setValueTo((float) Math.max(TRANSFER_STEP_AMOUNT, sliderMaximum));
+            amountSlider.setValue(sliderEnabled
+                    ? (float) TransferBucketUiHelper.snapToStep(allocation.getAmount(), TRANSFER_STEP_AMOUNT, sliderMaximum)
+                    : 0f);
+            suppressCallbacks = false;
+            updateScaleLabels(maxAmountForBucket);
+        }
+
+        private void updateScaleLabels(double maxAmountForBucket) {
+            int labelCount = TransferBucketUiHelper.recommendedScaleLabelCount(
+                    rootView.getWidth(),
+                    rootView.getResources().getDisplayMetrics().density);
+            if (labelCount <= 3) {
+                List<String> compactLabels = TransferBucketUiHelper.buildScaleLabels(maxAmountForBucket, 3);
+                scaleLabelViews.get(0).setVisibility(View.VISIBLE);
+                scaleLabelViews.get(0).setText(compactLabels.get(0));
+                scaleLabelViews.get(1).setVisibility(View.GONE);
+                scaleLabelViews.get(2).setVisibility(View.VISIBLE);
+                scaleLabelViews.get(2).setText(compactLabels.get(1));
+                scaleLabelViews.get(3).setVisibility(View.GONE);
+                scaleLabelViews.get(4).setVisibility(View.VISIBLE);
+                scaleLabelViews.get(4).setText(compactLabels.get(2));
+                return;
+            }
+
+            List<String> labels = TransferBucketUiHelper.buildScaleLabels(maxAmountForBucket, scaleLabelViews.size());
+            for (int i = 0; i < scaleLabelViews.size() && i < labels.size(); i++) {
+                scaleLabelViews.get(i).setVisibility(View.VISIBLE);
+                scaleLabelViews.get(i).setText(labels.get(i));
+            }
+        }
+
+        private void bindCallbacks() {
+            destinationDropdown.setOnItemClickListener((parent, view, position, id) -> {
+                if (suppressCallbacks) {
+                    return;
+                }
+                markTransferInteraction(activeTransferDialogViews);
+                allocation.setToEnvelope(availableDestinations.get(position));
+                updateTransferSectionSummary(activeTransferDialogViews);
+            });
+            removeButton.setOnClickListener(v -> {
+                if (activeTransferDialogViews == null) {
+                    return;
+                }
+                markTransferInteraction(activeTransferDialogViews);
+                activeTransferDialogViews.bucketControllers.remove(this);
+                activeTransferDialogViews.bucketsContainer.removeView(rootView);
+                refreshTransferBucketLabels(activeTransferDialogViews);
+                updateTransferSectionSummary(activeTransferDialogViews);
+            });
+            decreaseButton.setOnClickListener(v -> {
+                markTransferInteraction(activeTransferDialogViews);
+                double maxAllowed = Math.max(0d, parseAmountOrZero(activeTransferAmountInput) - allocatedExcluding(this));
+                double next = TransferBucketUiHelper.snapToStep(
+                        allocation.getAmount() - TRANSFER_STEP_AMOUNT,
+                        TRANSFER_STEP_AMOUNT,
+                        maxAllowed);
+                setAmountInternal(next, true);
+                updateTransferSectionSummary(activeTransferDialogViews);
+            });
+            increaseButton.setOnClickListener(v -> {
+                markTransferInteraction(activeTransferDialogViews);
+                double maxAllowed = Math.max(0d, parseAmountOrZero(activeTransferAmountInput) - allocatedExcluding(this));
+                double next = TransferBucketUiHelper.snapToStep(
+                        allocation.getAmount() + TRANSFER_STEP_AMOUNT,
+                        TRANSFER_STEP_AMOUNT,
+                        maxAllowed);
+                setAmountInternal(next, true);
+                updateTransferSectionSummary(activeTransferDialogViews);
+            });
+            amountSlider.addOnSliderTouchListener(new Slider.OnSliderTouchListener() {
+                @Override
+                public void onStartTrackingTouch(Slider slider) {
+                    markTransferInteraction(activeTransferDialogViews);
+                    if (activeTransferDialogViews != null) {
+                        scrollTransferDialogToView(activeTransferDialogViews, rootView, false);
+                    }
+                }
+
+                @Override
+                public void onStopTrackingTouch(Slider slider) {
+                }
+            });
+            amountSlider.addOnChangeListener((slider, value, fromUser) -> {
+                if (suppressCallbacks || !fromUser) {
+                    return;
+                }
+                markTransferInteraction(activeTransferDialogViews);
+                setAmountInternal(value, true);
+                updateTransferSectionSummary(activeTransferDialogViews);
+            });
+            manualAmountView.addTextChangedListener(new TextWatcher() {
+                @Override
+                public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+                }
+
+                @Override
+                public void onTextChanged(CharSequence s, int start, int before, int count) {
+                }
+
+                @Override
+                public void afterTextChanged(Editable s) {
+                    if (suppressCallbacks) {
+                        return;
+                    }
+                    markTransferInteraction(activeTransferDialogViews);
+                    allocation.setAmount(parseAmountOrZero(s == null ? null : s.toString()));
+                    amountView.setText(formatCurrency(allocation.getAmount()));
+                    updateTransferSectionSummary(activeTransferDialogViews);
+                }
+            });
+        }
+
+        private void setAmountInternal(double amount, boolean snapManualField) {
+            allocation.setAmount(Math.max(0d, amount));
+            amountView.setText(formatCurrency(allocation.getAmount()));
+            if (snapManualField) {
+                suppressCallbacks = true;
+                manualAmountView.setText(String.format(Locale.getDefault(), "%.2f", allocation.getAmount()));
+                manualAmountView.setSelection(manualAmountView.getText().length());
+                suppressCallbacks = false;
+            } else {
+                suppressCallbacks = true;
+                if (manualAmountView.getText().length() == 0 && allocation.getAmount() == 0d) {
+                    manualAmountView.setText("");
+                } else {
+                    manualAmountView.setText(String.format(Locale.getDefault(), "%.2f", allocation.getAmount()));
+                    manualAmountView.setSelection(manualAmountView.getText().length());
+                }
+                suppressCallbacks = false;
+            }
+        }
+
+        void applyDefaultAmount(double amount) {
+            setAmountInternal(amount, false);
+        }
+    }
+
+
+    private static final class SplitDialogViews {
+        final View section;
+        final BoundedNestedScrollView scrollView;
+        final TextView allocatedSummary;
+        final TextView validationMessage;
+        final LinearLayout bucketsContainer;
+        final View addBucketButton;
+        final List<SplitPurchaseBucketRowController> bucketControllers = new ArrayList<>();
+        boolean hasMeaningfulInteraction = false;
+        boolean saveAttempted = false;
+        boolean skipDefaultAllocations = false;
+        @Nullable Button positiveButton;
+
+        SplitDialogViews(View section,
+                         BoundedNestedScrollView scrollView,
+                         TextView allocatedSummary,
+                         TextView validationMessage,
+                         LinearLayout bucketsContainer,
+                         View addBucketButton) {
+            this.section = section;
+            this.scrollView = scrollView;
+            this.allocatedSummary = allocatedSummary;
+            this.validationMessage = validationMessage;
+            this.bucketsContainer = bucketsContainer;
+            this.addBucketButton = addBucketButton;
+        }
+    }
+
+    private final class SplitPurchaseBucketRowController {
+        private final View rootView;
+        private final TextView titleView;
+        private final MaterialAutoCompleteTextView pondDropdown;
+        private final View removeButton;
+        private final View decreaseButton;
+        private final View increaseButton;
+        private final TextView amountView;
+        private final Slider amountSlider;
+        private final EditText manualAmountView;
+        private final List<TextView> scaleLabelViews = new ArrayList<>();
+        private final SplitPurchaseSliceAllocation allocation;
+        private boolean suppressCallbacks = false;
+        private List<String> availablePonds = new ArrayList<>();
+
+        SplitPurchaseBucketRowController(View rootView, SplitPurchaseSliceAllocation allocation) {
+            this.rootView = rootView;
+            this.allocation = allocation;
+            this.titleView = rootView.findViewById(R.id.tvTransferBucketTitle);
+            this.pondDropdown = rootView.findViewById(R.id.spinnerTransferBucketDestination);
+            this.removeButton = rootView.findViewById(R.id.btnRemoveTransferBucket);
+            this.decreaseButton = rootView.findViewById(R.id.btnTransferBucketDecrease);
+            this.increaseButton = rootView.findViewById(R.id.btnTransferBucketIncrease);
+            this.amountView = rootView.findViewById(R.id.tvTransferBucketAmount);
+            this.amountSlider = rootView.findViewById(R.id.sliderTransferBucketAmount);
+            this.manualAmountView = rootView.findViewById(R.id.etTransferBucketManualAmount);
+            scaleLabelViews.add(rootView.findViewById(R.id.tvTransferScaleLabelStart));
+            scaleLabelViews.add(rootView.findViewById(R.id.tvTransferScaleLabelQuarter));
+            scaleLabelViews.add(rootView.findViewById(R.id.tvTransferScaleLabelHalf));
+            scaleLabelViews.add(rootView.findViewById(R.id.tvTransferScaleLabelThreeQuarter));
+            scaleLabelViews.add(rootView.findViewById(R.id.tvTransferScaleLabelEnd));
+            configureDialogDropdown(pondDropdown, () -> {
+                if (activeSplitDialogViews != null) {
+                    prepareSplitDialogDropdownForOpen(activeSplitDialogViews, pondDropdown, rootView);
+                }
+            });
+            manualAmountView.setOnFocusChangeListener((view, hasFocus) -> {
+                if (hasFocus && activeSplitDialogViews != null) {
+                    scrollSplitDialogToView(activeSplitDialogViews, rootView, false);
+                }
+            });
+            bindCallbacks();
+            setAmountInternal(allocation.getAmount(), false);
+        }
+
+        SplitPurchaseSliceAllocation getAllocation() {
+            return allocation;
+        }
+
+        View getRootView() {
+            return rootView;
+        }
+
+        MaterialAutoCompleteTextView getPondDropdown() {
+            return pondDropdown;
+        }
+
+        void dismissDropdown() {
+            pondDropdown.dismissDropDown();
+        }
+
+        void setIndex(int index, boolean canRemove) {
+            titleView.setText(String.format(Locale.getDefault(), "Slice %d", index + 1));
+            removeButton.setVisibility(canRemove ? View.VISIBLE : View.GONE);
+        }
+
+        void bindPonds(List<String> allPondNames, @Nullable String selectedPond) {
+            availablePonds = allPondNames == null ? new ArrayList<>() : new ArrayList<>(allPondNames);
+            ArrayAdapter<String> adapter = new ArrayAdapter<>(MainActivity.this,
+                    android.R.layout.simple_list_item_1, availablePonds);
+            pondDropdown.setAdapter(adapter);
+            pondDropdown.setEnabled(!availablePonds.isEmpty());
+
+            String target = selectedPond;
+            if (target == null || !availablePonds.contains(target)) {
+                target = availablePonds.isEmpty() ? null : availablePonds.get(0);
+            }
+            suppressCallbacks = true;
+            if (target != null) {
+                pondDropdown.setText(target, false);
+                allocation.setPondName(target);
+            } else {
+                pondDropdown.setText("", false);
+                allocation.setPondName(null);
+            }
+            suppressCallbacks = false;
+        }
+
+        void refreshSliderBounds(double totalAmount) {
+            double maxAmountForBucket = Math.max(0d, totalAmount - splitAllocatedExcluding(this));
+            double sliderMaximum = Math.floor((maxAmountForBucket + 0.0001d) / TRANSFER_STEP_AMOUNT) * TRANSFER_STEP_AMOUNT;
+            boolean sliderEnabled = sliderMaximum >= TRANSFER_STEP_AMOUNT;
+            suppressCallbacks = true;
+            amountSlider.setValueFrom(0f);
+            amountSlider.setStepSize((float) TRANSFER_STEP_AMOUNT);
+            amountSlider.setEnabled(sliderEnabled);
+            amountSlider.setValueTo((float) Math.max(TRANSFER_STEP_AMOUNT, sliderMaximum));
+            amountSlider.setValue(sliderEnabled
+                    ? (float) TransferBucketUiHelper.snapToStep(allocation.getAmount(), TRANSFER_STEP_AMOUNT, sliderMaximum)
+                    : 0f);
+            suppressCallbacks = false;
+            updateScaleLabels(maxAmountForBucket);
+        }
+
+        private void updateScaleLabels(double maxAmountForBucket) {
+            int labelCount = TransferBucketUiHelper.recommendedScaleLabelCount(
+                    rootView.getWidth(),
+                    rootView.getResources().getDisplayMetrics().density);
+            if (labelCount <= 3) {
+                List<String> compactLabels = TransferBucketUiHelper.buildScaleLabels(maxAmountForBucket, 3);
+                scaleLabelViews.get(0).setVisibility(View.VISIBLE);
+                scaleLabelViews.get(0).setText(compactLabels.get(0));
+                scaleLabelViews.get(1).setVisibility(View.GONE);
+                scaleLabelViews.get(2).setVisibility(View.VISIBLE);
+                scaleLabelViews.get(2).setText(compactLabels.get(1));
+                scaleLabelViews.get(3).setVisibility(View.GONE);
+                scaleLabelViews.get(4).setVisibility(View.VISIBLE);
+                scaleLabelViews.get(4).setText(compactLabels.get(2));
+                return;
+            }
+
+            List<String> labels = TransferBucketUiHelper.buildScaleLabels(maxAmountForBucket, scaleLabelViews.size());
+            for (int i = 0; i < scaleLabelViews.size() && i < labels.size(); i++) {
+                scaleLabelViews.get(i).setVisibility(View.VISIBLE);
+                scaleLabelViews.get(i).setText(labels.get(i));
+            }
+        }
+
+        private void bindCallbacks() {
+            pondDropdown.setOnItemClickListener((parent, view, position, id) -> {
+                if (suppressCallbacks) {
+                    return;
+                }
+                markSplitInteraction(activeSplitDialogViews);
+                allocation.setPondName(availablePonds.get(position));
+                updateSplitSectionSummary(activeSplitDialogViews);
+            });
+            removeButton.setOnClickListener(v -> {
+                if (activeSplitDialogViews == null) {
+                    return;
+                }
+                markSplitInteraction(activeSplitDialogViews);
+                activeSplitDialogViews.bucketControllers.remove(this);
+                activeSplitDialogViews.bucketsContainer.removeView(rootView);
+                refreshSplitBucketLabels(activeSplitDialogViews);
+                updateSplitSectionSummary(activeSplitDialogViews);
+            });
+            decreaseButton.setOnClickListener(v -> {
+                markSplitInteraction(activeSplitDialogViews);
+                double maxAllowed = Math.max(0d, parseAmountOrZero(activeSplitTotalInput) - splitAllocatedExcluding(this));
+                double next = TransferBucketUiHelper.snapToStep(
+                        allocation.getAmount() - TRANSFER_STEP_AMOUNT,
+                        TRANSFER_STEP_AMOUNT,
+                        maxAllowed);
+                setAmountInternal(next, true);
+                updateSplitSectionSummary(activeSplitDialogViews);
+            });
+            increaseButton.setOnClickListener(v -> {
+                markSplitInteraction(activeSplitDialogViews);
+                double maxAllowed = Math.max(0d, parseAmountOrZero(activeSplitTotalInput) - splitAllocatedExcluding(this));
+                double next = TransferBucketUiHelper.snapToStep(
+                        allocation.getAmount() + TRANSFER_STEP_AMOUNT,
+                        TRANSFER_STEP_AMOUNT,
+                        maxAllowed);
+                setAmountInternal(next, true);
+                updateSplitSectionSummary(activeSplitDialogViews);
+            });
+            amountSlider.addOnSliderTouchListener(new Slider.OnSliderTouchListener() {
+                @Override
+                public void onStartTrackingTouch(Slider slider) {
+                    markSplitInteraction(activeSplitDialogViews);
+                    if (activeSplitDialogViews != null) {
+                        scrollSplitDialogToView(activeSplitDialogViews, rootView, false);
+                    }
+                }
+
+                @Override
+                public void onStopTrackingTouch(Slider slider) {
+                    double trueMax = Math.max(0d, parseAmountOrZero(activeSplitTotalInput) - splitAllocatedExcluding(SplitPurchaseBucketRowController.this));
+                    double sliderMax = TransferBucketUiHelper.computeSliderMaximum(trueMax, TRANSFER_STEP_AMOUNT);
+                    double resolved = TransferBucketUiHelper.resolveAmountAtSliderMax(
+                            slider.getValue(), sliderMax, trueMax);
+                    if (Math.abs(resolved - allocation.getAmount()) > 0.0001d) {
+                        setAmountInternal(resolved, true);
+                        updateSplitSectionSummary(activeSplitDialogViews);
+                    }
+                }
+            });
+            amountSlider.addOnChangeListener((slider, value, fromUser) -> {
+                if (suppressCallbacks || !fromUser) {
+                    return;
+                }
+                markSplitInteraction(activeSplitDialogViews);
+                double trueMax = Math.max(0d, parseAmountOrZero(activeSplitTotalInput) - splitAllocatedExcluding(SplitPurchaseBucketRowController.this));
+                double sliderMax = TransferBucketUiHelper.computeSliderMaximum(trueMax, TRANSFER_STEP_AMOUNT);
+                double resolved = TransferBucketUiHelper.resolveAmountAtSliderMax(value, sliderMax, trueMax);
+                setAmountInternal(resolved, true);
+                updateSplitSectionSummary(activeSplitDialogViews);
+            });
+            manualAmountView.addTextChangedListener(new TextWatcher() {
+                @Override
+                public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+                }
+
+                @Override
+                public void onTextChanged(CharSequence s, int start, int before, int count) {
+                }
+
+                @Override
+                public void afterTextChanged(Editable s) {
+                    if (suppressCallbacks) {
+                        return;
+                    }
+                    markSplitInteraction(activeSplitDialogViews);
+                    allocation.setAmount(parseAmountOrZero(s == null ? null : s.toString()));
+                    amountView.setText(formatCurrency(allocation.getAmount()));
+                    updateSplitSectionSummary(activeSplitDialogViews);
+                }
+            });
+        }
+
+        private void setAmountInternal(double amount, boolean snapManualField) {
+            allocation.setAmount(Math.max(0d, amount));
+            amountView.setText(formatCurrency(allocation.getAmount()));
+            if (snapManualField) {
+                suppressCallbacks = true;
+                manualAmountView.setText(String.format(Locale.getDefault(), "%.2f", allocation.getAmount()));
+                manualAmountView.setSelection(manualAmountView.getText().length());
+                suppressCallbacks = false;
+            } else {
+                suppressCallbacks = true;
+                if (manualAmountView.getText().length() == 0 && allocation.getAmount() == 0d) {
+                    manualAmountView.setText("");
+                } else {
+                    manualAmountView.setText(String.format(Locale.getDefault(), "%.2f", allocation.getAmount()));
+                    manualAmountView.setSelection(manualAmountView.getText().length());
+                }
+                suppressCallbacks = false;
+            }
+        }
+
+        void applyDefaultAmount(double amount) {
+            setAmountInternal(amount, false);
+        }
+    }
+
+    @Nullable
+    private SplitDialogViews activeSplitDialogViews;
+    @Nullable
+    private EditText activeSplitTotalInput;
+    @Nullable
+    private TransferDialogViews activeTransferDialogViews;
+    @Nullable
+    private EditText activeTransferAmountInput;
     @RequiresApi(api = Build.VERSION_CODES.N)
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        if (savedInstanceState != null) pendingReceiptReference = savedInstanceState.getString("pendingReceiptReference");
+        receiptReadPermissionLauncher = registerForActivityResult(
+                new ActivityResultContracts.RequestPermission(), granted -> {
+                    // Android 14 "Select photos" grants partial access without granting the requested
+                    // permission; treat any usable access as a grant so recovery re-runs immediately.
+                    boolean usableAccess = granted
+                            || !new AndroidReceiptSource(this).needsReadPermission();
+                    if (usableAccess) startReceiptReferenceRepair();
+                    if (pendingReceiptReference != null) {
+                        String reference = pendingReceiptReference;
+                        pendingReceiptReference = null;
+                        if (usableAccess) openReceiptWithRecovery(reference, false);
+                        else showReceiptRecoveryFailure(reference, ReceiptReferenceResolver.Status.PERMISSION_REQUIRED);
+                    }
+                });
+        receiptPreviewLauncher = registerForActivityResult(
+                new ActivityResultContracts.StartActivityForResult(), result -> {
+                    Intent data = result.getData();
+                    if (result.getResultCode() == RESULT_OK && data != null) {
+                        handleReceiptCandidatePicked(
+                                data.getStringExtra(ReceiptPreviewActivity.EXTRA_PICKED_REFERENCE));
+                    } else if (data != null
+                            && data.getBooleanExtra(ReceiptPreviewActivity.EXTRA_REQUEST_SWAP, false)) {
+                        reopenReceiptChooserForSwap(
+                                data.getStringExtra(ReceiptPreviewActivity.EXTRA_SWAP_REFERENCE));
+                    }
+                });
+        receiptDeleteRequestLauncher = registerForActivityResult(
+                new ActivityResultContracts.StartIntentSenderForResult(), result -> {
+                    Uri source = pendingDeleteSourceUri;
+                    pendingDeleteSourceUri = null;
+                    if (source != null && result.getResultCode() != RESULT_OK) {
+                        // Ask once per photo: a declined delete keeps both copies quietly.
+                        receiptDeclinedDeleteSources.add(source.toString());
+                    }
+                });
+        receiptCaptureLauncher = registerForActivityResult(
+                new ActivityResultContracts.StartActivityForResult(),
+                result -> {
+                    if (result.getResultCode() != RESULT_OK || result.getData() == null) {
+                        return;
+                    }
+                    Intent data = result.getData();
+                    String uriStr = data.getStringExtra(ReceiptCaptureActivity.EXTRA_SAVED_IMAGE_URI);
+                    String modeName = data.getStringExtra(ReceiptCaptureActivity.EXTRA_CAPTURE_MODE);
+                    ReceiptCaptureMode mode = ReceiptCaptureMode.AUTO;
+                    if (modeName != null) {
+                        try {
+                            mode = ReceiptCaptureMode.valueOf(modeName);
+                        } catch (IllegalArgumentException ignored) {
+                        }
+                    }
+                    if (uriStr != null) {
+                        ensureReceiptTransactionDialogVisible();
+                        View host = resolveReceiptDialogHost();
+                        if (host != null) {
+                            startReceiptImportAndOcr(Uri.parse(uriStr), mode);
+                        }
+                    }
+                });
+        galleryPickLauncher = registerForActivityResult(
+                new ActivityResultContracts.GetContent(),
+                uri -> {
+                    awaitingGalleryPick = false;
+                    if (uri == null) {
+                        ensureReceiptTransactionDialogVisible();
+                        return;
+                    }
+                    View host = resolveReceiptDialogHost();
+                    if (host == null) {
+                        Toast.makeText(MainActivity.this, R.string.receipt_gallery_dialog_lost,
+                                Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                    receiptDialogHostView = host;
+                    ensureReceiptTransactionDialogVisible();
+                    startReceiptImportAndOcr(uri, ReceiptCaptureMode.AUTO);
+                });
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        learningDb = new LearningDb(this);
 
         // Initialize views
         ImageButton btnAddTransaction = findViewById(R.id.btnAddTransaction);
@@ -96,26 +890,53 @@ public class MainActivity extends AppCompatActivity {
             updateDisplay();
         });
 
+        ImageButton btnBillsPeriodFilter = findViewById(R.id.btnBillsPeriodFilter);
+        billsPeriodFilterActive = PrefManager.isBillsFilterActive(this);
+        btnBillsPeriodFilter.setOnClickListener(v -> toggleBillsPeriodFilter());
+        updateBillsPeriodFilterButton(btnBillsPeriodFilter);
+
+        ImageButton btnBillsDaysSetup = findViewById(R.id.btnBillsDaysSetup);
+        btnBillsDaysSetup.setOnClickListener(v -> showBillsPaydaysSettingsDialog());
+        expandTouchTarget(btnBillsDaysSetup, 8);
+
+        ImageButton btnAnalysis = findViewById(R.id.btnAnalysis);
+        btnAnalysis.setOnClickListener(v -> showAnalysisDialog());
+        expandTouchTarget(btnAnalysis, 8);
+
+        ImageButton btnRecalculateBalances = findViewById(R.id.btnRecalculateBalances);
+        btnRecalculateBalances.setOnClickListener(v -> showResetConfirmationDialog());
+        expandTouchTarget(btnRecalculateBalances, 8);
+
         ImageButton btnAddEnvelope = findViewById(R.id.btnAddEnvelope);
         btnAddEnvelope.setOnClickListener(v -> showEnvelopeDialog(null));
 
         btnToggleEnvelopes = findViewById(R.id.btnToggleEnvelopes);
-        listViewEnvelopes = findViewById(R.id.listViewEnvelopes);
+        recyclerViewEnvelopes = findViewById(R.id.recyclerViewEnvelopes);
+        tvPondSelectedCount = findViewById(R.id.tvPondSelectedCount);
+        btnPondSelectToggle = findViewById(R.id.btnPondSelectToggle);
+        btnPondReorder = findViewById(R.id.btnPondReorder);
         layoutEnvelopesSection = findViewById(R.id.layoutEnvelopesSection);
         envelopesCollapsed = PrefManager.isEnvelopesCollapsed(this);
         applyEnvelopesCollapsedState();
+        expandTouchTarget(btnToggleEnvelopes, 8);
+        expandTouchTarget(btnPondSelectToggle, 8);
+        expandTouchTarget(btnPondReorder, 8);
         btnToggleEnvelopes.setOnClickListener(v -> {
             envelopesCollapsed = !envelopesCollapsed;
             PrefManager.setEnvelopesCollapsed(MainActivity.this, envelopesCollapsed);
+            if (envelopesCollapsed && pondReorderMode) {
+                pondReorderMode = false;
+            }
             applyEnvelopesCollapsedState();
+            updatePondHeaderControls();
         });
+        btnPondSelectToggle.setOnClickListener(v -> toggleAllPondSelection());
+        btnPondReorder.setOnClickListener(v -> togglePondReorderMode());
         listViewTransactions = findViewById(R.id.listViewTransactions);
         layoutTransferTotals = findViewById(R.id.layoutTransferTotals);
         spinnerTransferTotals = findViewById(R.id.spinnerTransferTotals);
         tvTransferTotalsSummary = findViewById(R.id.tvTransferTotalsSummary);
-        // Hook up the Toolbar as your ActionBar
-        Toolbar toolbar = findViewById(R.id.toolbar);
-        setSupportActionBar(toolbar);
+        tvPondTotalsFooter = findViewById(R.id.tvPondTotalsFooter);
 
         // Load envelopes through the rollover repair path so startup only adopts sanitized state.
         envelopes = PrefManager.getEnvelopes(this);
@@ -137,18 +958,59 @@ public class MainActivity extends AppCompatActivity {
         if (launchState.requiresPersistence()) {
             PrefManager.saveEnvelopes(this, envelopes);
         }
+        applyPaydayReconciliationToAllEligibleEnvelopes();
+        if (isGlobalPaydayReconciliationEnabled()) {
+            PrefManager.saveEnvelopes(this, envelopes);
+        }
         setupMonthNavigation();
         setupDatePickers();
+        applyPersistedBillsFilterState();
+        updatePondTotalsFooter();
 
         // Initialize adapters
         transactionAdapter = new TransactionAdapter(this, allTransactions);
         listViewTransactions.setAdapter(transactionAdapter);
         envelopeAdapter = new EnvelopeAdapter(this, envelopes);
-        listViewEnvelopes.setAdapter(envelopeAdapter);
+        recyclerViewEnvelopes.setLayoutManager(new LinearLayoutManager(this));
+        recyclerViewEnvelopes.setAdapter(envelopeAdapter);
+        setupPondDragHelper();
+        updatePondHeaderControls();
 
 
 
         updateTransactionHistory();
+        updatePondTotalsFooter();
+        AndroidReceiptSource receiptSource = new AndroidReceiptSource(this);
+        receiptLibraryAccessMissing = receiptSource.needsReadPermission();
+        receiptPhotoAccessPromptPending = receiptSource.shouldRequestLibraryAccess(
+                !ReceiptReferenceRepair.snapshot(envelopes).isEmpty());
+        startReceiptReferenceRepair();
+    }
+
+    @Override protected void onSaveInstanceState(Bundle state) {
+        state.putString("pendingReceiptReference", pendingReceiptReference);
+        super.onSaveInstanceState(state);
+    }
+
+    @Override protected void onDestroy() {
+        receiptRecoveryExecutor.shutdownNow();
+        receiptThumbExecutor.shutdownNow();
+        super.onDestroy();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        promptReceiptPhotoAccessIfNeeded();
+        retryReceiptRepairAfterPhotoAccessGranted();
+        // Re-apply payday unlock math when returning (e.g. after a payday day passed in the background).
+        if (envelopes == null || envelopes.isEmpty()) {
+            return;
+        }
+        updateDisplay();
+        if (isGlobalPaydayReconciliationEnabled()) {
+            PrefManager.saveEnvelopes(this, envelopes);
+        }
     }
 
     private void applyEnvelopesCollapsedState() {
@@ -157,6 +1019,30 @@ public class MainActivity extends AppCompatActivity {
         }
         layoutEnvelopesSection.setVisibility(envelopesCollapsed ? View.GONE : View.VISIBLE);
         btnToggleEnvelopes.setImageResource(envelopesCollapsed ? android.R.drawable.arrow_down_float : android.R.drawable.arrow_up_float);
+    }
+
+    /**
+     * Expands the effective hit box without changing the visual icon size, which makes taps register
+     * reliably on smaller screens and when the user is pressing near the icon edge.
+     */
+    private void expandTouchTarget(View target, int extraPaddingDp) {
+        if (target == null) {
+            return;
+        }
+        View parent = (View) target.getParent();
+        if (parent == null) {
+            return;
+        }
+        final int extraPaddingPx = Math.round(extraPaddingDp * getResources().getDisplayMetrics().density);
+        parent.post(() -> {
+            Rect hitRect = new Rect();
+            target.getHitRect(hitRect);
+            hitRect.top -= extraPaddingPx;
+            hitRect.bottom += extraPaddingPx;
+            hitRect.left -= extraPaddingPx;
+            hitRect.right += extraPaddingPx;
+            parent.setTouchDelegate(new TouchDelegate(hitRect, target));
+        });
     }
     private void addData() {
         // Dummy transactions for "Emergency Fund"
@@ -314,7 +1200,9 @@ public class MainActivity extends AppCompatActivity {
             PrefManager.saveEnvelopes(this, envelopes);
             if (envelopeAdapter != null && transactionAdapter != null) {
                 envelopeAdapter = new EnvelopeAdapter(this, envelopes);
-                listViewEnvelopes.setAdapter(envelopeAdapter);
+                recyclerViewEnvelopes.setAdapter(envelopeAdapter);
+                setupPondDragHelper();
+                updatePondHeaderControls();
                 updateDisplay();
             }
         } catch (RuntimeException exception) {
@@ -328,6 +1216,7 @@ public class MainActivity extends AppCompatActivity {
         if (currentMonth == null || currentMonth.isEmpty()) {
             return;
         }
+        clearBillsPeriodFilterState();
         try {
             SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM", Locale.getDefault());
             Date date = sdf.parse(currentMonth);
@@ -356,6 +1245,7 @@ public class MainActivity extends AppCompatActivity {
         for (Envelope env : envelopes) {
             env.getMonthlyData(currentMonth);
         }
+        applyPaydayReconciliationToAllEligibleEnvelopes();
         updateDisplay();
     }
 
@@ -378,17 +1268,24 @@ public class MainActivity extends AppCompatActivity {
 
     @RequiresApi(api = Build.VERSION_CODES.N)
     private void showNewTransactionDialog() {
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(this);
         View dialogView = getLayoutInflater().inflate(R.layout.dialog_new_transaction, null);
+        receiptDialogHostView = dialogView;
+        clearOcrLearningSession();
 
-        Spinner spinnerEnvelope = dialogView.findViewById(R.id.spinnerEditEnvelope);
+        MaterialAutoCompleteTextView spinnerEnvelope = dialogView.findViewById(R.id.spinnerEditEnvelope);
         EditText etDate = dialogView.findViewById(R.id.etEditTransactionDate);
         EditText etAmount = dialogView.findViewById(R.id.etEditTransactionAmount);
+        EditText etSplitTotal = dialogView.findViewById(R.id.etSplitPurchaseTotal);
         EditText etComment = dialogView.findViewById(R.id.etEditTransactionComment);
-        CheckBox cbIsTransfer = dialogView.findViewById(R.id.cbIsTransfer);
-        TextView tvTransferToLabel = dialogView.findViewById(R.id.tvTransferToLabel);
-        Spinner spinnerTransferDestination = dialogView.findViewById(R.id.spinnerTransferDestination);
-        CheckBox cbIsRecurring = dialogView.findViewById(R.id.cbIsRecurring);
+        TransferDialogViews transferViews = createTransferDialogViews(dialogView);
+        SplitDialogViews splitViews = createSplitDialogViews(dialogView);
+        TabLayout tabTransactionType = dialogView.findViewById(R.id.tabTransactionType);
+        TabLayout tabTransactionTime = dialogView.findViewById(R.id.tabTransactionTime);
+        LinearLayout panelSpending = dialogView.findViewById(R.id.panelSpending);
+        LinearLayout panelTransfer = dialogView.findViewById(R.id.panelTransfer);
+        View panelSplit = dialogView.findViewById(R.id.panelSplitPurchase);
+        LinearLayout layoutRowPond = dialogView.findViewById(R.id.layoutRowPond);
         TextView tvRecurringFrequencyLabel = dialogView.findViewById(R.id.tvRecurringFrequencyLabel);
         LinearLayout layoutRecurringFrequencyOptions = dialogView.findViewById(R.id.layoutRecurringFrequencyOptions);
         TextView btnRecurringWeekly = dialogView.findViewById(R.id.btnRecurringWeekly);
@@ -404,17 +1301,20 @@ public class MainActivity extends AppCompatActivity {
         TextView btnRecurringDaySat = dialogView.findViewById(R.id.btnRecurringDaySat);
         TextView tvRecurringDaysValue = dialogView.findViewById(R.id.tvRecurringDaysValue);
 
-        ArrayAdapter<String> envelopeAdapter = new ArrayAdapter<>(this,
-                android.R.layout.simple_spinner_item, getEnvelopeNames());
-        envelopeAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        spinnerEnvelope.setAdapter(envelopeAdapter);
+        tabTransactionType.addTab(tabTransactionType.newTab().setText(R.string.tab_transaction_type_spending));
+        tabTransactionType.addTab(tabTransactionType.newTab().setText(R.string.tab_transaction_type_transfer));
+        tabTransactionType.addTab(tabTransactionType.newTab().setText(R.string.tab_transaction_type_split_purchase));
+        tabTransactionTime.addTab(tabTransactionTime.newTab().setText(R.string.tab_transaction_time_one_time));
+        tabTransactionTime.addTab(tabTransactionTime.newTab().setText(R.string.tab_transaction_time_recurring));
+
+        bindDialogDropdownOptions(spinnerEnvelope, getEnvelopeNames());
         String savedSourceEnvelope = PrefManager.getLastAddTransactionEnvelope(this);
         List<String> envelopeNames = getEnvelopeNames();
-        if (savedSourceEnvelope != null) {
-            int savedSourceIndex = envelopeNames.indexOf(savedSourceEnvelope);
-            if (savedSourceIndex >= 0) {
-                spinnerEnvelope.setSelection(savedSourceIndex);
-            }
+        Envelope savedSourcePond = PondLookup.findByName(envelopes, savedSourceEnvelope);
+        if (savedSourcePond != null) {
+            spinnerEnvelope.setText(savedSourcePond.getName(), false);
+        } else if (!envelopeNames.isEmpty()) {
+            spinnerEnvelope.setText(envelopeNames.get(0), false);
         }
 
         List<Integer> selectedRecurringDays = new ArrayList<>();
@@ -438,7 +1338,7 @@ public class MainActivity extends AppCompatActivity {
             applyRecurringFrequencyButtonSelection(btnRecurringWeekly, btnRecurringBiWeekly, btnRecurringMonthly, selectedRecurringFrequency[0]);
             applyRecurringWeekdayButtonSelection(recurringDayButtons, selectedRecurringDays);
             updateRecurringDaysSummaryView(tvRecurringDaysValue, selectedRecurringFrequency[0], selectedRecurringDays);
-            setRecurringControlsVisibility(cbIsRecurring.isChecked(),
+            setRecurringControlsVisibility(isTransactionDialogRecurringSelected(tabTransactionType, tabTransactionTime),
                     tvRecurringFrequencyLabel,
                     layoutRecurringFrequencyOptions,
                     tvRecurringDaysLabel,
@@ -452,7 +1352,7 @@ public class MainActivity extends AppCompatActivity {
             applyRecurringFrequencyButtonSelection(btnRecurringWeekly, btnRecurringBiWeekly, btnRecurringMonthly, selectedRecurringFrequency[0]);
             applyRecurringWeekdayButtonSelection(recurringDayButtons, selectedRecurringDays);
             updateRecurringDaysSummaryView(tvRecurringDaysValue, selectedRecurringFrequency[0], selectedRecurringDays);
-            setRecurringControlsVisibility(cbIsRecurring.isChecked(),
+            setRecurringControlsVisibility(isTransactionDialogRecurringSelected(tabTransactionType, tabTransactionTime),
                     tvRecurringFrequencyLabel,
                     layoutRecurringFrequencyOptions,
                     tvRecurringDaysLabel,
@@ -466,7 +1366,7 @@ public class MainActivity extends AppCompatActivity {
             applyRecurringFrequencyButtonSelection(btnRecurringWeekly, btnRecurringBiWeekly, btnRecurringMonthly, selectedRecurringFrequency[0]);
             applyRecurringWeekdayButtonSelection(recurringDayButtons, selectedRecurringDays);
             updateRecurringDaysSummaryView(tvRecurringDaysValue, selectedRecurringFrequency[0], selectedRecurringDays);
-            setRecurringControlsVisibility(cbIsRecurring.isChecked(),
+            setRecurringControlsVisibility(isTransactionDialogRecurringSelected(tabTransactionType, tabTransactionTime),
                     tvRecurringFrequencyLabel,
                     layoutRecurringFrequencyOptions,
                     tvRecurringDaysLabel,
@@ -486,21 +1386,6 @@ public class MainActivity extends AppCompatActivity {
             );
         });
 
-        cbIsRecurring.setOnCheckedChangeListener((buttonView, checked) ->
-                setRecurringControlsVisibility(checked,
-                        tvRecurringFrequencyLabel,
-                        layoutRecurringFrequencyOptions,
-                        tvRecurringDaysLabel,
-                        layoutRecurringWeekdayButtons,
-                        tvRecurringDaysValue,
-                        selectedRecurringFrequency[0]));
-        setRecurringControlsVisibility(false,
-                tvRecurringFrequencyLabel,
-                layoutRecurringFrequencyOptions,
-                tvRecurringDaysLabel,
-                layoutRecurringWeekdayButtons,
-                tvRecurringDaysValue,
-                selectedRecurringFrequency[0]);
         Calendar calendar = Calendar.getInstance();
         String today = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(calendar.getTime());
         etDate.setText(today);
@@ -518,43 +1403,198 @@ public class MainActivity extends AppCompatActivity {
             datePickerDialog.show();
         });
 
-        spinnerEnvelope.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+        String initialSource = getSelectedDropdownValue(spinnerEnvelope);
+        String savedDestination = PrefManager.getLastAddTransferDestination(this, initialSource);
+        initializeTransferDialogSection(transferViews, etAmount, spinnerEnvelope, savedDestination, null, false);
+        initializeSplitDialogSection(splitViews, etSplitTotal, null, false);
+        attachTransactionDialogScrollDismiss(transferViews, splitViews, dialogView);
+        wireCommentTypeahead(dialogView);
+
+        tabTransactionTime.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
             @Override
-            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                String source = parent.getItemAtPosition(position).toString();
-                String savedDestination = PrefManager.getLastAddTransferDestination(MainActivity.this, source);
-                populateTransferDestinationSpinner(spinnerTransferDestination, source, savedDestination);
+            public void onTabSelected(TabLayout.Tab tab) {
+                setRecurringControlsVisibility(isTransactionDialogRecurringSelected(tabTransactionType, tabTransactionTime),
+                        tvRecurringFrequencyLabel,
+                        layoutRecurringFrequencyOptions,
+                        tvRecurringDaysLabel,
+                        layoutRecurringWeekdayButtons,
+                        tvRecurringDaysValue,
+                        selectedRecurringFrequency[0]);
             }
 
             @Override
-            public void onNothingSelected(AdapterView<?> parent) {
+            public void onTabUnselected(TabLayout.Tab tab) {
+            }
+
+            @Override
+            public void onTabReselected(TabLayout.Tab tab) {
             }
         });
-        if (spinnerEnvelope.getSelectedItem() != null) {
-            String source = spinnerEnvelope.getSelectedItem().toString();
-            String savedDestination = PrefManager.getLastAddTransferDestination(this, source);
-            populateTransferDestinationSpinner(spinnerTransferDestination, source, savedDestination);
-        }
+        tabTransactionType.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
+            @Override
+            public void onTabSelected(TabLayout.Tab tab) {
+                applyTransactionDialogTypeState(tab.getPosition(),
+                        tabTransactionTime,
+                        panelSpending,
+                        panelTransfer,
+                        panelSplit,
+                        layoutRowPond,
+                        etAmount,
+                        etSplitTotal,
+                        tvRecurringFrequencyLabel,
+                        layoutRecurringFrequencyOptions,
+                        tvRecurringDaysLabel,
+                        layoutRecurringWeekdayButtons,
+                        tvRecurringDaysValue,
+                        selectedRecurringFrequency[0],
+                        transferViews,
+                        splitViews);
+            }
 
-        cbIsTransfer.setOnCheckedChangeListener((buttonView, isChecked) ->
-                setTransferControlsVisibility(isChecked, tvTransferToLabel, spinnerTransferDestination));
-        setTransferControlsVisibility(false, tvTransferToLabel, spinnerTransferDestination);
+            @Override
+            public void onTabUnselected(TabLayout.Tab tab) {
+            }
+
+            @Override
+            public void onTabReselected(TabLayout.Tab tab) {
+            }
+        });
+        Objects.requireNonNull(tabTransactionTime.getTabAt(TAB_TIME_ONE_TIME)).select();
+        Objects.requireNonNull(tabTransactionType.getTabAt(TAB_TYPE_SPENDING)).select();
+        setRecurringControlsVisibility(isTransactionDialogRecurringSelected(tabTransactionType, tabTransactionTime),
+                tvRecurringFrequencyLabel,
+                layoutRecurringFrequencyOptions,
+                tvRecurringDaysLabel,
+                layoutRecurringWeekdayButtons,
+                tvRecurringDaysValue,
+                selectedRecurringFrequency[0]);
+
+        wireReceiptRow(dialogView, null);
 
         builder.setView(dialogView)
                 .setTitle("New Transaction")
-                .setPositiveButton("Save", null)
-                .setNegativeButton("Cancel", null);
+                .setPositiveButton(android.R.string.ok, null)
+                .setNegativeButton(android.R.string.cancel, null);
 
         AlertDialog dialog = builder.create();
-        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+        activeReceiptTransactionDialog = dialog;
+        dialog.setOnDismissListener(d -> {
+            if (awaitingGalleryPick) {
+                return;
+            }
+            if (activeReceiptTransactionDialog == dialog) {
+                activeReceiptTransactionDialog = null;
+            }
+            if (receiptDialogHostView == dialogView) {
+                receiptDialogHostView = null;
+            }
+            receiptImportHostView = null;
+            receiptDialogSaveButton = null;
+            receiptDialogSaveListener = null;
+            receiptImportInProgress = false;
+            if (activeTransferDialogViews == transferViews) {
+                activeTransferDialogViews = null;
+                activeTransferAmountInput = null;
+            }
+            if (activeSplitDialogViews == splitViews) {
+                activeSplitDialogViews = null;
+                activeSplitTotalInput = null;
+            }
+            clearOcrLearningSession();
+        });
+        dialog.setOnShowListener(ignored -> {
+            applyIconMaterialDialogActions(dialog);
+            configureTransactionDialogWindow(dialog);
+            Button positive = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+            receiptDialogSaveButton = positive;
+            transferViews.positiveButton = positive;
+            splitViews.positiveButton = positive;
+            updateTransferSectionSummary(transferViews);
+            updateSplitSectionSummary(splitViews);
+            receiptDialogSaveListener = v -> {
             try {
-                String envelopeName = spinnerEnvelope.getSelectedItem().toString();
-                double amount = Double.parseDouble(etAmount.getText().toString());
+                if (receiptImportInProgress) {
+                    Toast.makeText(MainActivity.this, R.string.receipt_import_in_progress,
+                            Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                int typeTab = tabTransactionType.getSelectedTabPosition();
                 String comment = etComment.getText().toString();
                 String date = etDate.getText().toString();
+                View receiptHost = receiptDialogHostView != null ? receiptDialogHostView : dialogView;
+                Object uriTag = receiptHost.getTag(R.id.tag_receipt_image_uri);
+                String receiptUri = uriTag instanceof String ? (String) uriTag : null;
+
+                if (typeTab == TAB_TYPE_SPLIT) {
+                    double total = parseAmountOrZero(etSplitTotal);
+                    List<SplitPurchaseSliceAllocation> slices = snapshotSplitAllocations(splitViews);
+                    TransferGroupValidationResult validation = SplitPurchaseGroupDraft.validate(total, slices);
+                    if (!validation.isValid()) {
+                        splitViews.saveAttempted = true;
+                        updateSplitSectionSummary(splitViews);
+                        return;
+                    }
+                    Set<String> months = SplitPurchaseSyncHelper.applyGroup(
+                            envelopes, null, date, comment, receiptUri, slices, currentMonth);
+                    for (String m : months) {
+                        synchronizeAllEnvelopesForMonth(m);
+                    }
+                    PrefManager.saveEnvelopes(MainActivity.this, envelopes);
+                    persistLearningOnSave(comment, total);
+                    ensureDateFilterIncludes(date);
+                    updateDisplay();
+                    dialog.dismiss();
+                    return;
+                }
+
+                if (typeTab == TAB_TYPE_TRANSFER) {
+                    Envelope env = requireSelectedPond(spinnerEnvelope);
+                    if (env == null) {
+                        return;
+                    }
+                    String envelopeName = env.getName();
+                    double amount = Double.parseDouble(etAmount.getText().toString());
+                    Transaction newTransaction = new Transaction(envelopeName, amount, date, comment);
+                    if (receiptUri != null && !receiptUri.isEmpty()) {
+                        newTransaction.setReceiptImageUri(receiptUri);
+                    }
+                    List<TransferBucketAllocation> allocations = snapshotTransferAllocations(transferViews);
+                    TransferGroupValidationResult validation = TransferGroupDraft.validate(amount, envelopeName, allocations);
+                    if (!validation.isValid()) {
+                        transferViews.saveAttempted = true;
+                        updateTransferSectionSummary(transferViews);
+                        return;
+                    }
+                    PrefManager.setLastAddTransactionEnvelope(MainActivity.this, envelopeName);
+                    PrefManager.setLastAddTransferDestination(MainActivity.this, envelopeName, allocations.get(0).getToEnvelope());
+                    env.addTransaction(newTransaction, currentMonth);
+                    TransferSyncHelper.applyTransferGroup(envelopes, newTransaction, envelopeName, allocations);
+                    synchronizeAllEnvelopesForMonth(resolveTransactionMonth(newTransaction));
+                    PrefManager.saveEnvelopes(MainActivity.this, envelopes);
+                    persistLearningOnSave(comment, amount);
+                    ensureDateFilterIncludes(date);
+                    updateDisplay();
+                    dialog.dismiss();
+                    return;
+                }
+
+                Envelope env = requireSelectedPond(spinnerEnvelope);
+                if (env == null) {
+                    return;
+                }
+                String envelopeName = env.getName();
+                String amountText = etAmount.getText().toString().trim();
+                if (amountText.isEmpty()) {
+                    showError("Enter an amount or wait for receipt scan");
+                    return;
+                }
+                double amount = Double.parseDouble(amountText);
 
                 Transaction newTransaction = new Transaction(envelopeName, amount, date, comment);
-                if (cbIsRecurring.isChecked()) {
+                if (receiptUri != null && !receiptUri.isEmpty()) {
+                    newTransaction.setReceiptImageUri(receiptUri);
+                }
+                if (isTransactionDialogRecurringSelected(tabTransactionType, tabTransactionTime)) {
                     if (selectedRecurringDays.isEmpty()) {
                         showError("Recurring requires at least one selected day");
                         return;
@@ -566,42 +1606,1374 @@ public class MainActivity extends AppCompatActivity {
                     newTransaction.setRecurringTemplate(true);
                 }
 
-                Envelope env = findEnvelopeByName(envelopeName);
-                if (env == null) {
-                    showError("Envelope not found");
-                    return;
-                }
-
-                String destination = null;
-                if (cbIsTransfer.isChecked()) {
-                    if (spinnerTransferDestination.getSelectedItem() == null) {
-                        showError("Select where this transfer goes");
-                        return;
-                    }
-                    destination = spinnerTransferDestination.getSelectedItem().toString();
-                    if (destination.equals(envelopeName)) {
-                        showError("Transfer destination must be a different envelope");
-                        return;
-                    }
-                }
-
                 PrefManager.setLastAddTransactionEnvelope(MainActivity.this, envelopeName);
-                if (destination != null) {
-                    PrefManager.setLastAddTransferDestination(MainActivity.this, envelopeName, destination);
-                }
-
                 env.addTransaction(newTransaction, currentMonth);
-                if (destination != null) {
-                    upsertTransferForTransaction(newTransaction, envelopeName, destination, Math.abs(amount));
-                }
+                synchronizeAllEnvelopesForMonth(resolveTransactionMonth(newTransaction));
                 PrefManager.saveEnvelopes(MainActivity.this, envelopes);
+                persistLearningOnSave(comment, amount);
+                ensureDateFilterIncludes(date);
                 updateDisplay();
                 dialog.dismiss();
             } catch (NumberFormatException e) {
                 showError("Invalid amount entered!");
             }
-        }));
+        };
+            bindReceiptTransactionDialogSave(dialog);
+        });
         dialog.show();
+    }
+
+    private void bindReceiptTransactionDialogSave(AlertDialog dialog) {
+        if (dialog == null) {
+            return;
+        }
+        Button positive = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+        if (positive == null) {
+            return;
+        }
+        receiptDialogSaveButton = positive;
+        if (activeTransferDialogViews != null) {
+            activeTransferDialogViews.positiveButton = positive;
+        }
+        if (activeSplitDialogViews != null) {
+            activeSplitDialogViews.positiveButton = positive;
+        }
+        if (receiptDialogSaveListener != null) {
+            positive.setOnClickListener(receiptDialogSaveListener);
+        }
+    }
+
+    private void setReceiptDialogSaveEnabled(boolean enabled) {
+        if (receiptDialogSaveButton != null) {
+            receiptDialogSaveButton.setEnabled(enabled);
+        }
+    }
+
+    /**
+     * The transaction dialog is often dismissed while the gallery/camera activity is on screen.
+     * Re-show it so the user can confirm save after import/OCR.
+     */
+    private void ensureReceiptTransactionDialogVisible() {
+        AlertDialog dialog = activeReceiptTransactionDialog;
+        if (dialog == null || dialog.isShowing()) {
+            return;
+        }
+        dialog.show();
+        configureTransactionDialogWindow(dialog);
+        applyIconMaterialDialogActions(dialog);
+        bindReceiptTransactionDialogSave(dialog);
+    }
+
+    @Nullable
+    private View resolveReceiptDialogHost() {
+        if (receiptDialogHostView != null) {
+            return receiptDialogHostView;
+        }
+        return receiptImportHostView;
+    }
+
+    private byte[] readUriBytes(Uri uri) throws IOException {
+        try (InputStream in = ReceiptBitmapLoader.openInputStream(this, uri)) {
+            if (in == null) {
+                throw new IOException("openInputStream null");
+            }
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = in.read(buffer)) != -1) {
+                out.write(buffer, 0, read);
+            }
+            return out.toByteArray();
+        } catch (SecurityException e) {
+            throw new IOException("uri permission denied", e);
+        }
+    }
+
+    private void handleReceiptImportFailure(@Nullable View host, @Nullable TextView status, IOException e) {
+        Log.e("EnvelopeMoney", "receipt import picker uri", e);
+        receiptImportInProgress = false;
+        setReceiptDialogSaveEnabled(true);
+        if (host != null) {
+            host.setTag(R.id.tag_receipt_image_uri, null);
+            syncReceiptActionUi(host);
+        }
+        if (status != null) {
+            status.setVisibility(View.VISIBLE);
+            status.setText(R.string.receipt_ocr_failed);
+        }
+        Toast.makeText(this, R.string.receipt_ocr_failed, Toast.LENGTH_LONG).show();
+    }
+
+    /**
+     * Imports on a worker: reads picker bytes, copies into Pictures/Mountain Money, then OCR.
+     */
+    private void startReceiptImportAndOcr(Uri imageUri, ReceiptCaptureMode mode) {
+        View host = resolveReceiptDialogHost();
+        if (host == null || imageUri == null) {
+            return;
+        }
+        receiptDialogHostView = host;
+        ensureReceiptTransactionDialogVisible();
+        if (receiptImportInProgress) {
+            return;
+        }
+        final TextView status = host.findViewById(R.id.tvReceiptOcrStatus);
+        receiptImportInProgress = true;
+        setReceiptDialogSaveEnabled(false);
+        if (status != null) {
+            status.setVisibility(View.VISIBLE);
+            status.setText(R.string.receipt_ocr_reading);
+        }
+
+        if (ReceiptPickerUriNormalizer.isAppOwnedReceiptUri(this, imageUri)) {
+            host.setTag(R.id.tag_receipt_image_uri, imageUri.toString());
+            syncReceiptActionUi(host);
+            runReceiptOcrBackground(imageUri, mode, status);
+            return;
+        }
+
+        final Uri originalUri = imageUri;
+        Executors.newSingleThreadExecutor().execute(() -> {
+            try {
+                byte[] pickedBytes = readUriBytes(originalUri);
+                ReceiptPickerUriNormalizer.ImportResult result =
+                        ReceiptPickerUriNormalizer.normalizeImportFromBytes(
+                                MainActivity.this, pickedBytes, originalUri);
+                final byte[] bytesForOcr = pickedBytes;
+                runOnUiThread(() -> {
+                    View activeHost = receiptDialogHostView != null
+                            ? receiptDialogHostView
+                            : resolveReceiptDialogHost();
+                    if (activeHost == null) {
+                        receiptImportInProgress = false;
+                        setReceiptDialogSaveEnabled(true);
+                        return;
+                    }
+                    ensureReceiptTransactionDialogVisible();
+                    activeHost.setTag(R.id.tag_receipt_image_uri, result.uri.toString());
+                    syncReceiptActionUi(activeHost);
+                    if (result.deleteNeedsConsent) {
+                        // GetContent grants cannot delete silently; one system sheet finishes the move.
+                        offerGallerySourceDelete(originalUri);
+                    }
+                    if (ReceiptPickerUriNormalizer.isAppOwnedReceiptUri(MainActivity.this, result.uri)) {
+                        runReceiptOcrBackground(result.uri, mode, status);
+                    } else {
+                        runReceiptOcrBackgroundFromBytes(bytesForOcr, mode, status);
+                    }
+                });
+            } catch (IOException e) {
+                runOnUiThread(() -> handleReceiptImportFailure(
+                        receiptDialogHostView != null ? receiptDialogHostView : host,
+                        status,
+                        e));
+            }
+        });
+    }
+
+    private void runReceiptOcrBackground(Uri appOwnedUri, ReceiptCaptureMode mode, TextView status) {
+        Executors.newSingleThreadExecutor().execute(() -> {
+            Bitmap bmp;
+            try {
+                bmp = ReceiptExifBitmapLoader.decodeUpright(MainActivity.this, appOwnedUri);
+            } catch (java.io.IOException | SecurityException e) {
+                Log.e("EnvelopeMoney", "receipt decode", e);
+                bmp = null;
+            }
+            if (bmp == null) {
+                runOnUiThread(() -> {
+                    receiptImportInProgress = false;
+                    setReceiptDialogSaveEnabled(true);
+                    if (status != null) {
+                        status.setVisibility(View.VISIBLE);
+                        status.setText(R.string.receipt_ocr_failed);
+                    }
+                });
+                return;
+            }
+            final Bitmap bitmap = bmp;
+            ReceiptOcrPipeline pipeline = new ReceiptOcrPipeline(PaddleOcrAdapter.createDefaultEngine());
+            pipeline.runAsync(this, bitmap, mode, currentOcrWeights(), new ReceiptOcrPipeline.PipelineCallback() {
+                @Override
+                public void onResult(ReceiptDraft draft) {
+                    bitmap.recycle();
+                    runOnUiThread(() -> {
+                        receiptImportInProgress = false;
+                        setReceiptDialogSaveEnabled(true);
+                        applyReceiptDraft(draft, status, mode);
+                    });
+                }
+
+                @Override
+                public void onError(Throwable t) {
+                    bitmap.recycle();
+                    runOnUiThread(() -> {
+                        receiptImportInProgress = false;
+                        setReceiptDialogSaveEnabled(true);
+                        if (status != null) {
+                            status.setVisibility(View.VISIBLE);
+                            status.setText(R.string.receipt_ocr_failed);
+                        }
+                    });
+                }
+            });
+        });
+    }
+
+    private void runReceiptOcrBackgroundFromBytes(byte[] imageBytes, ReceiptCaptureMode mode, TextView status) {
+        Executors.newSingleThreadExecutor().execute(() -> {
+            Bitmap bmp;
+            try {
+                bmp = ReceiptExifBitmapLoader.decodeUprightFromBytes(imageBytes);
+            } catch (IOException e) {
+                Log.e("EnvelopeMoney", "receipt decode bytes", e);
+                bmp = null;
+            }
+            if (bmp == null) {
+                runOnUiThread(() -> {
+                    receiptImportInProgress = false;
+                    setReceiptDialogSaveEnabled(true);
+                    if (status != null) {
+                        status.setVisibility(View.VISIBLE);
+                        status.setText(R.string.receipt_ocr_failed);
+                    }
+                });
+                return;
+            }
+            final Bitmap bitmap = bmp;
+            ReceiptOcrPipeline pipeline = new ReceiptOcrPipeline(PaddleOcrAdapter.createDefaultEngine());
+            pipeline.runAsync(this, bitmap, mode, currentOcrWeights(), new ReceiptOcrPipeline.PipelineCallback() {
+                @Override
+                public void onResult(ReceiptDraft draft) {
+                    bitmap.recycle();
+                    runOnUiThread(() -> {
+                        receiptImportInProgress = false;
+                        setReceiptDialogSaveEnabled(true);
+                        applyReceiptDraft(draft, status, mode);
+                    });
+                }
+
+                @Override
+                public void onError(Throwable t) {
+                    bitmap.recycle();
+                    runOnUiThread(() -> {
+                        receiptImportInProgress = false;
+                        setReceiptDialogSaveEnabled(true);
+                        if (status != null) {
+                            status.setVisibility(View.VISIBLE);
+                            status.setText(R.string.receipt_ocr_failed);
+                        }
+                    });
+                }
+            });
+        });
+    }
+
+    private void applyReceiptDraft(ReceiptDraft draft, TextView status, ReceiptCaptureMode mode) {
+        if (receiptDialogHostView == null || draft == null) {
+            return;
+        }
+        lastOcrAmount = draft.totalAmount;
+        lastOcrLines = new ArrayList<>(draft.sourceLines);
+        lastOcrMode = mode != null ? mode : ReceiptCaptureMode.AUTO;
+        EditText etAmount = receiptDialogHostView.findViewById(R.id.etEditTransactionAmount);
+        EditText etSplitTotal = receiptDialogHostView.findViewById(R.id.etSplitPurchaseTotal);
+        EditText etComment = receiptDialogHostView.findViewById(R.id.etEditTransactionComment);
+        EditText etDate = receiptDialogHostView.findViewById(R.id.etEditTransactionDate);
+        if (draft.totalAmount != null) {
+            if (etSplitTotal != null && etSplitTotal.getVisibility() == View.VISIBLE) {
+                etSplitTotal.setText(String.format(Locale.getDefault(), "%.2f", draft.totalAmount));
+            } else if (etAmount != null) {
+                etAmount.setText(String.format(Locale.getDefault(), "%.2f", draft.totalAmount));
+            }
+        }
+        if (draft.merchantForComment != null && etComment != null
+                && etComment.getText().toString().trim().isEmpty()) {
+            etComment.setText(draft.merchantForComment);
+        }
+        if (draft.dateYyyyMmDd != null && etDate != null) {
+            etDate.setText(draft.dateYyyyMmDd);
+        }
+        if (status != null) {
+            TextView tvStartDate = findViewById(R.id.tvStartDate);
+            TextView tvEndDate = findViewById(R.id.tvEndDate);
+            String startText = tvStartDate != null ? tvStartDate.getText().toString() : null;
+            String endText = tvEndDate != null ? tvEndDate.getText().toString() : null;
+            boolean outsideFilter = ReceiptDateFilterHelper.isIsoDateOutsideFilterRange(
+                    draft.dateYyyyMmDd, startText, endText);
+            if (outsideFilter) {
+                status.setVisibility(View.VISIBLE);
+                status.setText(R.string.receipt_date_outside_filter);
+            } else if (draft.amountConfidence < 0.45f) {
+                status.setVisibility(View.VISIBLE);
+                status.setText("Check amount — low confidence");
+            } else {
+                status.setVisibility(View.GONE);
+            }
+        }
+        syncReceiptActionUi(receiptDialogHostView);
+    }
+
+    /** Widens Start/End so a newly saved transaction is visible in history. */
+    private void ensureDateFilterIncludes(@Nullable String isoDateYyyyMmDd) {
+        if (isoDateYyyyMmDd == null || isoDateYyyyMmDd.trim().isEmpty()) {
+            return;
+        }
+        TextView tvStart = findViewById(R.id.tvStartDate);
+        TextView tvEnd = findViewById(R.id.tvEndDate);
+        if (tvStart == null || tvEnd == null) {
+            return;
+        }
+        SimpleDateFormat iso = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault());
+        SimpleDateFormat display = new SimpleDateFormat("MMM d, yyyy", Locale.getDefault());
+        try {
+            Date tx = iso.parse(isoDateYyyyMmDd.trim());
+            if (tx == null) {
+                return;
+            }
+            Date start = display.parse(tvStart.getText().toString());
+            Date end = display.parse(tvEnd.getText().toString());
+            boolean changed = false;
+            if (start != null && tx.before(start)) {
+                tvStart.setText(display.format(tx));
+                changed = true;
+            }
+            if (end != null && tx.after(end)) {
+                tvEnd.setText(display.format(tx));
+                changed = true;
+            }
+            if (changed && billsPeriodFilterActive) {
+                billsPeriodFilterActive = false;
+                PrefManager.setBillsFilterActive(this, false);
+                ImageButton btn = findViewById(R.id.btnBillsPeriodFilter);
+                if (btn != null) {
+                    updateBillsPeriodFilterButton(btn);
+                }
+            }
+        } catch (ParseException ignored) {
+        }
+    }
+
+    private void syncReceiptActionUi(@Nullable View host) {
+        if (host == null) {
+            return;
+        }
+        Object tag = host.getTag(R.id.tag_receipt_image_uri);
+        boolean has = tag instanceof String && !((String) tag).isEmpty();
+        View preview = host.findViewById(R.id.btnReceiptPreview);
+        View remove = host.findViewById(R.id.btnReceiptRemove);
+        if (preview != null) {
+            preview.setEnabled(has);
+        }
+        if (remove != null) {
+            remove.setEnabled(has);
+        }
+    }
+
+    private void wireReceiptRow(View dialogView, @Nullable String initialUri) {
+        if (initialUri != null && !initialUri.isEmpty()) {
+            dialogView.setTag(R.id.tag_receipt_image_uri, initialUri);
+        } else {
+            dialogView.setTag(R.id.tag_receipt_image_uri, null);
+        }
+        View btnReceiptCamera = dialogView.findViewById(R.id.btnReceiptCamera);
+        View btnReceiptGallery = dialogView.findViewById(R.id.btnReceiptGallery);
+        if (btnReceiptCamera != null) {
+            btnReceiptCamera.setOnClickListener(v -> {
+                receiptImportHostView = dialogView;
+                Intent intent = new Intent(MainActivity.this, ReceiptCaptureActivity.class);
+                receiptCaptureLauncher.launch(intent);
+            });
+        }
+        if (btnReceiptGallery != null) {
+            btnReceiptGallery.setOnClickListener(v -> {
+                receiptImportHostView = dialogView;
+                awaitingGalleryPick = true;
+                galleryPickLauncher.launch("image/*");
+            });
+        }
+        View btnPreview = dialogView.findViewById(R.id.btnReceiptPreview);
+        if (btnPreview != null) {
+            btnPreview.setOnClickListener(v -> {
+                Object u = dialogView.getTag(R.id.tag_receipt_image_uri);
+                if (u instanceof String && !((String) u).isEmpty()) {
+                    showReceiptImagePreview(Uri.parse((String) u));
+                }
+            });
+        }
+        View btnRemove = dialogView.findViewById(R.id.btnReceiptRemove);
+        if (btnRemove != null) {
+            btnRemove.setOnClickListener(v -> {
+                dialogView.setTag(R.id.tag_receipt_image_uri, null);
+                syncReceiptActionUi(dialogView);
+                TextView st = dialogView.findViewById(R.id.tvReceiptOcrStatus);
+                if (st != null) {
+                    st.setVisibility(View.GONE);
+                }
+            });
+        }
+        syncReceiptActionUi(dialogView);
+    }
+
+    private void showReceiptImagePreview(Uri uri) {
+        if (uri == null) {
+            return;
+        }
+        final String reference = uri.toString();
+        // Read-only: do not re-import/move. That can delete the only album row.
+        receiptRecoveryExecutor.execute(() -> {
+            if (ReceiptBitmapLoader.isReadable(getApplicationContext(), uri)) {
+                runOnUiThread(() -> {
+                    if (isFinishing() || isDestroyed()) return;
+                    markReceiptResolved(reference);
+                    launchReceiptPreviewActivity(uri);
+                });
+                return;
+            }
+            List<ReceiptReferenceRepair.Entry> entries = receiptEntriesFor(reference);
+            Map<String, ReceiptReferenceResolver.Result> resolved = entries.isEmpty()
+                    ? Collections.emptyMap()
+                    : resolveReceiptEntries(entries);
+            ReceiptReferenceResolver.Result result = firstReceiptResult(entries, resolved);
+            List<ReceiptReferenceResolver.Result> nearby = nearbyChooserPool(reference, entries, result, false);
+            runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                recordReceiptAttention(entries, resolved, false);
+                presentUnresolvedReceipt(reference, entries, result, nearby, false);
+            });
+        });
+    }
+
+    /**
+     * Content URIs must be Intent data so read grants reach {@link ReceiptPreviewActivity}.
+     * Extras do not forward URI permissions. Never put {@code file://} on {@link Intent#setData}.
+     * Write grants are omitted: they throw if the caller only has read access.
+     */
+    private void launchReceiptPreviewActivity(Uri uri) {
+        if (uri == null) {
+            return;
+        }
+        Intent preview = new Intent(this, ReceiptPreviewActivity.class);
+        preview.putExtra(ReceiptPreviewActivity.EXTRA_IMAGE_URI, uri.toString());
+        Uri data = ReceiptPreviewActivity.intentDataUri(uri);
+        if (data != null) {
+            preview.setDataAndType(data, "image/*");
+            preview.setClipData(android.content.ClipData.newRawUri("receipt", data));
+            preview.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        }
+        try {
+            receiptPreviewLauncher.launch(preview);
+        } catch (RuntimeException e) {
+            Log.e("EnvelopeMoney", "receipt preview launch", e);
+            Toast.makeText(this, R.string.receipt_preview_load_failed, Toast.LENGTH_LONG).show();
+        }
+    }
+
+    /** Resolution is read-only; only verified associations are applied to unchanged live records. */
+    private void openReceiptWithRecovery(String reference, boolean requestPermission) {
+        List<ReceiptReferenceRepair.Entry> entries = receiptEntriesFor(reference);
+        receiptRecoveryExecutor.execute(() -> {
+            Map<String, ReceiptReferenceResolver.Result> resolved = entries.isEmpty()
+                    ? Collections.emptyMap()
+                    : resolveReceiptEntries(entries);
+            ReceiptReferenceResolver.Result result = firstReceiptResult(entries, resolved);
+            List<ReceiptReferenceResolver.Result> nearby = nearbyChooserPool(reference, entries, result, requestPermission);
+            runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                recordReceiptAttention(entries, resolved, false);
+                presentUnresolvedReceipt(reference, entries, result, nearby, requestPermission);
+            });
+        });
+    }
+
+    /** Ask once after resume so the system permission sheet is not launched from onCreate. */
+    private void promptReceiptPhotoAccessIfNeeded() {
+        if (!receiptPhotoAccessPromptPending || isFinishing() || isDestroyed()) return;
+        receiptPhotoAccessPromptPending = false;
+        AndroidReceiptSource receiptSource = new AndroidReceiptSource(this);
+        String permission = AndroidReceiptSource.readPermission();
+        if (permission == null || !receiptSource.needsReadPermission()) return;
+        receiptReadPermissionLauncher.launch(permission);
+    }
+
+    /** Settings grants do not go through the permission launcher; resume re-runs folder recovery. */
+    private void retryReceiptRepairAfterPhotoAccessGranted() {
+        AndroidReceiptSource receiptSource = new AndroidReceiptSource(this);
+        boolean missingAccess = receiptSource.needsReadPermission();
+        if (receiptLibraryAccessMissing && !missingAccess) startReceiptReferenceRepair();
+        receiptLibraryAccessMissing = missingAccess;
+    }
+
+    /** Runs once after load and again after a photo-access grant; never filters by receipt age. */
+    private void startReceiptReferenceRepair() {
+        if (envelopes == null || isDestroyed()) return;
+        if (receiptRepairInProgress) { receiptRepairRequestedAgain = true; return; }
+        List<ReceiptReferenceRepair.Entry> entries = ReceiptReferenceRepair.snapshot(envelopes);
+        if (entries.isEmpty()) return;
+        receiptRepairInProgress = true;
+        receiptRecoveryExecutor.execute(() -> {
+            if (Thread.currentThread().isInterrupted()) return;
+            Map<String, ReceiptReferenceResolver.Result> results = resolveReceiptEntries(entries);
+            runOnUiThread(() -> {
+                receiptRepairInProgress = false;
+                if (isFinishing() || isDestroyed()) return;
+                recordReceiptAttention(entries, results, true);
+                if (ReceiptReferenceRepair.apply(envelopes, entries, results) > 0) {
+                    PrefManager.saveEnvelopes(this, envelopes);
+                }
+                updateTransactionHistory();
+                if (receiptRepairRequestedAgain) {
+                    receiptRepairRequestedAgain = false;
+                    startReceiptReferenceRepair();
+                }
+            });
+        });
+    }
+
+    private List<ReceiptReferenceRepair.Entry> receiptEntriesFor(String reference) {
+        List<ReceiptReferenceRepair.Entry> matching = new ArrayList<>();
+        if (envelopes == null || reference == null) return matching;
+        String stripped = stripReceiptFragment(reference);
+        for (ReceiptReferenceRepair.Entry entry : ReceiptReferenceRepair.snapshot(envelopes)) {
+            if (reference.equals(entry.reference) || stripped.equals(stripReceiptFragment(entry.reference))) {
+                matching.add(entry);
+            }
+        }
+        return matching;
+    }
+
+    private static String stripReceiptFragment(String reference) {
+        if (reference == null) return "";
+        int hash = reference.indexOf('#');
+        return hash >= 0 ? reference.substring(0, hash) : reference;
+    }
+
+    private static ReceiptReferenceResolver.Result firstReceiptResult(
+            List<ReceiptReferenceRepair.Entry> matching,
+            Map<String, ReceiptReferenceResolver.Result> results) {
+        ReceiptReferenceResolver.Result fallback = null;
+        for (ReceiptReferenceRepair.Entry entry : matching) {
+            ReceiptReferenceResolver.Result result = results.get(entry.key());
+            if (result == null) continue;
+            if (result.status == ReceiptReferenceResolver.Status.RESOLVED) return result;
+            if (fallback == null) fallback = result;
+        }
+        return fallback;
+    }
+
+    /**
+     * Unique auto still first. When that fails, unused Mountain Money files from capture day
+     * ±1 open the existing chooser; close OCR totals from other unused files append; None of
+     * these lists every leftover unused picture.
+     */
+    private void presentUnresolvedReceipt(String reference, List<ReceiptReferenceRepair.Entry> entries,
+                                          ReceiptReferenceResolver.Result result,
+                                          List<ReceiptReferenceResolver.Result> nearby,
+                                          boolean requestPermission) {
+        if (result == null || result.status != ReceiptReferenceResolver.Status.RESOLVED) {
+            Log.d("EnvelopeMoney", "receipt chooser: status="
+                    + (result == null ? "null" : result.status)
+                    + ", alternatives=" + (result == null ? 0 : result.alternatives.size())
+                    + ", nearby=" + (nearby == null ? 0 : nearby.size()));
+        }
+        if (result != null && result.status == ReceiptReferenceResolver.Status.RESOLVED) {
+            applyReceiptResolution(reference, entries, result);
+            launchReceiptPreviewActivity(Uri.parse(namedReceiptReference(result)));
+            return;
+        }
+        if (requestPermission && new AndroidReceiptSource(this).needsReadPermission()
+                && result != null
+                && result.status == ReceiptReferenceResolver.Status.PERMISSION_REQUIRED) {
+            notifyReceiptAttentionChanged();
+            pendingReceiptReference = reference;
+            receiptReadPermissionLauncher.launch(AndroidReceiptSource.readPermission());
+            return;
+        }
+        if (nearby != null && !nearby.isEmpty()) {
+            notifyReceiptAttentionChanged();
+            showReceiptCandidateChooser(reference, nearby);
+            return;
+        }
+        notifyReceiptAttentionChanged();
+        showReceiptRecoveryFailure(reference, result != null
+                ? result.status
+                : ReceiptReferenceResolver.Status.MISSING);
+    }
+
+    /**
+     * Unused Pictures/Mountain Money files for the tap chooser: capture day ±1 first, otherwise
+     * every unused album file, minus other rows' URIs and this session's picks. Empty when unique
+     * already won, permission is still missing, or the album is truly empty. Close OCR leftovers
+     * are appended later; this pool is the main list only.
+     */
+    private List<ReceiptReferenceResolver.Result> nearbyChooserPool(String reference,
+            List<ReceiptReferenceRepair.Entry> entries, ReceiptReferenceResolver.Result result,
+            boolean requestPermission) {
+        if (result != null && result.status == ReceiptReferenceResolver.Status.RESOLVED) {
+            return Collections.emptyList();
+        }
+        if (requestPermission && new AndroidReceiptSource(this).needsReadPermission()
+                && result != null
+                && result.status == ReceiptReferenceResolver.Status.PERMISSION_REQUIRED) {
+            return Collections.emptyList();
+        }
+        Transaction tapped = entries == null || entries.isEmpty() ? null : entries.get(0).transaction;
+        String transactionDate = tapped != null ? tapped.getDate() : null;
+        Set<String> reserved = receiptChooserReserved(tapped);
+        List<ReceiptReferenceResolver.Result> nearby = ReceiptReferenceRepair.unusedNearby(
+                new AndroidReceiptSource(this), transactionDate, reserved, TimeZone.getDefault());
+        return unionNearbyWithAlternatives(nearby, result);
+    }
+
+    /** Other rows' URIs and this session's picks stay out of choosers. */
+    private Set<String> receiptChooserReserved(Transaction tapped) {
+        Set<String> reserved = new HashSet<>(receiptChosenReferences);
+        if (envelopes != null) {
+            for (ReceiptReferenceRepair.Entry entry : ReceiptReferenceRepair.snapshot(envelopes)) {
+                if (entry == null || entry.transaction == tapped) continue;
+                if (entry.reference != null && !entry.reference.isEmpty()) {
+                    reserved.add(stripReceiptFragment(entry.reference));
+                }
+            }
+        }
+        return reserved;
+    }
+
+    private static List<ReceiptReferenceResolver.Result> unionNearbyWithAlternatives(
+            List<ReceiptReferenceResolver.Result> nearby, ReceiptReferenceResolver.Result result) {
+        List<ReceiptReferenceResolver.Result> pool = nearby == null
+                ? new ArrayList<>() : new ArrayList<>(nearby);
+        Set<String> seen = new HashSet<>();
+        for (ReceiptReferenceResolver.Result picture : pool) {
+            if (picture != null && picture.reference != null) seen.add(picture.reference);
+        }
+        if (result != null) {
+            for (ReceiptReferenceResolver.Result alternative : result.alternatives) {
+                if (alternative == null || alternative.reference == null) continue;
+                if (seen.add(alternative.reference)) pool.add(alternative);
+            }
+        }
+        return pool;
+    }
+
+    private String namedReceiptReference(ReceiptReferenceResolver.Result result) {
+        return Uri.parse(result.reference).buildUpon().fragment(result.fileName).build().toString();
+    }
+
+    private void applyReceiptResolution(String reference, List<ReceiptReferenceRepair.Entry> entries,
+                                        ReceiptReferenceResolver.Result result) {
+        Map<String, ReceiptReferenceResolver.Result> results = new HashMap<>();
+        for (ReceiptReferenceRepair.Entry entry : entries) results.put(entry.key(), result);
+        if (ReceiptReferenceRepair.apply(envelopes, entries, results) > 0) {
+            PrefManager.saveEnvelopes(this, envelopes);
+        }
+        recordReceiptAttention(entries, results, false);
+        markReceiptResolved(reference);
+        if (result != null && result.reference != null) {
+            markReceiptResolved(result.reference);
+        }
+        updateTransactionHistory();
+        View host = resolveReceiptDialogHost();
+        if (host != null && reference.equals(host.getTag(R.id.tag_receipt_image_uri))) {
+            host.setTag(R.id.tag_receipt_image_uri, namedReceiptReference(result));
+            syncReceiptActionUi(host);
+        }
+    }
+
+    /**
+     * Records last repair status by fragment-stripped URI so the list photo icon can tint.
+     * Whole-app passes replace the map; tap-path passes merge.
+     */
+    private void recordReceiptAttention(List<ReceiptReferenceRepair.Entry> entries,
+                                        Map<String, ReceiptReferenceResolver.Result> results,
+                                        boolean replaceAll) {
+        if (replaceAll) {
+            receiptAttentionByReference.clear();
+        }
+        if (entries == null || results == null) {
+            return;
+        }
+        for (ReceiptReferenceRepair.Entry entry : entries) {
+            if (entry == null || entry.reference == null) {
+                continue;
+            }
+            ReceiptReferenceResolver.Result result = results.get(entry.key());
+            if (result == null) {
+                continue;
+            }
+            putReceiptAttention(entry.reference, result.status);
+            if (result.status == ReceiptReferenceResolver.Status.RESOLVED && result.reference != null) {
+                putReceiptAttention(result.reference, ReceiptReferenceResolver.Status.RESOLVED);
+            }
+        }
+    }
+
+    private void markReceiptResolved(String reference) {
+        String key = stripReceiptFragment(reference);
+        if (key.isEmpty()) {
+            return;
+        }
+        ReceiptReferenceResolver.Status previous = receiptAttentionByReference.put(
+                key, ReceiptReferenceResolver.Status.RESOLVED);
+        if (ReceiptRowUi.receiptNeedsAttention(previous)) {
+            notifyReceiptAttentionChanged();
+        }
+    }
+
+    private void putReceiptAttention(String reference, ReceiptReferenceResolver.Status status) {
+        String key = stripReceiptFragment(reference);
+        if (key.isEmpty() || status == null) {
+            return;
+        }
+        receiptAttentionByReference.put(key, status);
+    }
+
+    private void notifyReceiptAttentionChanged() {
+        if (transactionAdapter != null) {
+            transactionAdapter.notifyDataSetChanged();
+        }
+    }
+
+    /** Automatic folder discovery has already run. A retry can pick up new access or a restored file. */
+    private void showReceiptRecoveryFailure(String reference, ReceiptReferenceResolver.Status status) {
+        int message = R.string.receipt_recovery_missing;
+        if (status == ReceiptReferenceResolver.Status.PERMISSION_REQUIRED) message = R.string.receipt_recovery_permission;
+        else if (status == ReceiptReferenceResolver.Status.AMBIGUOUS) message = R.string.receipt_recovery_ambiguous;
+        else if (status == ReceiptReferenceResolver.Status.CORRUPT) message = R.string.receipt_recovery_corrupt;
+        new MaterialAlertDialogBuilder(this).setTitle(R.string.receipt_recovery_title).setMessage(message)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(R.string.receipt_recovery_retry,
+                        (dialog, which) -> openReceiptWithRecovery(reference, true)).show();
+    }
+
+    /** Resolves the given entries and logs the pass duration so a slow phase is visible in logcat. */
+    private Map<String, ReceiptReferenceResolver.Result> resolveReceiptEntries(
+            List<ReceiptReferenceRepair.Entry> entries) {
+        long startedAt = System.currentTimeMillis();
+        Map<String, ReceiptReferenceResolver.Result> resolved = ReceiptReferenceRepair.resolveAll(
+                new AndroidReceiptSource(this), entries, TimeZone.getDefault());
+        Log.d("EnvelopeMoney", "receipt repair: " + entries.size() + " entries in "
+                + (System.currentTimeMillis() - startedAt) + "ms");
+        return resolved;
+    }
+
+    /**
+     * AMBIGUOUS with known candidates becomes a picker. The main list is ±1 unused (or the
+     * empty-window fallback). Background OCR may append leftover unused pictures whose printed
+     * total is close. If leftover unused pictures exist, the drawer always opens so
+     * See all unused pictures is visible — even for a lone ±1 file. A lone survivor with
+     * no leftovers still opens the fullscreen check. Candidates that fail a fresh verification
+     * never reach the user; attach still happens only after Use this picture.
+     */
+    private void showReceiptCandidateChooser(String reference,
+                                             List<ReceiptReferenceResolver.Result> alternatives) {
+        receiptRecoveryExecutor.execute(() -> {
+            AndroidReceiptSource source = new AndroidReceiptSource(this);
+            List<ReceiptReferenceResolver.Result> readable = new ArrayList<>();
+            for (ReceiptReferenceResolver.Result candidate : alternatives) {
+                ReceiptReferenceResolver.Result verified = inspectChooserCandidate(source, candidate);
+                if (verified != null) readable.add(verified);
+            }
+            Transaction tapped = receiptTransactionFor(reference);
+            List<ReceiptReferenceResolver.Result> leftoverListed =
+                    ReceiptAlbumMatcher.unusedNotAlreadyListed(
+                            ReceiptReferenceRepair.unusedNotReserved(source, receiptChooserReserved(tapped)),
+                            readable);
+            runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                if (readable.isEmpty()) {
+                    showReceiptRecoveryFailure(reference, ReceiptReferenceResolver.Status.AMBIGUOUS);
+                } else if (readable.size() == 1 && leftoverListed.isEmpty()) {
+                    launchReceiptCandidateCheck(reference, readable, 0);
+                } else {
+                    final int generation = ++receiptChooserGeneration;
+                    receiptChooserBadges.clear();
+                    receiptChooserScores.clear();
+                    receiptChooserDrafts.clear();
+                    receiptChooserLeftovers.clear();
+                    receiptChooserLeftovers.addAll(leftoverListed);
+                    receiptChooserShowingAllUnused = false;
+                    final List<ReceiptReferenceResolver.Result> ranked = new ArrayList<>(readable);
+                    receiptChooserDialog = buildReceiptChooserDialog(reference, ranked);
+                    receiptChooserDialog.show();
+                    final List<ReceiptReferenceResolver.Result> leftoverSnapshot =
+                            new ArrayList<>(leftoverListed);
+                    receiptRecoveryExecutor.execute(() ->
+                            scoreReceiptCandidatesByOcr(reference, ranked, leftoverSnapshot, generation));
+                }
+            });
+        });
+    }
+
+    /** Header-decode a chooser row so file:// album paths survive; skip session picks. */
+    private ReceiptReferenceResolver.Result inspectChooserCandidate(
+            AndroidReceiptSource source, ReceiptReferenceResolver.Result candidate) {
+        if (source == null || candidate == null || candidate.reference == null) return null;
+        if (receiptChosenReferences.contains(candidate.reference)
+                || receiptChosenReferences.contains(stripReceiptFragment(candidate.reference))) {
+            return null;
+        }
+        ReceiptReferenceResolver.Result verified = source.inspect(candidate.reference);
+        if (verified == null || verified.status != ReceiptReferenceResolver.Status.RESOLVED) {
+            return null;
+        }
+        long capture = candidate.captureTimeMs > 0 ? candidate.captureTimeMs : verified.captureTimeMs;
+        String name = verified.fileName != null ? verified.fileName : candidate.fileName;
+        return ReceiptReferenceResolver.Result.resolved(verified.reference, name, capture);
+    }
+
+    /** Rows browse; the fullscreen check (launched per row) is the only place a pick happens. */
+    private AlertDialog buildReceiptChooserDialog(String reference,
+                                                  List<ReceiptReferenceResolver.Result> candidates) {
+        ViewGroup body = (ViewGroup) LayoutInflater.from(this).inflate(R.layout.dialog_receipt_chooser, null);
+        AlertDialog dialog = new MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.receipt_chooser_title)
+                .setMessage(receiptChooserMessage(reference, candidates.size()))
+                .setView(body)
+                .setNegativeButton(android.R.string.cancel, null)
+                .create();
+        populateReceiptChooserRows(reference, candidates, body.findViewById(R.id.receiptChooserRows));
+        return dialog;
+    }
+
+    private String receiptChooserMessage(String reference, int count) {
+        if (receiptChooserShowingAllUnused) {
+            return getString(R.string.receipt_chooser_all_unused_message, count);
+        }
+        return getString(R.string.receipt_chooser_message, count, receiptChooserSummary(reference));
+    }
+
+    /**
+     * One row per candidate. Existing rows keep their thumbnails; OCR re-sort only reorders
+     * views and updates badges. See all unused pictures sits after the last thumb.
+     */
+    private void populateReceiptChooserRows(String reference,
+                                            List<ReceiptReferenceResolver.Result> candidates,
+                                            ViewGroup rows) {
+        SimpleDateFormat capturedAt = new SimpleDateFormat("MMM d, yyyy · h:mm a", Locale.getDefault());
+        Map<String, ViewGroup> existing = new HashMap<>();
+        View seeAll = null;
+        for (int index = 0; index < rows.getChildCount(); index++) {
+            View child = rows.getChildAt(index);
+            Object tag = child.getTag();
+            if (RECEIPT_CHOOSER_SEE_ALL_TAG.equals(tag)) {
+                seeAll = child;
+            } else if (tag instanceof String && child instanceof ViewGroup) {
+                existing.put((String) tag, (ViewGroup) child);
+            }
+        }
+        List<View> ordered = new ArrayList<>();
+        for (int index = 0; index < candidates.size(); index++) {
+            ReceiptReferenceResolver.Result candidate = candidates.get(index);
+            if (candidate == null || candidate.reference == null) continue;
+            ViewGroup row = existing.remove(candidate.reference);
+            if (row == null) {
+                row = (ViewGroup) LayoutInflater.from(this).inflate(R.layout.item_receipt_chooser, rows, false);
+                row.setTag(candidate.reference);
+                String name = candidate.fileName != null ? candidate.fileName
+                        : getString(R.string.receipt_chooser_unnamed_picture);
+                TextView nameView = row.findViewById(R.id.receiptChooserName);
+                nameView.setText(name);
+                TextView dateView = row.findViewById(R.id.receiptChooserDate);
+                dateView.setText(candidate.captureTimeMs > 0
+                        ? capturedAt.format(new Date(candidate.captureTimeMs)) : "");
+                ImageView thumbnail = row.findViewById(R.id.receiptChooserThumbnail);
+                thumbnail.setContentDescription(name);
+                loadReceiptChooserThumbnail(thumbnail, candidate.reference);
+            }
+            TextView badge = row.findViewById(R.id.receiptChooserBadge);
+            String badgeText = receiptChooserBadges.get(candidate.reference);
+            badge.setText(badgeText != null ? badgeText
+                    : getString(R.string.receipt_chooser_badge_reading));
+            final int checkIndex = index;
+            row.setOnClickListener(v -> launchReceiptCandidateCheck(reference, candidates, checkIndex));
+            ordered.add(row);
+        }
+        for (ViewGroup stale : existing.values()) {
+            rows.removeView(stale);
+        }
+        boolean showSeeAll = !receiptChooserShowingAllUnused && !receiptChooserLeftovers.isEmpty();
+        if (showSeeAll) {
+            if (seeAll == null) {
+                seeAll = LayoutInflater.from(this).inflate(R.layout.item_receipt_chooser_see_all, rows, false);
+                seeAll.setTag(RECEIPT_CHOOSER_SEE_ALL_TAG);
+            }
+            TextView label = seeAll.findViewById(R.id.receiptChooserSeeAll);
+            if (label != null) {
+                label.setText(getString(R.string.receipt_chooser_see_all_unused,
+                        receiptChooserLeftovers.size()));
+            }
+            seeAll.setOnClickListener(v -> expandReceiptChooserToAllUnused(reference, candidates));
+            ordered.add(seeAll);
+        } else if (seeAll != null) {
+            rows.removeView(seeAll);
+        }
+        for (View child : ordered) {
+            if (child.getParent() instanceof ViewGroup) {
+                ((ViewGroup) child.getParent()).removeView(child);
+            }
+            rows.addView(child);
+        }
+    }
+
+    /**
+     * OCRs the ±1 shortlist first, then leftover unused pictures. Close printed totals append
+     * to the open dialog; the rest wait for See all unused pictures. Learned OCR weights come from
+     * {@link #currentOcrWeights()}. A stale generation drops updates.
+     */
+    private void scoreReceiptCandidatesByOcr(String reference,
+                                             List<ReceiptReferenceResolver.Result> ranked,
+                                             List<ReceiptReferenceResolver.Result> leftoverSnapshot,
+                                             int generation) {
+        Transaction transaction = receiptTransactionFor(reference);
+        if (transaction == null) return;
+        List<ReceiptReferenceResolver.Result> shortlist = new ArrayList<>(ranked);
+        for (ReceiptReferenceResolver.Result candidate : shortlist) {
+            scoreOneChooserCandidate(reference, transaction, candidate, ranked, generation, false);
+        }
+        AndroidReceiptSource source = new AndroidReceiptSource(this);
+        List<ReceiptReferenceResolver.Result> leftovers = leftoverSnapshot == null
+                ? Collections.emptyList() : leftoverSnapshot;
+        for (ReceiptReferenceResolver.Result leftover : leftovers) {
+            if (receiptChooserGeneration != generation) return;
+            ReceiptReferenceResolver.Result verified = inspectChooserCandidate(source, leftover);
+            if (verified == null) {
+                runOnUiThread(() -> {
+                    if (receiptChooserGeneration != generation) return;
+                    removeChooserReference(receiptChooserLeftovers, leftover.reference);
+                    updateReceiptChooserChrome(reference, ranked);
+                });
+                continue;
+            }
+            final ReceiptReferenceResolver.Result inspected = verified;
+            runOnUiThread(() -> replaceChooserLeftover(leftover.reference, inspected));
+            scoreOneChooserCandidate(reference, transaction, inspected, ranked, generation, true);
+        }
+    }
+
+    private void scoreOneChooserCandidate(String reference, Transaction transaction,
+                                          ReceiptReferenceResolver.Result candidate,
+                                          List<ReceiptReferenceResolver.Result> ranked,
+                                          int generation, boolean leftover) {
+        if (receiptChooserGeneration != generation || candidate == null) return;
+        ReceiptDraft draft = ocrReceiptCandidateQuietly(candidate.reference);
+        Double ocrTotal = draft != null ? draft.totalAmount : null;
+        int score = ReceiptCandidateScorer.score(
+                ocrTotal,
+                draft != null ? draft.merchantForComment : null,
+                draft != null ? draft.dateYyyyMmDd : null,
+                transaction.getAmount(), transaction.getComment(), transaction.getDate());
+        int amountTier = ReceiptCandidateScorer.amountTier(ocrTotal, transaction.getAmount());
+        boolean append = leftover
+                && ReceiptCandidateScorer.shouldAppendByAmount(ocrTotal, transaction.getAmount());
+        runOnUiThread(() -> {
+            if (receiptChooserGeneration != generation
+                    || receiptChooserDialog == null || !receiptChooserDialog.isShowing()) return;
+            if (draft != null) {
+                receiptChooserDrafts.put(candidate.reference, draft);
+            }
+            receiptChooserScores.put(candidate.reference, score);
+            if (append && !receiptChooserShowingAllUnused
+                    && !containsChooserReference(ranked, candidate.reference)) {
+                ranked.add(candidate);
+                removeChooserReference(receiptChooserLeftovers, candidate.reference);
+            }
+            receiptChooserBadges.put(candidate.reference,
+                    receiptChooserBadgeText(draft, amountTier, receiptChooserShowingAllUnused));
+            List<ReceiptReferenceResolver.Result> sorted = ReceiptCandidateScorer.sortByScoreDesc(
+                    ranked, item -> receiptChooserScores.containsKey(item.reference)
+                            ? receiptChooserScores.get(item.reference) : 0);
+            ranked.clear();
+            ranked.addAll(sorted);
+            updateReceiptChooserChrome(reference, ranked);
+        });
+    }
+
+    /**
+     * See all unused pictures: keep the shortlist and append every remaining unused picture, then OCR
+     * any row that still has no score so each badge can show the printed dollar.
+     */
+    private void expandReceiptChooserToAllUnused(String reference,
+                                                 List<ReceiptReferenceResolver.Result> ranked) {
+        if (receiptChooserShowingAllUnused) return;
+        receiptChooserShowingAllUnused = true;
+        final List<ReceiptReferenceResolver.Result> leftoverSnapshot =
+                new ArrayList<>(receiptChooserLeftovers);
+        receiptChooserLeftovers.clear();
+        updateReceiptChooserChrome(reference, ranked);
+        final int generation = receiptChooserGeneration;
+        receiptRecoveryExecutor.execute(() -> {
+            AndroidReceiptSource source = new AndroidReceiptSource(this);
+            List<ReceiptReferenceResolver.Result> extra = new ArrayList<>();
+            for (ReceiptReferenceResolver.Result leftover : leftoverSnapshot) {
+                if (receiptChooserGeneration != generation) return;
+                ReceiptReferenceResolver.Result verified = inspectChooserCandidate(source, leftover);
+                if (verified != null && !containsChooserReference(extra, verified.reference)) {
+                    extra.add(verified);
+                }
+            }
+            runOnUiThread(() -> {
+                if (receiptChooserGeneration != generation
+                        || receiptChooserDialog == null || !receiptChooserDialog.isShowing()) return;
+                for (ReceiptReferenceResolver.Result verified : extra) {
+                    if (!containsChooserReference(ranked, verified.reference)) {
+                        ranked.add(verified);
+                    }
+                }
+                receiptChooserLeftovers.clear();
+                refreshChooserPrintedAmountBadges(reference);
+                updateReceiptChooserChrome(reference, ranked);
+                final List<ReceiptReferenceResolver.Result> toScore = new ArrayList<>();
+                for (ReceiptReferenceResolver.Result candidate : ranked) {
+                    if (!receiptChooserScores.containsKey(candidate.reference)) {
+                        toScore.add(candidate);
+                    }
+                }
+                if (!toScore.isEmpty()) {
+                    receiptRecoveryExecutor.execute(() ->
+                            scoreUnscoredChooserCandidates(reference, ranked, toScore, generation));
+                }
+            });
+        });
+    }
+
+    private void scoreUnscoredChooserCandidates(String reference,
+                                                List<ReceiptReferenceResolver.Result> ranked,
+                                                List<ReceiptReferenceResolver.Result> toScore,
+                                                int generation) {
+        Transaction transaction = receiptTransactionFor(reference);
+        if (transaction == null || toScore == null) return;
+        for (ReceiptReferenceResolver.Result candidate : toScore) {
+            if (receiptChooserGeneration != generation) return;
+            scoreOneChooserCandidate(reference, transaction, candidate, ranked, generation, false);
+        }
+    }
+
+    private void refreshChooserPrintedAmountBadges(String reference) {
+        Transaction transaction = receiptTransactionFor(reference);
+        if (transaction == null) return;
+        for (Map.Entry<String, ReceiptDraft> entry : receiptChooserDrafts.entrySet()) {
+            ReceiptDraft draft = entry.getValue();
+            int amountTier = ReceiptCandidateScorer.amountTier(
+                    draft != null ? draft.totalAmount : null, transaction.getAmount());
+            receiptChooserBadges.put(entry.getKey(),
+                    receiptChooserBadgeText(draft, amountTier, true));
+        }
+    }
+
+    private void updateReceiptChooserChrome(String reference,
+                                            List<ReceiptReferenceResolver.Result> ranked) {
+        if (receiptChooserDialog == null || !receiptChooserDialog.isShowing()) return;
+        receiptChooserDialog.setMessage(receiptChooserMessage(reference, ranked.size()));
+        ViewGroup body = (ViewGroup) receiptChooserDialog.findViewById(R.id.receiptChooserRows);
+        if (body != null) {
+            populateReceiptChooserRows(reference, ranked, body);
+        }
+    }
+
+    private static boolean containsChooserReference(
+            List<ReceiptReferenceResolver.Result> list, String reference) {
+        if (list == null || reference == null) return false;
+        String bare = stripReceiptFragment(reference);
+        for (ReceiptReferenceResolver.Result picture : list) {
+            if (picture == null || picture.reference == null) continue;
+            if (reference.equals(picture.reference)
+                    || bare.equals(stripReceiptFragment(picture.reference))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void removeChooserReference(
+            List<ReceiptReferenceResolver.Result> list, String reference) {
+        if (list == null || reference == null) return;
+        String bare = stripReceiptFragment(reference);
+        Iterator<ReceiptReferenceResolver.Result> iterator = list.iterator();
+        while (iterator.hasNext()) {
+            ReceiptReferenceResolver.Result picture = iterator.next();
+            if (picture == null || picture.reference == null) continue;
+            if (reference.equals(picture.reference)
+                    || bare.equals(stripReceiptFragment(picture.reference))) {
+                iterator.remove();
+            }
+        }
+    }
+
+    private void replaceChooserLeftover(String previousReference,
+                                        ReceiptReferenceResolver.Result verified) {
+        if (verified == null) return;
+        for (int index = 0; index < receiptChooserLeftovers.size(); index++) {
+            ReceiptReferenceResolver.Result picture = receiptChooserLeftovers.get(index);
+            if (picture == null || picture.reference == null) continue;
+            if (previousReference.equals(picture.reference)
+                    || stripReceiptFragment(previousReference)
+                    .equals(stripReceiptFragment(picture.reference))) {
+                receiptChooserLeftovers.set(index, verified);
+                return;
+            }
+        }
+    }
+
+    /** One OCR pass over a candidate picture; any failure just means "no content evidence". */
+    private ReceiptDraft ocrReceiptCandidateQuietly(String candidateReference) {
+        Bitmap bitmap = null;
+        try {
+            bitmap = ReceiptBitmapLoader.decodeSampled(this, Uri.parse(candidateReference),
+                    RECEIPT_CHOOSER_OCR_MAX_DIM);
+        } catch (IOException | RuntimeException unavailable) {
+            Log.d("EnvelopeMoney", "receipt candidate decode for OCR unavailable");
+        }
+        if (bitmap == null) return null;
+        final CountDownLatch done = new CountDownLatch(1);
+        final ReceiptDraft[] draftOut = new ReceiptDraft[1];
+        try {
+            ReceiptOcrPipeline pipeline = new ReceiptOcrPipeline(PaddleOcrAdapter.createDefaultEngine());
+            pipeline.runAsync(this, bitmap, ReceiptCaptureMode.AUTO, currentOcrWeights(),
+                    new ReceiptOcrPipeline.PipelineCallback() {
+                        @Override public void onResult(ReceiptDraft draft) {
+                            draftOut[0] = draft;
+                            done.countDown();
+                        }
+                        @Override public void onError(Throwable error) {
+                            done.countDown();
+                        }
+                    });
+            done.await(10, TimeUnit.SECONDS);
+        } catch (RuntimeException | InterruptedException pipelineUnavailable) {
+            Log.d("EnvelopeMoney", "receipt candidate OCR unavailable");
+        } finally {
+            bitmap.recycle();
+        }
+        return draftOut[0];
+    }
+
+    private String receiptChooserBadgeText(ReceiptDraft draft, int amountTier,
+                                           boolean showPrintedWhenNotClose) {
+        if (draft == null || draft.totalAmount == null) {
+            return getString(R.string.receipt_chooser_badge_no_amount);
+        }
+        if (amountTier >= ReceiptCandidateScorer.AMOUNT_EXACT) {
+            return getString(R.string.receipt_chooser_badge_amount_match, draft.totalAmount);
+        }
+        if (amountTier >= ReceiptCandidateScorer.AMOUNT_NEAR) {
+            return getString(R.string.receipt_chooser_badge_amount_close, draft.totalAmount);
+        }
+        if (showPrintedWhenNotClose) {
+            return getString(R.string.receipt_chooser_badge_printed, draft.totalAmount);
+        }
+        return getString(R.string.receipt_chooser_badge_no_amount);
+    }
+
+    /** The transaction behind a reference, for content matching; null when the row is gone. */
+    private Transaction receiptTransactionFor(String reference) {
+        List<ReceiptReferenceRepair.Entry> entries = receiptEntriesFor(reference);
+        return entries.isEmpty() ? null : entries.get(0).transaction;
+    }
+
+    /** Android 11+ finishes a gallery move through one system delete-consent sheet, once per photo. */
+    private void offerGallerySourceDelete(Uri source) {
+        if (source == null || Build.VERSION.SDK_INT < 30
+                || receiptDeclinedDeleteSources.contains(source.toString())) return;
+        try {
+            android.app.PendingIntent delete = MediaStore.createDeleteRequest(
+                    getContentResolver(), Collections.singletonList(source));
+            pendingDeleteSourceUri = source;
+            receiptDeleteRequestLauncher.launch(new androidx.activity.result.IntentSenderRequest.Builder(
+                    delete.getIntentSender()).build());
+        } catch (RuntimeException unavailable) {
+            pendingDeleteSourceUri = null;
+            Log.w("EnvelopeMoney", "receipt gallery delete request unavailable", unavailable);
+        }
+    }
+
+    /** Thumbnails decode on a dedicated pool and reuse an LRU so OCR re-sort does not re-decode. */
+    private void loadReceiptChooserThumbnail(ImageView thumbnail, String reference) {
+        thumbnail.setTag(R.id.tag_receipt_image_uri, reference);
+        Bitmap cached = receiptChooserThumbCache.get(reference);
+        if (cached != null && !cached.isRecycled()) {
+            thumbnail.setImageBitmap(cached);
+            return;
+        }
+        receiptThumbExecutor.execute(() -> {
+            Bitmap decoded = receiptChooserThumbCache.get(reference);
+            if (decoded == null || decoded.isRecycled()) {
+                try {
+                    decoded = ReceiptBitmapLoader.decodeSampled(this, Uri.parse(reference),
+                            RECEIPT_CHOOSER_THUMB_MAX_DIM);
+                } catch (IOException | RuntimeException unavailable) {
+                    Log.d("EnvelopeMoney", "receipt chooser thumbnail unavailable");
+                    decoded = null;
+                }
+                if (decoded != null) {
+                    receiptChooserThumbCache.put(reference, decoded);
+                }
+            }
+            Bitmap thumbnailBitmap = decoded;
+            runOnUiThread(() -> {
+                if (thumbnailBitmap == null || thumbnailBitmap.isRecycled()) return;
+                if (!reference.equals(thumbnail.getTag(R.id.tag_receipt_image_uri))) return;
+                if (thumbnail.getParent() == null) return;
+                thumbnail.setImageBitmap(thumbnailBitmap);
+            });
+        });
+    }
+
+    /** Applies one user-verified pick, persists it, and opens the fullscreen preview. */
+    private void attachChosenReceipt(String reference, ReceiptReferenceResolver.Result chosen) {
+        List<ReceiptReferenceRepair.Entry> entries = receiptEntriesFor(reference);
+        if (entries.isEmpty()) return;
+        persistChooserLearning(chosen, entries.get(0).transaction);
+        applyReceiptResolution(reference, entries, chosen);
+        Toast.makeText(this, R.string.receipt_picture_updated, Toast.LENGTH_SHORT).show();
+        launchReceiptPreviewActivity(Uri.parse(namedReceiptReference(chosen)));
+    }
+
+    /**
+     * Same sidecar nudge as save-from-capture: when the row amount was printed on the OCR lines
+     * and differed from the guessed total, update {@code ocr_weight_vec}.
+     */
+    private void persistChooserLearning(ReceiptReferenceResolver.Result chosen, Transaction transaction) {
+        if (learningDb == null || chosen == null || transaction == null) return;
+        ReceiptDraft draft = receiptChooserDrafts.get(chosen.reference);
+        if (draft == null) {
+            draft = receiptChooserDrafts.get(stripReceiptFragment(chosen.reference));
+        }
+        if (draft == null || draft.sourceLines == null || draft.sourceLines.isEmpty()) return;
+        float[] next = OcrAmountLearner.learn(
+                draft.sourceLines, draft.totalAmount, transaction.getAmount(),
+                learningDb.getWeights(), ReceiptCaptureMode.AUTO);
+        learningDb.saveWeights(next);
+    }
+
+    /**
+     * Opens the fullscreen candidate check with the transaction context in the header. Every
+     * content:// candidate shares one ClipData so the read grant covers arrow navigation.
+     */
+    private void launchReceiptCandidateCheck(String reference,
+                                             List<ReceiptReferenceResolver.Result> candidates,
+                                             int startIndex) {
+        pendingCandidateReference = reference;
+        pendingCandidateResults.clear();
+        String[] references = new String[candidates.size()];
+        android.content.ClipData grants = null;
+        for (int index = 0; index < candidates.size(); index++) {
+            ReceiptReferenceResolver.Result candidate = candidates.get(index);
+            pendingCandidateResults.put(candidate.reference, candidate);
+            references[index] = candidate.reference;
+            Uri grantUri = ReceiptPreviewActivity.intentDataUri(Uri.parse(candidate.reference));
+            if (grantUri != null) {
+                if (grants == null) {
+                    grants = android.content.ClipData.newRawUri("receipt", grantUri);
+                } else {
+                    grants.addItem(new android.content.ClipData.Item(grantUri));
+                }
+            }
+        }
+        String[] lines = receiptCandidateLines(reference);
+        Intent check = new Intent(this, ReceiptPreviewActivity.class);
+        check.putExtra(ReceiptPreviewActivity.EXTRA_CANDIDATE_REFERENCES, references);
+        check.putExtra(ReceiptPreviewActivity.EXTRA_CANDIDATE_INDEX,
+                Math.max(0, Math.min(startIndex, references.length - 1)));
+        check.putExtra(ReceiptPreviewActivity.EXTRA_CANDIDATE_TITLE, lines[0]);
+        check.putExtra(ReceiptPreviewActivity.EXTRA_CANDIDATE_DETAIL, lines[1]);
+        String[] cue = receiptCandidateCue(reference);
+        check.putExtra(ReceiptPreviewActivity.EXTRA_CANDIDATE_COMMENT, cue[0]);
+        check.putExtra(ReceiptPreviewActivity.EXTRA_CANDIDATE_POND, cue[1]);
+        check.putExtra(ReceiptPreviewActivity.EXTRA_CANDIDATE_AMOUNT, cue[2]);
+        if (grants != null) {
+            check.setClipData(grants);
+            check.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        }
+        try {
+            receiptPreviewLauncher.launch(check);
+        } catch (RuntimeException e) {
+            Log.e("EnvelopeMoney", "receipt candidate check launch", e);
+            Toast.makeText(this, R.string.receipt_preview_load_failed, Toast.LENGTH_LONG).show();
+        }
+    }
+
+    /** A confirmed pick applies through the guarded path; stale results (activity restarted) are ignored. */
+    private void handleReceiptCandidatePicked(String pickedReference) {
+        ReceiptReferenceResolver.Result chosen = pendingCandidateResults.get(pickedReference);
+        String reference = pendingCandidateReference;
+        pendingCandidateReference = null;
+        pendingCandidateResults.clear();
+        if (reference == null || chosen == null) return;
+        // Every shared row moves to the pick, so the replaced file is owned nowhere and free again.
+        receiptChosenReferences.remove(stripReceiptFragment(reference));
+        receiptChosenReferences.add(chosen.reference);
+        if (receiptChooserDialog != null && receiptChooserDialog.isShowing()) {
+            receiptChooserDialog.dismiss();
+        }
+        attachChosenReceipt(reference, chosen);
+    }
+
+    /**
+     * "Choose different" from the normal preview: re-opens the picker for this receipt with the
+     * attached file and other transactions' files excluded. Normal recovery cannot produce this
+     * list — the attached reference resolves — so the matcher runs once for this claim alone.
+     */
+    private void reopenReceiptChooserForSwap(String swapReference) {
+        if (swapReference == null) return;
+        receiptRecoveryExecutor.execute(() -> {
+            List<ReceiptReferenceRepair.Entry> entries = receiptEntriesFor(swapReference);
+            Transaction transaction = entries.isEmpty() ? null : entries.get(0).transaction;
+            List<ReceiptReferenceResolver.Result> swapPool = Collections.emptyList();
+            if (transaction != null) {
+                Set<String> reserved = new HashSet<>();
+                for (ReceiptReferenceRepair.Entry entry : ReceiptReferenceRepair.snapshot(envelopes)) {
+                    if (entry.transaction == transaction) continue;
+                    if (entry.reference != null && !entry.reference.isEmpty()) {
+                        reserved.add(stripReceiptFragment(entry.reference));
+                    }
+                }
+                swapPool = ReceiptReferenceRepair.swapCandidates(new AndroidReceiptSource(this),
+                        transaction.getReceiptImageFileName(), transaction.getDate(),
+                        swapReference, reserved, TimeZone.getDefault());
+            }
+            final List<ReceiptReferenceResolver.Result> others = swapPool;
+            runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                if (others.isEmpty()) {
+                    Toast.makeText(this, R.string.receipt_swap_none_found, Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                showReceiptCandidateChooser(swapReference, others);
+            });
+        });
+    }
+
+    /** Fullscreen cue lines from the tapped row; empty comment is "No comment". */
+    private String[] receiptCandidateCue(String reference) {
+        String emptyComment = getString(R.string.receipt_candidate_no_comment);
+        List<ReceiptReferenceRepair.Entry> entries = receiptEntriesFor(reference);
+        if (entries.isEmpty()) {
+            return new String[]{emptyComment, "", ""};
+        }
+        Transaction transaction = entries.get(0).transaction;
+        return new String[]{
+                ReceiptCandidateSummary.immersiveComment(transaction.getComment(), emptyComment),
+                ReceiptCandidateSummary.immersivePond(transaction.getEnvelopeName()),
+                ReceiptCandidateSummary.immersiveAmount(transaction.getAmount())};
+    }
+
+    /** Title/detail context lines from the tapped row's transaction; blank when the row is gone. */
+    private String[] receiptCandidateLines(String reference) {
+        List<ReceiptReferenceRepair.Entry> entries = receiptEntriesFor(reference);
+        if (entries.isEmpty()) return new String[]{"", ""};
+        Transaction transaction = entries.get(0).transaction;
+        return new String[]{
+                ReceiptCandidateSummary.titleLine(transaction.getComment(),
+                        transaction.getEnvelopeName(), transaction.getAmount()),
+                ReceiptCandidateSummary.detailLine(transaction.getComment(),
+                        transaction.getEnvelopeName(), transaction.getDate())};
+    }
+
+    private String receiptChooserSummary(String reference) {
+        String[] lines = receiptCandidateLines(reference);
+        if (lines[0].isEmpty()) return "";
+        return lines[1].isEmpty() ? lines[0] : lines[0] + " · " + lines[1];
     }
     private void updateTransactionHistory() {
         ensureRecurringTransactionsForCurrentMonth();
@@ -628,6 +3000,7 @@ public class MainActivity extends AppCompatActivity {
 
         List<Transaction> filteredTransactions = new ArrayList<>();
         Map<String, TransferTotalsOption> transferTotalsByEnvelope = new HashMap<>();
+        Map<String, List<TransferBucketAllocation>> transferAllocationsById = new HashMap<>();
         double grossTotal = 0;
         double outgoingTransferTotal = 0;
         double incomingTransferTotal = 0;
@@ -642,27 +3015,32 @@ public class MainActivity extends AppCompatActivity {
                     }
 
                     String transferId = transaction.getTransferId();
-                    Envelope.TransferData transfer = null;
                     Envelope ownerEnvelope = null;
-                    Envelope destinationEnvelope = null;
                     boolean isTransfer = transferId != null && !transferId.isEmpty();
                     boolean isSourceSide = false;
-                    boolean destinationSelected = false;
                     boolean ownerSelected = false;
                     boolean includeTransaction = envelopeSelected;
+                    List<TransferBucketAllocation> allocations = new ArrayList<>();
 
                     if (isTransfer) {
-                        transfer = findTransferById(transferId);
-                        if (transfer != null && transfer.getToEnvelope() != null && !transfer.getToEnvelope().isEmpty()) {
-                            ownerEnvelope = findTransferOwner(transferId);
-                            destinationEnvelope = findEnvelopeByName(transfer.getToEnvelope());
-                            isSourceSide = ownerEnvelope != null
-                                    && Objects.equals(ownerEnvelope.getName(), transaction.getEnvelopeName());
-                            destinationSelected = destinationEnvelope != null && destinationEnvelope.isSelected();
-                            ownerSelected = ownerEnvelope != null && ownerEnvelope.isSelected();
-                            if (!includeTransaction && showTransfers && (ownerSelected || destinationSelected)) {
-                                includeTransaction = true;
+                        allocations = transferAllocationsById.computeIfAbsent(
+                                transferId,
+                                id -> TransferSyncHelper.getAllocations(envelopes, id));
+                        ownerEnvelope = findTransferOwner(transferId);
+                        isSourceSide = ownerEnvelope != null
+                                && Objects.equals(ownerEnvelope.getName(), transaction.getEnvelopeName())
+                                && (transaction.getTransferBucketId() == null || transaction.getTransferBucketId().isEmpty());
+                        ownerSelected = ownerEnvelope != null && ownerEnvelope.isSelected();
+                        boolean anyDestinationSelected = false;
+                        for (TransferBucketAllocation allocation : allocations) {
+                            Envelope destinationEnvelope = findEnvelopeByName(allocation.getToEnvelope());
+                            if (destinationEnvelope != null && destinationEnvelope.isSelected()) {
+                                anyDestinationSelected = true;
+                                break;
                             }
+                        }
+                        if (!includeTransaction && showTransfers && (ownerSelected || anyDestinationSelected)) {
+                            includeTransaction = true;
                         }
                     }
 
@@ -673,44 +3051,27 @@ public class MainActivity extends AppCompatActivity {
                     filteredTransactions.add(transaction);
                     grossTotal += transaction.getAmount();
 
-                    if (transfer != null && transfer.getToEnvelope() != null && !transfer.getToEnvelope().isEmpty()) {
-                        double amount = Math.abs(transaction.getAmount());
-
+                    if (isTransfer && !allocations.isEmpty()) {
                         if (isSourceSide) {
-                            outgoingTransferTotal += amount;
-                        } else {
-                            incomingTransferTotal += amount;
-                        }
-
-                        String summaryKey;
-                        String labelPrefix;
-                        String relatedEnvelopeName;
-                        if (isSourceSide) {
-                            summaryKey = "to:" + transfer.getToEnvelope();
-                            labelPrefix = "To";
-                            relatedEnvelopeName = transfer.getToEnvelope();
-                        } else {
-                            String ownerName = ownerEnvelope != null ? ownerEnvelope.getName() : transfer.getToEnvelope();
-                            summaryKey = "from:" + ownerName;
-                            labelPrefix = "From";
-                            relatedEnvelopeName = ownerName;
-                        }
-
-                        TransferTotalsOption existing = transferTotalsByEnvelope.get(summaryKey);
-                        double running = existing != null ? existing.total : 0d;
-                        if (isSourceSide) {
-                            running += amount;
-                            if (destinationSelected) {
-                                running -= amount;
+                            double allocatedTotal = TransferGroupDraft.allocatedTotal(allocations);
+                            outgoingTransferTotal += allocatedTotal;
+                            for (TransferBucketAllocation allocation : allocations) {
+                                Envelope destinationEnvelope = findEnvelopeByName(allocation.getToEnvelope());
+                                boolean destinationSelected = destinationEnvelope != null && destinationEnvelope.isSelected();
+                                String summaryKey = "to:" + allocation.getToEnvelope();
+                                String relatedEnvelopeName = allocation.getToEnvelope();
+                                TransferTotalsOption existing = transferTotalsByEnvelope.get(summaryKey);
+                                double running = existing != null ? existing.total : 0d;
+                                running += Math.abs(allocation.getAmount());
+                                if (destinationSelected) {
+                                    running -= Math.abs(allocation.getAmount());
+                                }
+                                transferTotalsByEnvelope.put(summaryKey,
+                                        new TransferTotalsOption(summaryKey, "To", relatedEnvelopeName, running));
                             }
                         } else {
-                            running += amount;
-                            if (ownerSelected) {
-                                running -= amount;
-                            }
+                            incomingTransferTotal += Math.abs(transaction.getAmount());
                         }
-                        transferTotalsByEnvelope.put(summaryKey,
-                                new TransferTotalsOption(summaryKey, labelPrefix, relatedEnvelopeName, running));
                     }
                 } catch (ParseException e) {
                     Log.d("EnvelopeMoney", "Transaction date parse failed", e);
@@ -742,12 +3103,15 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void updateDisplay() {
+        applyPaydayReconciliationToAllEligibleEnvelopes();
         if (envelopeAdapter != null) {
             envelopeAdapter.notifyDataSetChanged();
         }
         if (transactionAdapter != null) {
             updateTransactionHistory();
         }
+        updatePondHeaderControls();
+        updatePondTotalsFooter();
     }
 
     // Adapter classes and helper methods below
@@ -768,6 +3132,9 @@ public class MainActivity extends AppCompatActivity {
 
             TextView tvAmount = convertView.findViewById(R.id.tvTransactionAmount);
             TextView tvDetails = convertView.findViewById(R.id.tvTransactionDetails);
+            ImageButton btnReceipt = convertView.findViewById(R.id.btnTransactionReceipt);
+            ImageButton btnSplitExpand = convertView.findViewById(R.id.btnSplitExpand);
+            TextView tvSplitBreakdown = convertView.findViewById(R.id.tvSplitBreakdown);
             ImageButton btnOptions = convertView.findViewById(R.id.btnTransactionOptions);
 
             // Populate data
@@ -787,10 +3154,72 @@ public class MainActivity extends AppCompatActivity {
             if (transaction.getComment() != null && !transaction.getComment().isEmpty()) {
                 details += " | " + transaction.getComment();
             }
+            if (transaction.getTransferId() != null && !transaction.getTransferId().isEmpty()
+                    && (transaction.getTransferBucketId() == null || transaction.getTransferBucketId().isEmpty())) {
+                double allocated = TransferSyncHelper.allocatedTotal(envelopes, transaction.getTransferId());
+                double spentHere = transaction.getAmount() - allocated;
+                details += String.format(Locale.getDefault(),
+                        " | Transfer allocated $%.2f | Spent here $%.2f",
+                        allocated,
+                        spentHere);
+            }
             if (transaction.isRecurring() && transaction.getRecurringFrequency() != null && !transaction.getRecurringFrequency().isEmpty()) {
                 details += " | " + recurringFrequencyDisplay(normalizeRecurringFrequency(transaction.getRecurringFrequency()));
             }
             tvDetails.setText(details);
+
+            boolean splitRow = SplitPurchaseSyncHelper.isSplitPurchase(transaction);
+            if (splitRow) {
+                btnSplitExpand.setVisibility(View.VISIBLE);
+                String gid = transaction.getSplitPurchaseGroupId();
+                boolean expanded = expandedSplitGroupIds.contains(gid);
+                tvSplitBreakdown.setVisibility(expanded ? View.VISIBLE : View.GONE);
+                btnSplitExpand.setRotation(expanded ? 180f : 0f);
+                btnSplitExpand.setContentDescription(expanded
+                        ? getString(R.string.content_desc_split_collapse)
+                        : getString(R.string.content_desc_split_expand));
+                List<Transaction> peers = SplitPurchaseSyncHelper.findTransactionsInGroup(envelopes, gid);
+                double groupTotal = SplitPurchaseSyncHelper.groupTotal(peers);
+                String header = getString(R.string.split_breakdown_total_line, groupTotal);
+                tvSplitBreakdown.setText(header + "\n" + SplitPurchaseSyncHelper.formatBreakdownLine(peers));
+                btnSplitExpand.setOnClickListener(v -> {
+                    if (expandedSplitGroupIds.contains(gid)) {
+                        expandedSplitGroupIds.remove(gid);
+                    } else {
+                        expandedSplitGroupIds.add(gid);
+                    }
+                    notifyDataSetChanged();
+                });
+            } else {
+                btnSplitExpand.setVisibility(View.GONE);
+                tvSplitBreakdown.setVisibility(View.GONE);
+                btnSplitExpand.setOnClickListener(null);
+            }
+
+            boolean showReceipt = ReceiptRowUi.showReceiptThumbnail(transaction);
+            ReceiptReferenceResolver.Status receiptStatus = showReceipt
+                    ? receiptAttentionByReference.get(stripReceiptFragment(transaction.getReceiptImageUri()))
+                    : null;
+            boolean receiptAttention = ReceiptRowUi.receiptNeedsAttention(receiptStatus);
+            int receiptTint = resolveThemeColor(receiptAttention
+                    ? com.google.android.material.R.attr.colorError
+                    : androidx.appcompat.R.attr.colorControlNormal);
+            ImageViewCompat.setImageTintList(btnReceipt, ColorStateList.valueOf(receiptTint));
+            btnReceipt.setContentDescription(getString(receiptAttention
+                    ? R.string.content_desc_transaction_receipt_unresolved
+                    : R.string.content_desc_transaction_receipt));
+            if (showReceipt) {
+                btnReceipt.setVisibility(View.VISIBLE);
+                btnReceipt.setOnClickListener(v -> {
+                    String uriStr = transaction.getReceiptImageUri();
+                    if (uriStr != null && !uriStr.isEmpty()) {
+                        showReceiptImagePreview(Uri.parse(uriStr));
+                    }
+                });
+            } else {
+                btnReceipt.setVisibility(View.GONE);
+                btnReceipt.setOnClickListener(null);
+            }
 
             // Handle Options button click
             btnOptions.setOnClickListener(v -> showTransactionOptionsDialog(transaction));
@@ -801,7 +3230,7 @@ public class MainActivity extends AppCompatActivity {
     @RequiresApi(api = Build.VERSION_CODES.N)
     private void showTransactionOptionsDialog(Transaction transaction) {
         // We'll show an AlertDialog with "Edit" and "Delete" options
-        new AlertDialog.Builder(this)
+        new MaterialAlertDialogBuilder(this)
                 .setTitle("Transaction Options")
                 .setItems(new CharSequence[]{"Edit", "Delete"}, (dialog, which) -> {
                     if (which == 0) {
@@ -817,73 +3246,225 @@ public class MainActivity extends AppCompatActivity {
 
 
 
-    private class EnvelopeAdapter extends ArrayAdapter<Envelope> {
-        public EnvelopeAdapter(Context context, List<Envelope> envelopes) {
-            super(context, R.layout.item_envelope, envelopes);
+    private void setupPondDragHelper() {
+        if (recyclerViewEnvelopes == null) {
+            return;
+        }
+        ItemTouchHelper.Callback callback = new ItemTouchHelper.SimpleCallback(
+                ItemTouchHelper.UP | ItemTouchHelper.DOWN, 0) {
+            @Override
+            public boolean isLongPressDragEnabled() {
+                return pondReorderMode;
+            }
+
+            @Override
+            public boolean onMove(@NonNull RecyclerView recyclerView,
+                                    @NonNull RecyclerView.ViewHolder viewHolder,
+                                    @NonNull RecyclerView.ViewHolder target) {
+                int from = viewHolder.getBindingAdapterPosition();
+                int to = target.getBindingAdapterPosition();
+                if (from == RecyclerView.NO_POSITION || to == RecyclerView.NO_POSITION) {
+                    return false;
+                }
+                Collections.swap(envelopes, from, to);
+                envelopeAdapter.notifyItemMoved(from, to);
+                return true;
+            }
+
+            @Override
+            public void onSwiped(@NonNull RecyclerView.ViewHolder viewHolder, int direction) {
+            }
+
+            @Override
+            public void onSelectedChanged(@Nullable RecyclerView.ViewHolder viewHolder, int actionState) {
+                super.onSelectedChanged(viewHolder, actionState);
+                if (viewHolder != null && actionState == ItemTouchHelper.ACTION_STATE_DRAG) {
+                    viewHolder.itemView.setAlpha(0.92f);
+                    viewHolder.itemView.setElevation(12f);
+                }
+            }
+
+            @Override
+            public void clearView(@NonNull RecyclerView recyclerView,
+                                  @NonNull RecyclerView.ViewHolder viewHolder) {
+                super.clearView(recyclerView, viewHolder);
+                viewHolder.itemView.setAlpha(1f);
+                viewHolder.itemView.setElevation(0f);
+                PrefManager.saveEnvelopes(MainActivity.this, envelopes);
+            }
+        };
+        if (pondItemTouchHelper != null) {
+            pondItemTouchHelper.attachToRecyclerView(null);
+        }
+        pondItemTouchHelper = new ItemTouchHelper(callback);
+        pondItemTouchHelper.attachToRecyclerView(recyclerViewEnvelopes);
+    }
+
+    private int countSelectedPonds() {
+        int count = 0;
+        for (Envelope envelope : envelopes) {
+            if (envelope.isSelected()) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private void updatePondHeaderControls() {
+        if (tvPondSelectedCount == null || btnPondSelectToggle == null || btnPondReorder == null) {
+            return;
+        }
+        int selected = countSelectedPonds();
+        int total = envelopes.size();
+        tvPondSelectedCount.setText(getString(R.string.pond_selected_count, selected));
+        boolean anySelected = selected > 0;
+        btnPondSelectToggle.setImageResource(anySelected
+                ? R.drawable.ic_pond_unselect_all
+                : R.drawable.ic_pond_select_all);
+        btnPondSelectToggle.setContentDescription(getString(anySelected
+                ? R.string.pond_unselect_all
+                : R.string.pond_select_all));
+        btnPondSelectToggle.setEnabled(total > 0);
+        btnPondSelectToggle.setAlpha(total > 0 ? 1f : 0.4f);
+        btnPondReorder.setImageResource(pondReorderMode
+                ? R.drawable.ic_dialog_check
+                : R.drawable.ic_pond_reorder);
+        btnPondReorder.setContentDescription(getString(pondReorderMode
+                ? R.string.pond_reorder_done
+                : R.string.pond_reorder));
+        btnPondReorder.setEnabled(total > 1);
+        btnPondReorder.setAlpha(total > 1 ? 1f : 0.4f);
+        btnPondReorder.setSelected(pondReorderMode);
+        if (envelopeAdapter != null) {
+            envelopeAdapter.notifyDataSetChanged();
+        }
+    }
+
+    private void toggleAllPondSelection() {
+        if (envelopes.isEmpty()) {
+            return;
+        }
+        boolean selectAll = countSelectedPonds() == 0;
+        for (Envelope envelope : envelopes) {
+            envelope.setSelected(selectAll);
+        }
+        PrefManager.saveEnvelopes(this, envelopes);
+        updateTransactionHistory();
+        updatePondHeaderControls();
+    }
+
+    private void togglePondReorderMode() {
+        if (envelopes.size() <= 1) {
+            return;
+        }
+        pondReorderMode = !pondReorderMode;
+        updatePondHeaderControls();
+    }
+
+    private class EnvelopeAdapter extends RecyclerView.Adapter<EnvelopeAdapter.EnvelopeViewHolder> {
+        private final LayoutInflater inflater;
+
+        EnvelopeAdapter(Context context, List<Envelope> envelopes) {
+            this.inflater = LayoutInflater.from(context);
+        }
+
+        @NonNull
+        @Override
+        public EnvelopeViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+            View row = inflater.inflate(R.layout.item_envelope, parent, false);
+            return new EnvelopeViewHolder(row);
         }
 
         @Override
-        public View getView(int position, View convertView, ViewGroup parent) {
-            Envelope envelope = getItem(position);
-
-            if (convertView == null) {
-                convertView = LayoutInflater.from(getContext())
-                        .inflate(R.layout.item_envelope, parent, false);
-            }
-
-            CheckBox cbSelect = convertView.findViewById(R.id.cbSelect);
-            TextView tvName = convertView.findViewById(R.id.tvName);
-            TextView tvAmounts = convertView.findViewById(R.id.tvAmounts);
-            ImageButton btnOptions = convertView.findViewById(R.id.btnOptions);
-
-            tvName.setText(envelope.getName());
-            tvAmounts.setText(String.format(Locale.getDefault(),
-                    "Limit: $%.2f | Remaining: $%.2f",
-                    envelope.getLimit(),
-                    envelope.getRemaining()));
-
-
-            cbSelect.setOnCheckedChangeListener(null);
-            cbSelect.setChecked(envelope.isSelected());
-            cbSelect.setOnCheckedChangeListener((buttonView, isChecked) -> {
-                envelope.setSelected(isChecked);
-                updateTransactionHistory();
-                PrefManager.saveEnvelopes(getContext(), envelopes);
-            });
-
-            btnOptions.setOnClickListener(v -> showEnvelopeOptionsDialog(position));
-            return convertView;
+        public void onBindViewHolder(@NonNull EnvelopeViewHolder holder, int position) {
+            Envelope envelope = envelopes.get(position);
+            holder.bind(envelope, position);
         }
 
+        @Override
+        public int getItemCount() {
+            return envelopes.size();
+        }
+
+        class EnvelopeViewHolder extends RecyclerView.ViewHolder {
+            private final CheckBox cbSelect;
+            private final TextView tvName;
+            private final TextView tvAmounts;
+            private final ImageButton btnOptions;
+            private final ImageView ivDragHandle;
+
+            EnvelopeViewHolder(@NonNull View itemView) {
+                super(itemView);
+                cbSelect = itemView.findViewById(R.id.cbSelect);
+                tvName = itemView.findViewById(R.id.tvName);
+                tvAmounts = itemView.findViewById(R.id.tvAmounts);
+                btnOptions = itemView.findViewById(R.id.btnOptions);
+                ivDragHandle = itemView.findViewById(R.id.ivPondDragHandle);
+            }
+
+            void bind(Envelope envelope, int position) {
+                tvName.setText(envelope.getName());
+                String amounts = String.format(Locale.getDefault(),
+                        "Limit: $%.2f | Remaining: $%.2f",
+                        envelope.getLimit(),
+                        envelope.getRemaining());
+                PondBankReconciliationHelper.Result reconcile = computePondReconciliation(envelope);
+                if (reconcile.isActive()) {
+                    amounts += "\n" + getString(R.string.pond_row_reconcile,
+                            reconcile.getInBank(),
+                            reconcile.getStillToDepositForMonth());
+                    if (reconcile.getPaydaysInMonth() > 0) {
+                        amounts += "\n" + getString(R.string.pond_payday_progress,
+                                reconcile.getPaydaysPassed(),
+                                reconcile.getPaydaysInMonth());
+                    }
+                } else if (envelope.getAccountBalance() != null) {
+                    amounts += String.format(Locale.getDefault(), " | Account: $%.2f",
+                            envelope.getAccountBalance());
+                }
+                tvAmounts.setText(amounts);
+
+                cbSelect.setOnCheckedChangeListener(null);
+                cbSelect.setChecked(envelope.isSelected());
+                cbSelect.setOnCheckedChangeListener((buttonView, isChecked) -> {
+                    envelope.setSelected(isChecked);
+                    updateTransactionHistory();
+                    PrefManager.saveEnvelopes(MainActivity.this, envelopes);
+                    updatePondHeaderControls();
+                });
+
+                ivDragHandle.setVisibility(pondReorderMode ? View.VISIBLE : View.GONE);
+                btnOptions.setEnabled(!pondReorderMode);
+                btnOptions.setAlpha(pondReorderMode ? 0.4f : 1f);
+                btnOptions.setOnClickListener(v -> {
+                    if (!pondReorderMode) {
+                        showEnvelopeOptionsDialog(position);
+                    }
+                });
+                ivDragHandle.setOnTouchListener((v, event) -> {
+                    if (pondReorderMode && pondItemTouchHelper != null
+                            && event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                        pondItemTouchHelper.startDrag(this);
+                        return true;
+                    }
+                    return false;
+                });
+            }
+        }
     }
 
     // Rest of helper methods (showEnvelopeOptionsDialog, showEnvelopeDialog,
     // getEnvelopeNames, showError) remain identical to your original implementation
 
-    @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        getMenuInflater().inflate(R.menu.main, menu);
-        return true;
-    }
-
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        if (item.getItemId() == R.id.action_reset) {
-            showResetConfirmationDialog();
-            return true;
-        }
-        return super.onOptionsItemSelected(item);
-    }
-
     @RequiresApi(api = Build.VERSION_CODES.N)
     private void showResetConfirmationDialog() {
-        new AlertDialog.Builder(this)
-                .setTitle("Recalculate Balances?")
-                .setMessage("This will recompute each envelope’s remaining balance from your existing transactions. Continue?")
-                .setPositiveButton("Recalculate", (dialog, which) -> {
+        new MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.dialog_recalculate_title)
+                .setMessage(R.string.dialog_recalculate_message)
+                .setPositiveButton(R.string.dialog_recalculate_positive, (dialog, which) -> {
                     performMonthlyReset();
                 })
-                .setNegativeButton("Cancel", null)
+                .setNegativeButton(android.R.string.cancel, null)
                 .show();
     }
     private void setupDatePickers() {
@@ -907,8 +3488,7 @@ public class MainActivity extends AppCompatActivity {
                         // month is 0-indexed, so add 1.
                         calendar.set(year, month, dayOfMonth);
                         tvStartDate.setText(sdf.format(calendar.getTime()));
-                        // Refresh your transaction history based on the new filter
-                        updateTransactionHistory();
+                        onManualDateRangeChanged();
                     },
                     calendar.get(Calendar.YEAR),
                     calendar.get(Calendar.MONTH),
@@ -929,7 +3509,7 @@ public class MainActivity extends AppCompatActivity {
                     (view, year, month, dayOfMonth) -> {
                         calendar.set(year, month, dayOfMonth);
                         tvEndDate.setText(sdf.format(calendar.getTime()));
-                        updateTransactionHistory();
+                        onManualDateRangeChanged();
                     },
                     calendar.get(Calendar.YEAR),
                     calendar.get(Calendar.MONTH),
@@ -941,32 +3521,37 @@ public class MainActivity extends AppCompatActivity {
     @RequiresApi(api = Build.VERSION_CODES.N)
     private void performMonthlyReset() {
         for (Envelope envelope : envelopes) {
-            // Recompute remaining = limit – sum(transactions)
+            // Option A: reset(false) syncs limit/remaining to originalLimit and clears manual override;
+            // then calculateRemaining aligns remaining with transactions for the active month.
             envelope.reset(false);
             envelope.calculateRemaining(currentMonth);
+            applyPaydayReconciliationIfActive(envelope);
         }
         PrefManager.saveEnvelopes(this, envelopes);
         updateDisplay();
-        showError("Balances recalculated successfully!");
+        Toast.makeText(this, R.string.toast_balances_recalculated, Toast.LENGTH_SHORT).show();
     }
 
     private void showEnvelopeOptionsDialog(int position) {
         Envelope envelope = envelopes.get(position);
-        new AlertDialog.Builder(this)
-                .setTitle("Envelope Options")
-                .setItems(new CharSequence[]{"Edit", "Delete"}, (dialog, which) -> {
+        new MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.dialog_pond_options_title)
+                .setItems(new CharSequence[]{
+                        getString(R.string.action_edit),
+                        getString(R.string.action_delete)
+                }, (dialog, which) -> {
                     if (which == 0) {
                         showEnvelopeDialog(envelope);
                     } else {
-                        new AlertDialog.Builder(MainActivity.this)
-                                .setMessage("Delete this envelope?")
-                                .setPositiveButton("Delete", (d, w) -> {
+                        new MaterialAlertDialogBuilder(MainActivity.this)
+                                .setMessage(R.string.dialog_delete_pond_message)
+                                .setPositiveButton(R.string.action_delete, (d, w) -> {
                                     removeTransferReferencesToEnvelope(envelope.getName());
                                     envelopes.remove(position);
                                     PrefManager.saveEnvelopes(MainActivity.this, envelopes);
                                     updateDisplay();
                                 })
-                                .setNegativeButton("Cancel", null)
+                                .setNegativeButton(android.R.string.cancel, null)
                                 .show();
                     }
                 })
@@ -974,25 +3559,58 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showEnvelopeDialog(@Nullable Envelope envelopeToEdit) {
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(this);
         View dialogView = getLayoutInflater().inflate(R.layout.dialog_envelope, null);
         EditText etName = dialogView.findViewById(R.id.etEnvelopeName);
         EditText etLimit = dialogView.findViewById(R.id.etEnvelopeLimit);
         EditText etRemainder = dialogView.findViewById(R.id.etEnvelopeRemainder);
         TextView etReminderLabel = dialogView.findViewById(R.id.etEnvelopeRemainderLabel);
-        if(envelopeToEdit == null){
+        EditText etAccount = dialogView.findViewById(R.id.etEnvelopeAccount);
+        TextView tvAccountLabel = dialogView.findViewById(R.id.tvEnvelopeAccountLabel);
+        TextView tvBankReconcilePreview = dialogView.findViewById(R.id.tvBankReconcilePreview);
+        if (envelopeToEdit == null) {
             etReminderLabel.setVisibility(View.GONE);
             etRemainder.setVisibility(View.GONE);
+            tvAccountLabel.setVisibility(View.GONE);
+            etAccount.setVisibility(View.GONE);
+            if (tvBankReconcilePreview != null) {
+                tvBankReconcilePreview.setVisibility(View.GONE);
+            }
         }
         if (envelopeToEdit != null) {
             etName.setText(envelopeToEdit.getName());
             etLimit.setText(String.valueOf(envelopeToEdit.getLimit()));
             etRemainder.setText(String.valueOf(envelopeToEdit.getRemaining()));
+            Double acct = envelopeToEdit.getAccountBalance();
+            if (acct != null) {
+                etAccount.setText(String.valueOf(acct));
+            }
+            Runnable refreshPreview = () -> {
+                double limit = parseAmountOrZero(etLimit);
+                refreshBankReconcilePreview(tvBankReconcilePreview, limit, etAccount.getText().toString());
+            };
+            refreshPreview.run();
+            TextWatcher previewWatcher = new TextWatcher() {
+                @Override
+                public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+                }
+
+                @Override
+                public void onTextChanged(CharSequence s, int start, int before, int count) {
+                    refreshPreview.run();
+                }
+
+                @Override
+                public void afterTextChanged(Editable s) {
+                }
+            };
+            etLimit.addTextChangedListener(previewWatcher);
+            etAccount.addTextChangedListener(previewWatcher);
         }
 
         builder.setView(dialogView)
-                .setTitle(envelopeToEdit == null ? "New Envelope" : "Edit Envelope")
-                .setPositiveButton("Save", (dialog, which) -> {
+                .setTitle(envelopeToEdit == null ? R.string.dialog_new_pond_title : R.string.dialog_edit_pond_title)
+                .setPositiveButton(R.string.save, (dialog, which) -> {
                     String name = etName.getText().toString();
                     String limitStr = etLimit.getText().toString();
 
@@ -1027,19 +3645,30 @@ public class MainActivity extends AppCompatActivity {
                         if(limit != envelopeToEdit.getLimit()) {
                             envelopeToEdit.adjustLimit(limit, currentMonth);
                         }
-                        if (remainder != remaining) {
-                            // Set the manual override values:
-                            envelopeToEdit.setManualOverrideRemaining(remainder); // store the limit at override time
-                        }
                         if (!oldName.equals(name)) {
                             renameTransferReferences(oldName, name);
+                        }
+                        String acctStr = etAccount.getText().toString().trim();
+                        if (acctStr.isEmpty()) {
+                            envelopeToEdit.setAccountBalance(null);
+                        } else {
+                            envelopeToEdit.setAccountBalance(
+                                    MoneyMath.roundToCents(Double.parseDouble(acctStr)));
+                        }
+                        List<Integer> paydays = PrefManager.getPaydays(MainActivity.this);
+                        boolean reconcile = PondBankReconciliationHelper.isReconciliationModeActive(
+                                envelopeToEdit.getAccountBalance(), paydays);
+                        if (reconcile) {
+                            applyPaydayReconciliationIfActive(envelopeToEdit);
+                        } else if (remainder != remaining) {
+                            envelopeToEdit.setManualOverrideRemaining(remainder);
                         }
                     }
 
                     PrefManager.saveEnvelopes(this, envelopes);
                     updateDisplay();
                 })
-                .setNegativeButton("Cancel", null);
+                .setNegativeButton(android.R.string.cancel, null);
 
         builder.create().show();
     }
@@ -1052,20 +3681,30 @@ public class MainActivity extends AppCompatActivity {
         return names;
     }
 
+    @RequiresApi(api = Build.VERSION_CODES.N)
     private void showTransactionDialog(Transaction transactionToEdit) {
-        final Transaction editTransaction = resolveTransferAnchorTransaction(transactionToEdit);
+        final boolean isSplitPurchase = SplitPurchaseSyncHelper.isSplitPurchase(transactionToEdit);
+        final Transaction editTransaction = isSplitPurchase
+                ? SplitPurchaseSyncHelper.resolveForEdit(envelopes, transactionToEdit)
+                : TransferSyncHelper.resolveAnchorTransaction(envelopes, transactionToEdit);
         final boolean wasRecurringBefore = editTransaction.isRecurring();
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(this);
         View dialogView = getLayoutInflater().inflate(R.layout.dialog_transaction, null);
+        clearOcrLearningSession();
 
-        Spinner spinnerEnvelope = dialogView.findViewById(R.id.spinnerEditEnvelope);
+        MaterialAutoCompleteTextView spinnerEnvelope = dialogView.findViewById(R.id.spinnerEditEnvelope);
         EditText etDate = dialogView.findViewById(R.id.etEditTransactionDate);
         EditText etAmount = dialogView.findViewById(R.id.etEditTransactionAmount);
+        EditText etSplitTotal = dialogView.findViewById(R.id.etSplitPurchaseTotal);
         EditText etComment = dialogView.findViewById(R.id.etEditTransactionComment);
-        CheckBox cbIsTransfer = dialogView.findViewById(R.id.cbIsTransfer);
-        TextView tvTransferToLabel = dialogView.findViewById(R.id.tvTransferToLabel);
-        Spinner spinnerTransferDestination = dialogView.findViewById(R.id.spinnerTransferDestination);
-        CheckBox cbIsRecurring = dialogView.findViewById(R.id.cbIsRecurring);
+        TransferDialogViews transferViews = createTransferDialogViews(dialogView);
+        SplitDialogViews splitViews = createSplitDialogViews(dialogView);
+        TabLayout tabTransactionType = dialogView.findViewById(R.id.tabTransactionType);
+        TabLayout tabTransactionTime = dialogView.findViewById(R.id.tabTransactionTime);
+        LinearLayout panelSpending = dialogView.findViewById(R.id.panelSpending);
+        LinearLayout panelTransfer = dialogView.findViewById(R.id.panelTransfer);
+        View panelSplit = dialogView.findViewById(R.id.panelSplitPurchase);
+        LinearLayout layoutRowPond = dialogView.findViewById(R.id.layoutRowPond);
         TextView tvRecurringFrequencyLabel = dialogView.findViewById(R.id.tvRecurringFrequencyLabel);
         LinearLayout layoutRecurringFrequencyOptions = dialogView.findViewById(R.id.layoutRecurringFrequencyOptions);
         TextView btnRecurringWeekly = dialogView.findViewById(R.id.btnRecurringWeekly);
@@ -1081,14 +3720,17 @@ public class MainActivity extends AppCompatActivity {
         TextView btnRecurringDaySat = dialogView.findViewById(R.id.btnRecurringDaySat);
         TextView tvRecurringDaysValue = dialogView.findViewById(R.id.tvRecurringDaysValue);
 
-        ArrayAdapter<String> envelopeAdapter = new ArrayAdapter<>(this,
-                android.R.layout.simple_spinner_item, getEnvelopeNames());
-        envelopeAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        spinnerEnvelope.setAdapter(envelopeAdapter);
+        tabTransactionType.addTab(tabTransactionType.newTab().setText(R.string.tab_transaction_type_spending));
+        tabTransactionType.addTab(tabTransactionType.newTab().setText(R.string.tab_transaction_type_transfer));
+        tabTransactionType.addTab(tabTransactionType.newTab().setText(R.string.tab_transaction_type_split_purchase));
+        tabTransactionTime.addTab(tabTransactionTime.newTab().setText(R.string.tab_transaction_time_one_time));
+        tabTransactionTime.addTab(tabTransactionTime.newTab().setText(R.string.tab_transaction_time_recurring));
 
-        int envelopeIndex = getEnvelopeNames().indexOf(editTransaction.getEnvelopeName());
-        if (envelopeIndex >= 0) {
-            spinnerEnvelope.setSelection(envelopeIndex);
+        bindDialogDropdownOptions(spinnerEnvelope, getEnvelopeNames());
+
+        Envelope envelopeForEdit = PondLookup.findByName(envelopes, editTransaction.getEnvelopeName());
+        if (envelopeForEdit != null) {
+            spinnerEnvelope.setText(envelopeForEdit.getName(), false);
         }
 
         List<Integer> selectedRecurringDays = new ArrayList<>(editTransaction.getRecurringDays());
@@ -1115,7 +3757,7 @@ public class MainActivity extends AppCompatActivity {
             applyRecurringFrequencyButtonSelection(btnRecurringWeekly, btnRecurringBiWeekly, btnRecurringMonthly, selectedRecurringFrequency[0]);
             applyRecurringWeekdayButtonSelection(recurringDayButtons, selectedRecurringDays);
             updateRecurringDaysSummaryView(tvRecurringDaysValue, selectedRecurringFrequency[0], selectedRecurringDays);
-            setRecurringControlsVisibility(cbIsRecurring.isChecked(),
+            setRecurringControlsVisibility(isTransactionDialogRecurringSelected(tabTransactionType, tabTransactionTime),
                     tvRecurringFrequencyLabel,
                     layoutRecurringFrequencyOptions,
                     tvRecurringDaysLabel,
@@ -1129,7 +3771,7 @@ public class MainActivity extends AppCompatActivity {
             applyRecurringFrequencyButtonSelection(btnRecurringWeekly, btnRecurringBiWeekly, btnRecurringMonthly, selectedRecurringFrequency[0]);
             applyRecurringWeekdayButtonSelection(recurringDayButtons, selectedRecurringDays);
             updateRecurringDaysSummaryView(tvRecurringDaysValue, selectedRecurringFrequency[0], selectedRecurringDays);
-            setRecurringControlsVisibility(cbIsRecurring.isChecked(),
+            setRecurringControlsVisibility(isTransactionDialogRecurringSelected(tabTransactionType, tabTransactionTime),
                     tvRecurringFrequencyLabel,
                     layoutRecurringFrequencyOptions,
                     tvRecurringDaysLabel,
@@ -1143,7 +3785,7 @@ public class MainActivity extends AppCompatActivity {
             applyRecurringFrequencyButtonSelection(btnRecurringWeekly, btnRecurringBiWeekly, btnRecurringMonthly, selectedRecurringFrequency[0]);
             applyRecurringWeekdayButtonSelection(recurringDayButtons, selectedRecurringDays);
             updateRecurringDaysSummaryView(tvRecurringDaysValue, selectedRecurringFrequency[0], selectedRecurringDays);
-            setRecurringControlsVisibility(cbIsRecurring.isChecked(),
+            setRecurringControlsVisibility(isTransactionDialogRecurringSelected(tabTransactionType, tabTransactionTime),
                     tvRecurringFrequencyLabel,
                     layoutRecurringFrequencyOptions,
                     tvRecurringDaysLabel,
@@ -1163,53 +3805,15 @@ public class MainActivity extends AppCompatActivity {
             );
         });
 
-        cbIsRecurring.setChecked(editTransaction.isRecurring());
-        setRecurringControlsVisibility(editTransaction.isRecurring(),
-                tvRecurringFrequencyLabel,
-                layoutRecurringFrequencyOptions,
-                tvRecurringDaysLabel,
-                layoutRecurringWeekdayButtons,
-                tvRecurringDaysValue,
-                selectedRecurringFrequency[0]);
-        cbIsRecurring.setOnCheckedChangeListener((buttonView, checked) ->
-                setRecurringControlsVisibility(checked,
-                        tvRecurringFrequencyLabel,
-                        layoutRecurringFrequencyOptions,
-                        tvRecurringDaysLabel,
-                        layoutRecurringWeekdayButtons,
-                        tvRecurringDaysValue,
-                        selectedRecurringFrequency[0]));
+        List<TransferBucketAllocation> existingAllocations = editTransaction.getTransferId() == null
+                ? new ArrayList<>()
+                : TransferSyncHelper.getAllocations(envelopes, editTransaction.getTransferId());
 
-        String selectedDestination = null;
-        boolean editingMirrorTransfer = false;
-        if (editTransaction.getTransferId() != null) {
-            Envelope.TransferData transferData = findTransferById(editTransaction.getTransferId());
-            Envelope transferOwner = findTransferOwner(editTransaction.getTransferId());
-            if (transferData != null) {
-                selectedDestination = transferData.getToEnvelope();
-            }
-            editingMirrorTransfer = transferOwner != null
-                    && !Objects.equals(transferOwner.getName(), editTransaction.getEnvelopeName());
-            if (editingMirrorTransfer && transferOwner != null) {
-                selectedDestination = transferOwner.getName();
-            }
-        }
-
-        final boolean finalEditingMirrorTransfer = editingMirrorTransfer;
-        final String initialDestination = selectedDestination;
-        spinnerEnvelope.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                String source = parent.getItemAtPosition(position).toString();
-                populateTransferDestinationSpinner(spinnerTransferDestination, source, initialDestination);
-            }
-
-            @Override
-            public void onNothingSelected(AdapterView<?> parent) {
-            }
-        });
-        if (spinnerEnvelope.getSelectedItem() != null) {
-            populateTransferDestinationSpinner(spinnerTransferDestination, spinnerEnvelope.getSelectedItem().toString(), initialDestination);
+        List<SplitPurchaseSliceAllocation> initialSplitSlices = null;
+        if (isSplitPurchase) {
+            List<Transaction> peers = SplitPurchaseSyncHelper.findTransactionsInGroup(
+                    envelopes, editTransaction.getSplitPurchaseGroupId());
+            initialSplitSlices = SplitPurchaseSyncHelper.toAllocations(peers);
         }
 
         etDate.setText(editTransaction.getDate());
@@ -1227,122 +3831,318 @@ public class MainActivity extends AppCompatActivity {
             datePickerDialog.show();
         });
 
-        etAmount.setText(String.valueOf(editTransaction.getAmount()));
+        if (isSplitPurchase) {
+            List<Transaction> peers = SplitPurchaseSyncHelper.findTransactionsInGroup(
+                    envelopes, editTransaction.getSplitPurchaseGroupId());
+            etSplitTotal.setText(String.format(Locale.getDefault(), "%.2f", SplitPurchaseSyncHelper.groupTotal(peers)));
+            etAmount.setText("0");
+        } else {
+            etAmount.setText(String.valueOf(editTransaction.getAmount()));
+            etSplitTotal.setText("");
+        }
         etComment.setText(editTransaction.getComment());
 
-        boolean isTransfer = editTransaction.getTransferId() != null && !editTransaction.getTransferId().isEmpty();
-        cbIsTransfer.setChecked(isTransfer);
-        setTransferControlsVisibility(isTransfer, tvTransferToLabel, spinnerTransferDestination);
-        cbIsTransfer.setOnCheckedChangeListener((buttonView, checked) ->
-                setTransferControlsVisibility(checked, tvTransferToLabel, spinnerTransferDestination));
+        boolean isTransfer = !isSplitPurchase
+                && editTransaction.getTransferId() != null
+                && !editTransaction.getTransferId().isEmpty();
+
+        initializeTransferDialogSection(transferViews,
+                etAmount,
+                spinnerEnvelope,
+                existingAllocations.isEmpty() ? null : existingAllocations.get(0).getToEnvelope(),
+                existingAllocations,
+                isTransfer);
+        initializeSplitDialogSection(splitViews, etSplitTotal, initialSplitSlices, isSplitPurchase);
+        attachTransactionDialogScrollDismiss(transferViews, splitViews, dialogView);
+        wireCommentTypeahead(dialogView);
+
+        tabTransactionTime.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
+            @Override
+            public void onTabSelected(TabLayout.Tab tab) {
+                setRecurringControlsVisibility(isTransactionDialogRecurringSelected(tabTransactionType, tabTransactionTime),
+                        tvRecurringFrequencyLabel,
+                        layoutRecurringFrequencyOptions,
+                        tvRecurringDaysLabel,
+                        layoutRecurringWeekdayButtons,
+                        tvRecurringDaysValue,
+                        selectedRecurringFrequency[0]);
+            }
+
+            @Override
+            public void onTabUnselected(TabLayout.Tab tab) {
+            }
+
+            @Override
+            public void onTabReselected(TabLayout.Tab tab) {
+            }
+        });
+        tabTransactionType.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
+            @Override
+            public void onTabSelected(TabLayout.Tab tab) {
+                applyTransactionDialogTypeState(tab.getPosition(),
+                        tabTransactionTime,
+                        panelSpending,
+                        panelTransfer,
+                        panelSplit,
+                        layoutRowPond,
+                        etAmount,
+                        etSplitTotal,
+                        tvRecurringFrequencyLabel,
+                        layoutRecurringFrequencyOptions,
+                        tvRecurringDaysLabel,
+                        layoutRecurringWeekdayButtons,
+                        tvRecurringDaysValue,
+                        selectedRecurringFrequency[0],
+                        transferViews,
+                        splitViews);
+            }
+
+            @Override
+            public void onTabUnselected(TabLayout.Tab tab) {
+            }
+
+            @Override
+            public void onTabReselected(TabLayout.Tab tab) {
+            }
+        });
+
+        int initialTypeTab = isSplitPurchase ? TAB_TYPE_SPLIT
+                : isTransfer ? TAB_TYPE_TRANSFER
+                : TAB_TYPE_SPENDING;
+        if (editTransaction.isRecurring()) {
+            Objects.requireNonNull(tabTransactionTime.getTabAt(TAB_TIME_RECURRING)).select();
+        } else {
+            Objects.requireNonNull(tabTransactionTime.getTabAt(TAB_TIME_ONE_TIME)).select();
+        }
+        Objects.requireNonNull(tabTransactionType.getTabAt(initialTypeTab)).select();
+        setRecurringControlsVisibility(isTransactionDialogRecurringSelected(tabTransactionType, tabTransactionTime),
+                tvRecurringFrequencyLabel,
+                layoutRecurringFrequencyOptions,
+                tvRecurringDaysLabel,
+                layoutRecurringWeekdayButtons,
+                tvRecurringDaysValue,
+                selectedRecurringFrequency[0]);
+
+        receiptDialogHostView = dialogView;
+        wireReceiptRow(dialogView, editTransaction.getReceiptImageUri());
 
         builder.setView(dialogView)
                 .setTitle("Edit Transaction")
-                .setPositiveButton("Save", null)
-                .setNegativeButton("Cancel", null);
+                .setPositiveButton(android.R.string.ok, null)
+                .setNegativeButton(android.R.string.cancel, null);
 
         AlertDialog dialog = builder.create();
-        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+        activeReceiptTransactionDialog = dialog;
+        dialog.setOnDismissListener(d -> {
+            if (awaitingGalleryPick) {
+                return;
+            }
+            if (activeReceiptTransactionDialog == dialog) {
+                activeReceiptTransactionDialog = null;
+            }
+            if (receiptDialogHostView == dialogView) {
+                receiptDialogHostView = null;
+            }
+            receiptImportHostView = null;
+            receiptDialogSaveButton = null;
+            receiptDialogSaveListener = null;
+            receiptImportInProgress = false;
+            if (activeTransferDialogViews == transferViews) {
+                activeTransferDialogViews = null;
+                activeTransferAmountInput = null;
+            }
+            if (activeSplitDialogViews == splitViews) {
+                activeSplitDialogViews = null;
+                activeSplitTotalInput = null;
+            }
+            clearOcrLearningSession();
+        });
+        dialog.setOnShowListener(ignored -> {
+            applyIconMaterialDialogActions(dialog);
+            configureTransactionDialogWindow(dialog);
+            Button positive = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+            receiptDialogSaveButton = positive;
+            transferViews.positiveButton = positive;
+            splitViews.positiveButton = positive;
+            updateTransferSectionSummary(transferViews);
+            updateSplitSectionSummary(splitViews);
+            receiptDialogSaveListener = v -> {
             try {
-                double newAmount = Double.parseDouble(etAmount.getText().toString());
+                if (receiptImportInProgress) {
+                    Toast.makeText(MainActivity.this, R.string.receipt_import_in_progress,
+                            Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                int typeTab = tabTransactionType.getSelectedTabPosition();
+                if (!isSplitPurchase && typeTab == TAB_TYPE_SPLIT) {
+                    showError("Converting an existing transaction to a split purchase is not supported.");
+                    return;
+                }
+                if (isSplitPurchase && typeTab != TAB_TYPE_SPLIT) {
+                    showError("Split purchases cannot be changed to another transaction type.");
+                    return;
+                }
                 String newComment = etComment.getText().toString();
                 String newDate = etDate.getText().toString();
-                String oldEnvelopeName = editTransaction.getEnvelopeName();
-                String newEnvelopeName = spinnerEnvelope.getSelectedItem().toString();
                 String previousMonth = resolveTransactionMonth(editTransaction);
+                View receiptHost = receiptDialogHostView != null ? receiptDialogHostView : dialogView;
+                Object receiptUriTag = receiptHost.getTag(R.id.tag_receipt_image_uri);
+                String receiptUri = receiptUriTag instanceof String ? (String) receiptUriTag : null;
 
-                if (cbIsRecurring.isChecked() && selectedRecurringDays.isEmpty()) {
+                if (typeTab == TAB_TYPE_SPLIT) {
+                    double total = parseAmountOrZero(etSplitTotal);
+                    List<SplitPurchaseSliceAllocation> slices = snapshotSplitAllocations(splitViews);
+                    TransferGroupValidationResult validation = SplitPurchaseGroupDraft.validate(total, slices);
+                    if (!validation.isValid()) {
+                        splitViews.saveAttempted = true;
+                        updateSplitSectionSummary(splitViews);
+                        return;
+                    }
+                    Set<String> months = SplitPurchaseSyncHelper.applyGroup(
+                            envelopes,
+                            editTransaction.getSplitPurchaseGroupId(),
+                            newDate,
+                            newComment,
+                            receiptUri,
+                            slices,
+                            currentMonth);
+                    for (String m : months) {
+                        synchronizeAllEnvelopesForMonth(m);
+                    }
+                    PrefManager.saveEnvelopes(MainActivity.this, envelopes);
+                    persistLearningOnSave(newComment, total);
+                    ensureDateFilterIncludes(newDate);
+                    updateDisplay();
+                    dialog.dismiss();
+                    return;
+                }
+
+                String oldEnvelopeName = editTransaction.getEnvelopeName();
+                Envelope selectedPond = requireSelectedPond(spinnerEnvelope);
+                if (selectedPond == null) {
+                    return;
+                }
+                String newEnvelopeName = selectedPond.getName();
+                double newAmount = Double.parseDouble(etAmount.getText().toString());
+
+                if (isTransactionDialogRecurringSelected(tabTransactionType, tabTransactionTime) && selectedRecurringDays.isEmpty()) {
                     showError("Recurring requires at least one selected day");
                     return;
                 }
 
-                String destination = null;
-                if (cbIsTransfer.isChecked()) {
-                    if (spinnerTransferDestination.getSelectedItem() == null) {
-                        showError("Select where this transfer goes");
+                if (typeTab == TAB_TYPE_TRANSFER) {
+                    TransferGroupValidationResult validation = TransferGroupDraft.validate(
+                            newAmount,
+                            newEnvelopeName,
+                            snapshotTransferAllocations(transferViews));
+                    if (!validation.isValid()) {
+                        transferViews.saveAttempted = true;
+                        updateTransferSectionSummary(transferViews);
                         return;
                     }
-                    destination = spinnerTransferDestination.getSelectedItem().toString();
-                    if (destination.equals(newEnvelopeName)) {
-                        showError("Transfer destination must be a different envelope");
-                        return;
+                }
+
+                if (typeTab != TAB_TYPE_SPLIT) {
+                    if (!oldEnvelopeName.equals(newEnvelopeName)) {
+                        Envelope oldEnvelope = findEnvelopeByName(oldEnvelopeName);
+                        Envelope newEnvelope = findEnvelopeByName(newEnvelopeName);
+                        if (oldEnvelope != null) {
+                            oldEnvelope.getTransactions().remove(editTransaction);
+                            synchronizeEnvelopeMonth(oldEnvelope, resolveTransactionMonth(editTransaction));
+                        }
+                        if (newEnvelope != null) {
+                            newEnvelope.getTransactions().add(editTransaction);
+                            synchronizeEnvelopeMonth(newEnvelope, resolveTransactionMonth(editTransaction));
+                        }
+                        editTransaction.setEnvelopeName(newEnvelopeName);
+                    } else {
+                        Envelope envelope = findEnvelopeByName(newEnvelopeName);
+                        if (envelope != null) {
+                            envelope.updateTransaction(editTransaction, newAmount, currentMonth);
+                        }
+                    }
+
+                    editTransaction.setAmount(newAmount);
+                    editTransaction.setComment(newComment);
+                    editTransaction.setDate(newDate);
+
+                    if (receiptUriTag instanceof String) {
+                        editTransaction.setReceiptImageUri((String) receiptUriTag);
+                    } else {
+                        editTransaction.setReceiptImageUri(null);
+                    }
+
+                    if (isTransactionDialogRecurringSelected(tabTransactionType, tabTransactionTime)) {
+                        editTransaction.setRecurring(true);
+                        editTransaction.setRecurringFrequency(selectedRecurringFrequency[0]);
+                        editTransaction.setRecurringDays(selectedRecurringDays);
+                        if (editTransaction.getRecurringSeriesId() == null || editTransaction.getRecurringSeriesId().isEmpty()) {
+                            editTransaction.setRecurringSeriesId(UUID.randomUUID().toString());
+                        }
+                        editTransaction.setRecurringTemplate(wasRecurringBefore ? editTransaction.isRecurringTemplate() : true);
+                    } else {
+                        editTransaction.setRecurring(false);
+                        editTransaction.setRecurringFrequency(null);
+                        editTransaction.setRecurringDays(new ArrayList<>());
+                        editTransaction.setRecurringSeriesId(null);
+                        editTransaction.setRecurringTemplate(false);
+                    }
+
+                    if (typeTab == TAB_TYPE_TRANSFER) {
+                        List<TransferBucketAllocation> allocations = snapshotTransferAllocations(transferViews);
+                        PrefManager.setLastAddTransferDestination(MainActivity.this, newEnvelopeName, allocations.get(0).getToEnvelope());
+                        TransferSyncHelper.applyTransferGroup(envelopes, editTransaction, newEnvelopeName, allocations);
+                    } else {
+                        TransferSyncHelper.detachTransferGroup(envelopes, editTransaction);
                     }
                 }
 
-                if (!oldEnvelopeName.equals(newEnvelopeName)) {
-                    Envelope oldEnvelope = findEnvelopeByName(oldEnvelopeName);
-                    Envelope newEnvelope = findEnvelopeByName(newEnvelopeName);
-                    if (oldEnvelope != null) {
-                        oldEnvelope.getTransactions().remove(editTransaction);
-                        synchronizeEnvelopeMonth(oldEnvelope, resolveTransactionMonth(editTransaction));
-                    }
-                    if (newEnvelope != null) {
-                        newEnvelope.getTransactions().add(editTransaction);
-                        synchronizeEnvelopeMonth(newEnvelope, resolveTransactionMonth(editTransaction));
-                    }
-                    editTransaction.setEnvelopeName(newEnvelopeName);
-                } else {
-                    Envelope envelope = findEnvelopeByName(newEnvelopeName);
-                    if (envelope != null) {
-                        envelope.updateTransaction(editTransaction, newAmount, currentMonth);
-                    }
-                }
-
-                editTransaction.setAmount(newAmount);
-                editTransaction.setComment(newComment);
-                editTransaction.setDate(newDate);
-
-                if (cbIsRecurring.isChecked()) {
-                    editTransaction.setRecurring(true);
-                    editTransaction.setRecurringFrequency(selectedRecurringFrequency[0]);
-                    editTransaction.setRecurringDays(selectedRecurringDays);
-                    if (editTransaction.getRecurringSeriesId() == null || editTransaction.getRecurringSeriesId().isEmpty()) {
-                        editTransaction.setRecurringSeriesId(UUID.randomUUID().toString());
-                    }
-                    editTransaction.setRecurringTemplate(wasRecurringBefore ? editTransaction.isRecurringTemplate() : true);
-                } else {
-                    editTransaction.setRecurring(false);
-                    editTransaction.setRecurringFrequency(null);
-                    editTransaction.setRecurringDays(new ArrayList<>());
-                    editTransaction.setRecurringSeriesId(null);
-                    editTransaction.setRecurringTemplate(false);
-                }
-
-                if (cbIsTransfer.isChecked()) {
-                    String sourceEnvelopeNameForTransfer = finalEditingMirrorTransfer ? destination : newEnvelopeName;
-                    String destinationEnvelopeNameForTransfer = finalEditingMirrorTransfer ? newEnvelopeName : destination;
-                    upsertTransferForTransaction(editTransaction,
-                            sourceEnvelopeNameForTransfer,
-                            destinationEnvelopeNameForTransfer,
-                            Math.abs(newAmount));
-                } else {
-                    detachTransferFromTransaction(editTransaction);
-                }
-
-                Envelope updatedEnvelope = findEnvelopeByName(editTransaction.getEnvelopeName());
-                synchronizeEnvelopeMonth(updatedEnvelope, previousMonth);
-                synchronizeEnvelopeMonth(updatedEnvelope, resolveTransactionMonth(editTransaction));
+                synchronizeAllEnvelopesForMonth(previousMonth);
+                synchronizeAllEnvelopesForMonth(resolveTransactionMonth(editTransaction));
 
                 PrefManager.saveEnvelopes(MainActivity.this, envelopes);
+                persistLearningOnSave(newComment, newAmount);
+                ensureDateFilterIncludes(newDate);
                 updateDisplay();
                 dialog.dismiss();
             } catch (NumberFormatException e) {
                 showError("Invalid amount entered!");
             }
-        }));
+        };
+            bindReceiptTransactionDialogSave(dialog);
+        });
 
         dialog.show();
     }
     @RequiresApi(api = Build.VERSION_CODES.N)
     private void deleteTransaction(Transaction transaction) {
-        final Transaction targetTransaction = resolveTransferAnchorTransaction(transaction);
-        new AlertDialog.Builder(MainActivity.this)
+        if (SplitPurchaseSyncHelper.isSplitPurchase(transaction)) {
+            final Transaction ref = SplitPurchaseSyncHelper.resolveForEdit(envelopes, transaction);
+            new MaterialAlertDialogBuilder(MainActivity.this)
+                    .setMessage(R.string.dialog_delete_split_purchase_message)
+                    .setPositiveButton(R.string.action_delete, (d, w) -> {
+                        String groupId = ref.getSplitPurchaseGroupId();
+                        Set<String> months = SplitPurchaseSyncHelper.removeGroup(envelopes, groupId);
+                        for (String m : months) {
+                            synchronizeAllEnvelopesForMonth(m);
+                        }
+                        PrefManager.saveEnvelopes(MainActivity.this, envelopes);
+                        updateDisplay();
+                    })
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .show();
+            return;
+        }
+        final Transaction targetTransaction = TransferSyncHelper.resolveAnchorTransaction(envelopes, transaction);
+        new MaterialAlertDialogBuilder(MainActivity.this)
                 .setMessage("Delete this transaction?")
                 .setPositiveButton("Delete", (d, w) -> {
                     Envelope envelope = findEnvelopeByName(targetTransaction.getEnvelopeName());
                     if(envelope != null){
-                        detachTransferFromTransaction(targetTransaction);
+                        String targetMonth = resolveTransactionMonth(targetTransaction);
+                        TransferSyncHelper.detachTransferGroup(envelopes, targetTransaction);
                         envelope.removeTransaction(targetTransaction, currentMonth);
+                        synchronizeAllEnvelopesForMonth(targetMonth);
                         // Save and refresh
                         PrefManager.saveEnvelopes(this, envelopes);
                         updateDisplay();
@@ -1354,41 +4154,40 @@ public class MainActivity extends AppCompatActivity {
 
 
     private Envelope findEnvelopeByName(String envelopeName) {
-        for (Envelope env : envelopes) {
-            if (env.getName().equals(envelopeName)) {
-                return env;
-            }
+        return PondLookup.findByName(envelopes, envelopeName);
+    }
+
+    @Nullable
+    private Envelope requireSelectedPond(@Nullable MaterialAutoCompleteTextView dropdown) {
+        Envelope pond = PondLookup.findByName(envelopes, getSelectedDropdownValue(dropdown));
+        if (pond != null) {
+            return pond;
+        }
+        if (getSelectedDropdownValue(dropdown) == null) {
+            showError("Select a pond");
+        } else {
+            showError(getString(R.string.error_no_pond_found));
         }
         return null;
     }
 
 
     private Envelope findTransferOwner(String transferId) {
-        for (Envelope envelope : envelopes) {
-            for (Envelope.TransferData transfer : envelope.getTransfers()) {
-                if (Objects.equals(transfer.getId(), transferId)) {
-                    return envelope;
-                }
-            }
-        }
-        return null;
+        return TransferSyncHelper.findTransferOwner(envelopes, transferId);
     }
 
     private Envelope.TransferData findTransferById(String transferId) {
-        for (Envelope envelope : envelopes) {
-            for (Envelope.TransferData transfer : envelope.getTransfers()) {
-                if (Objects.equals(transfer.getId(), transferId)) {
-                    return transfer;
-                }
-            }
+        List<TransferBucketAllocation> allocations = TransferSyncHelper.getAllocations(envelopes, transferId);
+        if (allocations.isEmpty()) {
+            return null;
         }
-        return null;
+        TransferBucketAllocation first = allocations.get(0);
+        return new Envelope.TransferData(transferId, first.getBucketId(), first.getToEnvelope(), first.getAmount());
     }
 
     private void removeTransferById(String transferId) {
-        Envelope owner = findTransferOwner(transferId);
-        if (owner != null) {
-            owner.removeTransfer(transferId);
+        for (Envelope envelope : envelopes) {
+            envelope.removeTransfer(transferId);
         }
     }
 
@@ -1408,29 +4207,777 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void populateTransferDestinationSpinner(Spinner spinner, String sourceEnvelopeName, @Nullable String selectedDestination) {
-        List<String> destinations = new ArrayList<>();
-        for (Envelope env : envelopes) {
-            if (!Objects.equals(env.getName(), sourceEnvelopeName)) {
-                destinations.add(env.getName());
-            }
+    private TransferDialogViews createTransferDialogViews(View dialogView) {
+        return new TransferDialogViews(
+                dialogView.findViewById(R.id.layoutTransferBucketsSection),
+                dialogView.findViewById(R.id.scrollTransactionDialogBody),
+                dialogView.findViewById(R.id.spinnerEditEnvelope),
+                dialogView.findViewById(R.id.tvTransferAllocatedSummary),
+                dialogView.findViewById(R.id.tvTransferSpentHereSummary),
+                dialogView.findViewById(R.id.tvTransferRemainingSummary),
+                dialogView.findViewById(R.id.tvTransferValidationMessage),
+                dialogView.findViewById(R.id.layoutTransferBucketsContainer),
+                dialogView.findViewById(R.id.btnAddTransferBucket)
+        );
+    }
+
+    private SplitDialogViews createSplitDialogViews(View dialogView) {
+        return new SplitDialogViews(
+                dialogView.findViewById(R.id.panelSplitPurchase),
+                dialogView.findViewById(R.id.scrollTransactionDialogBody),
+                dialogView.findViewById(R.id.tvSplitAllocatedSummary),
+                dialogView.findViewById(R.id.tvSplitValidationMessage),
+                dialogView.findViewById(R.id.layoutSplitBucketsContainer),
+                dialogView.findViewById(R.id.btnAddSplitBucket)
+        );
+    }
+
+    private void attachTransactionDialogScrollDismiss(TransferDialogViews transferViews,
+                                                      SplitDialogViews splitViews,
+                                                      View dialogView) {
+        transferViews.scrollView.setOnScrollChangeListener((View.OnScrollChangeListener) (scrollView, scrollX, scrollY, oldScrollX, oldScrollY) -> {
+            dismissTransferDropdowns(transferViews);
+            dismissSplitDropdowns(splitViews);
+            hideCommentSuggestions(
+                    (ScrollView) dialogView.findViewById(R.id.scrollCommentSuggestions),
+                    (LinearLayout) dialogView.findViewById(R.id.layoutCommentSuggestions));
+        });
+    }
+
+    private void wireCommentTypeahead(View dialogView) {
+        final EditText etComment = dialogView.findViewById(R.id.etEditTransactionComment);
+        final ScrollView scroll = dialogView.findViewById(R.id.scrollCommentSuggestions);
+        final LinearLayout list = dialogView.findViewById(R.id.layoutCommentSuggestions);
+        if (etComment == null || scroll == null || list == null) {
+            return;
         }
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, destinations);
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        spinner.setAdapter(adapter);
-        if (selectedDestination != null) {
-            int index = destinations.indexOf(selectedDestination);
-            if (index >= 0) {
-                spinner.setSelection(index);
+        final List<String> remembered = learningDb != null
+                ? learningDb.loadComments()
+                : new ArrayList<String>();
+        final Runnable refresh = new Runnable() {
+            @Override
+            public void run() {
+                refreshCommentSuggestions(etComment, scroll, list, remembered);
+            }
+        };
+        etComment.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                refresh.run();
+            }
+        });
+        etComment.setOnFocusChangeListener((v, hasFocus) -> {
+            if (hasFocus) {
+                refresh.run();
+            } else {
+                etComment.postDelayed(() -> {
+                    if (!etComment.hasFocus()) {
+                        hideCommentSuggestions(scroll, list);
+                    }
+                }, 160);
+            }
+        });
+    }
+
+    private void refreshCommentSuggestions(EditText etComment,
+                                           ScrollView scroll,
+                                           LinearLayout list,
+                                           List<String> remembered) {
+        List<String> matches = CommentHistory.suggestions(remembered, etComment.getText().toString());
+        if (!etComment.hasFocus() || matches.isEmpty()) {
+            hideCommentSuggestions(scroll, list);
+            return;
+        }
+        list.removeAllViews();
+        int rowHeight = getResources().getDimensionPixelSize(R.dimen.comment_suggestion_row_height);
+        int visibleRows = Math.min(3, matches.size());
+        ViewGroup.LayoutParams layoutParams = scroll.getLayoutParams();
+        layoutParams.height = visibleRows * rowHeight;
+        scroll.setLayoutParams(layoutParams);
+        int textColor = resolveThemeColor(android.R.attr.textColorPrimary);
+        TypedValue selectable = new TypedValue();
+        getTheme().resolveAttribute(android.R.attr.selectableItemBackground, selectable, true);
+        for (final String match : matches) {
+            TextView row = new TextView(this);
+            row.setText(match);
+            row.setMinHeight(rowHeight);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(dp(12), dp(8), dp(12), dp(8));
+            row.setTextColor(textColor);
+            if (selectable.resourceId != 0) {
+                row.setBackgroundResource(selectable.resourceId);
+            }
+            row.setOnClickListener(v -> {
+                etComment.setText(match);
+                etComment.setSelection(match.length());
+                hideCommentSuggestions(scroll, list);
+            });
+            list.addView(row);
+        }
+        scroll.setVisibility(View.VISIBLE);
+    }
+
+    private void hideCommentSuggestions(@Nullable ScrollView scroll, @Nullable LinearLayout list) {
+        if (list != null) {
+            list.removeAllViews();
+        }
+        if (scroll != null) {
+            scroll.setVisibility(View.GONE);
+        }
+    }
+
+    private void persistLearningOnSave(String comment, double savedAmount) {
+        if (learningDb == null) {
+            return;
+        }
+        learningDb.rememberComment(comment);
+        if (lastOcrLines != null && lastOcrAmount != null) {
+            float[] next = OcrAmountLearner.learn(
+                    lastOcrLines, lastOcrAmount, savedAmount, learningDb.getWeights(), lastOcrMode);
+            learningDb.saveWeights(next);
+        }
+    }
+
+    private void clearOcrLearningSession() {
+        lastOcrLines = null;
+        lastOcrAmount = null;
+        lastOcrMode = ReceiptCaptureMode.AUTO;
+    }
+
+    private float[] currentOcrWeights() {
+        return learningDb != null ? learningDb.getWeights() : OcrAmountWeights.defaults();
+    }
+
+    private void markSplitInteraction(@Nullable SplitDialogViews splitViews) {
+        if (splitViews == null) {
+            return;
+        }
+        splitViews.hasMeaningfulInteraction = true;
+    }
+
+    private double splitAllocatedExcluding(SplitPurchaseBucketRowController excludedController) {
+        if (activeSplitDialogViews == null) {
+            return 0d;
+        }
+        double total = 0d;
+        for (SplitPurchaseBucketRowController controller : activeSplitDialogViews.bucketControllers) {
+            if (controller == excludedController) {
+                continue;
+            }
+            total += Math.max(0d, controller.getAllocation().getAmount());
+        }
+        return total;
+    }
+
+    private void dismissSplitDropdowns(SplitDialogViews splitViews) {
+        dismissSplitDropdownsExcept(splitViews, null);
+    }
+
+    private void dismissSplitDropdownsExcept(SplitDialogViews splitViews,
+                                           @Nullable MaterialAutoCompleteTextView keepOpen) {
+        if (splitViews == null) {
+            return;
+        }
+        for (SplitPurchaseBucketRowController controller : splitViews.bucketControllers) {
+            if (keepOpen == null || controller.getPondDropdown() != keepOpen) {
+                controller.dismissDropdown();
             }
         }
     }
 
-    private void setTransferControlsVisibility(boolean visible, TextView label, Spinner spinner) {
-        int visibility = visible ? View.VISIBLE : View.GONE;
-        label.setVisibility(visibility);
-        spinner.setVisibility(visibility);
+    private void prepareSplitDialogDropdownForOpen(SplitDialogViews splitViews,
+                                                   MaterialAutoCompleteTextView targetDropdown,
+                                                   View anchorView) {
+        dismissSplitDropdownsExcept(splitViews, targetDropdown);
+        scrollSplitDialogToView(splitViews, anchorView, false);
     }
+
+    private void scrollSplitDialogToView(SplitDialogViews splitViews,
+                                         @Nullable View targetView,
+                                         boolean smooth) {
+        if (splitViews == null || targetView == null) {
+            return;
+        }
+        splitViews.scrollView.post(() -> {
+            Rect targetRect = new Rect();
+            targetView.getDrawingRect(targetRect);
+            splitViews.scrollView.offsetDescendantRectToMyCoords(targetView, targetRect);
+            int targetTop = Math.max(0, targetRect.top - dp(12));
+            if (smooth) {
+                splitViews.scrollView.smoothScrollTo(0, targetTop);
+            } else {
+                splitViews.scrollView.scrollTo(0, targetTop);
+            }
+        });
+    }
+
+    private List<SplitPurchaseSliceAllocation> snapshotSplitAllocations(SplitDialogViews splitViews) {
+        List<SplitPurchaseSliceAllocation> snapshot = new ArrayList<>();
+        for (SplitPurchaseBucketRowController controller : splitViews.bucketControllers) {
+            SplitPurchaseSliceAllocation a = controller.getAllocation();
+            snapshot.add(new SplitPurchaseSliceAllocation(a.getBucketId(), a.getPondName(), a.getAmount()));
+        }
+        return snapshot;
+    }
+
+    private void refreshSplitBucketLabels(SplitDialogViews splitViews) {
+        boolean canRemove = splitViews.bucketControllers.size() > 2;
+        for (int i = 0; i < splitViews.bucketControllers.size(); i++) {
+            splitViews.bucketControllers.get(i).setIndex(i, canRemove);
+        }
+    }
+
+    private void addSplitBucketRow(SplitDialogViews splitViews,
+                                   @Nullable SplitPurchaseSliceAllocation initialAllocation) {
+        View rowView = getLayoutInflater().inflate(R.layout.item_transfer_bucket, splitViews.bucketsContainer, false);
+        SplitPurchaseSliceAllocation allocation = initialAllocation == null
+                ? new SplitPurchaseSliceAllocation(null, null, 0d)
+                : new SplitPurchaseSliceAllocation(initialAllocation.getBucketId(), initialAllocation.getPondName(), initialAllocation.getAmount());
+        SplitPurchaseBucketRowController controller = new SplitPurchaseBucketRowController(rowView, allocation);
+        splitViews.bucketControllers.add(controller);
+        splitViews.bucketsContainer.addView(rowView);
+        controller.bindPonds(getEnvelopeNames(), allocation.getPondName());
+        refreshSplitBucketLabels(splitViews);
+    }
+
+    private void clearSplitBucketRows(SplitDialogViews splitViews) {
+        while (!splitViews.bucketControllers.isEmpty()) {
+            SplitPurchaseBucketRowController c = splitViews.bucketControllers.remove(splitViews.bucketControllers.size() - 1);
+            splitViews.bucketsContainer.removeView(c.getRootView());
+        }
+    }
+
+    private void setSplitControlsVisibility(boolean visible, SplitDialogViews splitViews) {
+        dismissSplitDropdowns(splitViews);
+        if (!visible) {
+            splitViews.hasMeaningfulInteraction = false;
+            splitViews.saveAttempted = false;
+        }
+        splitViews.section.setVisibility(visible ? View.VISIBLE : View.GONE);
+        if (visible && splitViews.bucketControllers.isEmpty()) {
+            addSplitBucketRow(splitViews, null);
+            addSplitBucketRow(splitViews, null);
+        }
+        if (visible) {
+            double purchaseTotal = parseAmountOrZero(activeSplitTotalInput);
+            applySplitDefaultAllocations(splitViews, purchaseTotal, false);
+            scrollSplitDialogToView(splitViews, splitViews.section, true);
+        }
+        updateSplitSectionSummary(splitViews);
+    }
+
+    private boolean isBucketAllocationUnset(TransferDialogViews transferViews) {
+        return TransferGroupDraft.allocatedTotal(snapshotTransferAllocations(transferViews)) <= 0d;
+    }
+
+    private boolean isSplitAllocationUnset(SplitDialogViews splitViews) {
+        return SplitPurchaseGroupDraft.allocatedTotal(snapshotSplitAllocations(splitViews)) <= 0d;
+    }
+
+    private void applyTransferDefaultAllocations(TransferDialogViews transferViews,
+                                                 double sourceTotal,
+                                                 boolean forceRedistribute) {
+        if (transferViews.skipDefaultAllocations || transferViews.bucketControllers.isEmpty()) {
+            return;
+        }
+        double safeTotal = MoneyMath.roundToCents(Math.max(0d, sourceTotal));
+        if (safeTotal <= 0d) {
+            return;
+        }
+        int bucketCount = transferViews.bucketControllers.size();
+        if (!forceRedistribute) {
+            if (!isBucketAllocationUnset(transferViews)) {
+                return;
+            }
+            if (bucketCount == 1) {
+                transferViews.bucketControllers.get(0).applyDefaultAmount(safeTotal);
+                return;
+            }
+            return;
+        }
+        int[] percents = MoneyMath.splitIntegerPercentsFirstCeiling(bucketCount);
+        double[] amounts = MoneyMath.splitTotalByPercents(safeTotal, percents);
+        for (int i = 0; i < bucketCount && i < amounts.length; i++) {
+            transferViews.bucketControllers.get(i).applyDefaultAmount(amounts[i]);
+        }
+    }
+
+    private void applySplitDefaultAllocations(SplitDialogViews splitViews,
+                                              double purchaseTotal,
+                                              boolean forceRedistribute) {
+        if (splitViews.skipDefaultAllocations || splitViews.bucketControllers.isEmpty()) {
+            return;
+        }
+        double safeTotal = MoneyMath.roundToCents(Math.max(0d, purchaseTotal));
+        if (safeTotal <= 0d) {
+            return;
+        }
+        int bucketCount = splitViews.bucketControllers.size();
+        if (!forceRedistribute && !isSplitAllocationUnset(splitViews)) {
+            return;
+        }
+        int[] percents = MoneyMath.splitIntegerPercentsFirstCeiling(bucketCount);
+        double[] amounts = MoneyMath.splitTotalByPercents(safeTotal, percents);
+        for (int i = 0; i < bucketCount && i < amounts.length; i++) {
+            splitViews.bucketControllers.get(i).applyDefaultAmount(amounts[i]);
+        }
+    }
+
+    private void maybeSyncSplitTotalFromAmount(EditText etAmount, EditText etSplit) {
+        if (etSplit.getText() != null && etSplit.getText().length() > 0) {
+            return;
+        }
+        if (etAmount.getText() == null || etAmount.getText().length() == 0) {
+            return;
+        }
+        etSplit.setText(etAmount.getText());
+    }
+
+    private void updateSplitSectionSummary(@Nullable SplitDialogViews splitViews) {
+        if (splitViews == null || activeSplitTotalInput == null) {
+            return;
+        }
+        double purchaseTotal = parseAmountOrZero(activeSplitTotalInput);
+        for (SplitPurchaseBucketRowController controller : splitViews.bucketControllers) {
+            controller.refreshSliderBounds(purchaseTotal);
+        }
+        List<SplitPurchaseSliceAllocation> snapshot = snapshotSplitAllocations(splitViews);
+        double allocated = SplitPurchaseGroupDraft.allocatedTotal(snapshot);
+        splitViews.allocatedSummary.setText(String.format(Locale.getDefault(),
+                "Allocated: $%.2f / $%.2f", allocated, purchaseTotal));
+
+        boolean sectionVisible = splitViews.section.getVisibility() == View.VISIBLE;
+        TransferGroupValidationResult validation = sectionVisible
+                ? SplitPurchaseGroupDraft.validate(purchaseTotal, snapshot)
+                : TransferGroupValidationResult.valid();
+        boolean showValidation = TransferBucketUiHelper.shouldShowValidationMessage(
+                sectionVisible,
+                splitViews.hasMeaningfulInteraction,
+                splitViews.saveAttempted,
+                validation);
+        if (showValidation) {
+            splitViews.validationMessage.setVisibility(View.VISIBLE);
+            splitViews.validationMessage.setText(validation.getMessage());
+        } else {
+            splitViews.validationMessage.setText("");
+            splitViews.validationMessage.setVisibility(View.GONE);
+        }
+        if (splitViews.positiveButton != null) {
+            splitViews.positiveButton.setEnabled(!sectionVisible || validation.isValid());
+        }
+    }
+
+    private void initializeSplitDialogSection(SplitDialogViews splitViews,
+                                              EditText totalInput,
+                                              @Nullable List<SplitPurchaseSliceAllocation> initialAllocations,
+                                              boolean showSectionInitially) {
+        activeSplitDialogViews = splitViews;
+        activeSplitTotalInput = totalInput;
+        clearSplitBucketRows(splitViews);
+        splitViews.addBucketButton.setOnClickListener(v -> {
+            markSplitInteraction(splitViews);
+            addSplitBucketRow(splitViews, null);
+            applySplitDefaultAllocations(splitViews, parseAmountOrZero(totalInput), true);
+            updateSplitSectionSummary(splitViews);
+            if (!splitViews.bucketControllers.isEmpty()) {
+                scrollSplitDialogToView(splitViews,
+                        splitViews.bucketControllers.get(splitViews.bucketControllers.size() - 1).getRootView(),
+                        true);
+            }
+        });
+        totalInput.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                if (splitViews.section.getVisibility() == View.VISIBLE
+                        && !splitViews.hasMeaningfulInteraction) {
+                    applySplitDefaultAllocations(splitViews,
+                            parseAmountOrZero(s == null ? null : s.toString()), false);
+                }
+                updateSplitSectionSummary(splitViews);
+            }
+        });
+
+        if (initialAllocations != null && !initialAllocations.isEmpty()) {
+            splitViews.skipDefaultAllocations = true;
+            for (SplitPurchaseSliceAllocation slice : initialAllocations) {
+                addSplitBucketRow(splitViews, slice);
+            }
+        }
+        if (showSectionInitially) {
+            setSplitControlsVisibility(true, splitViews);
+        } else {
+            splitViews.section.setVisibility(View.GONE);
+            updateSplitSectionSummary(splitViews);
+        }
+    }
+
+    private void applyTransactionDialogTypeState(int typeTab,
+                                               TabLayout tabTime,
+                                               View panelSpending,
+                                               View panelTransfer,
+                                               View panelSplit,
+                                               View layoutRowPond,
+                                               EditText etAmount,
+                                               EditText etSplit,
+                                               TextView tvRecurringFrequencyLabel,
+                                               LinearLayout layoutRecurringFrequencyOptions,
+                                               TextView tvRecurringDaysLabel,
+                                               LinearLayout layoutRecurringWeekdayButtons,
+                                               TextView tvRecurringDaysValue,
+                                               String recurringFrequency,
+                                               TransferDialogViews transferViews,
+                                               SplitDialogViews splitViews) {
+        boolean spending = typeTab == TAB_TYPE_SPENDING;
+        boolean transfer = typeTab == TAB_TYPE_TRANSFER;
+        boolean split = typeTab == TAB_TYPE_SPLIT;
+
+        tabTime.setVisibility(spending ? View.VISIBLE : View.GONE);
+        panelSpending.setVisibility(spending ? View.VISIBLE : View.GONE);
+        panelTransfer.setVisibility(transfer ? View.VISIBLE : View.GONE);
+        panelSplit.setVisibility(split ? View.VISIBLE : View.GONE);
+        layoutRowPond.setVisibility(split ? View.GONE : View.VISIBLE);
+        etAmount.setVisibility(split ? View.GONE : View.VISIBLE);
+        etSplit.setVisibility(split ? View.VISIBLE : View.GONE);
+
+        if (transfer || split) {
+            TabLayout.Tab oneTime = tabTime.getTabAt(TAB_TIME_ONE_TIME);
+            if (oneTime != null && tabTime.getSelectedTabPosition() != TAB_TIME_ONE_TIME) {
+                oneTime.select();
+            }
+        }
+
+        if (transfer) {
+            setTransferControlsVisibility(true, transferViews);
+            setSplitControlsVisibility(false, splitViews);
+        } else if (split) {
+            maybeSyncSplitTotalFromAmount(etAmount, etSplit);
+            setTransferControlsVisibility(false, transferViews);
+            setSplitControlsVisibility(true, splitViews);
+        } else {
+            setTransferControlsVisibility(false, transferViews);
+            setSplitControlsVisibility(false, splitViews);
+        }
+        boolean recurringChrome = spending && tabTime.getSelectedTabPosition() == TAB_TIME_RECURRING;
+        setRecurringControlsVisibility(recurringChrome,
+                tvRecurringFrequencyLabel,
+                layoutRecurringFrequencyOptions,
+                tvRecurringDaysLabel,
+                layoutRecurringWeekdayButtons,
+                tvRecurringDaysValue,
+                recurringFrequency);
+        updateTransferSectionSummary(transferViews);
+        updateSplitSectionSummary(splitViews);
+    }
+
+    private void initializeTransferDialogSection(TransferDialogViews transferViews,
+                                                 EditText amountInput,
+                                                 MaterialAutoCompleteTextView sourceSpinner,
+                                                 @Nullable String firstDestination,
+                                                 @Nullable List<TransferBucketAllocation> initialAllocations,
+                                                 boolean enabledInitially) {
+        activeTransferDialogViews = transferViews;
+        activeTransferAmountInput = amountInput;
+        configureDialogDropdown(sourceSpinner, () -> prepareDialogDropdownForOpen(transferViews, sourceSpinner, sourceSpinner));
+        transferViews.addBucketButton.setOnClickListener(v -> {
+            markTransferInteraction(transferViews);
+            String sourceEnvelope = getSelectedDropdownValue(sourceSpinner);
+            addTransferBucketRow(transferViews, sourceEnvelope, null);
+            applyTransferDefaultAllocations(transferViews, parseAmountOrZero(amountInput), true);
+            updateTransferSectionSummary(transferViews);
+            if (!transferViews.bucketControllers.isEmpty()) {
+                scrollTransferDialogToView(transferViews,
+                        transferViews.bucketControllers.get(transferViews.bucketControllers.size() - 1).getRootView(),
+                        true);
+            }
+        });
+        amountInput.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                if (transferViews.section.getVisibility() == View.VISIBLE
+                        && !transferViews.hasMeaningfulInteraction) {
+                    applyTransferDefaultAllocations(transferViews,
+                            parseAmountOrZero(s == null ? null : s.toString()), false);
+                }
+                updateTransferSectionSummary(transferViews);
+            }
+        });
+        sourceSpinner.setOnItemClickListener((parent, view, position, id) -> {
+            String selectedSource = (String) parent.getItemAtPosition(position);
+            sourceSpinner.setText(selectedSource, false);
+            if (transferViews.section.getVisibility() == View.VISIBLE) {
+                markTransferInteraction(transferViews);
+            }
+            rebindTransferBucketDestinations(transferViews, selectedSource);
+            updateTransferSectionSummary(transferViews);
+        });
+
+        if (initialAllocations != null && !initialAllocations.isEmpty()) {
+            transferViews.skipDefaultAllocations = true;
+            for (TransferBucketAllocation allocation : initialAllocations) {
+                addTransferBucketRow(transferViews,
+                        getSelectedDropdownValue(sourceSpinner),
+                        allocation);
+            }
+        } else if (enabledInitially) {
+            addTransferBucketRow(transferViews,
+                    getSelectedDropdownValue(sourceSpinner),
+                    new TransferBucketAllocation(null, firstDestination, 0d));
+        }
+        setTransferControlsVisibility(enabledInitially, transferViews);
+        updateTransferSectionSummary(transferViews);
+    }
+
+    private void addTransferBucketRow(TransferDialogViews transferViews,
+                                      @Nullable String sourceEnvelopeName,
+                                      @Nullable TransferBucketAllocation initialAllocation) {
+        View rowView = getLayoutInflater().inflate(R.layout.item_transfer_bucket, transferViews.bucketsContainer, false);
+        TransferBucketAllocation allocation = initialAllocation == null
+                ? new TransferBucketAllocation(null, null, 0d)
+                : initialAllocation;
+        TransferBucketRowController controller = new TransferBucketRowController(rowView, allocation);
+        transferViews.bucketControllers.add(controller);
+        transferViews.bucketsContainer.addView(rowView);
+        controller.bindDestinations(sourceEnvelopeName, allocation.getToEnvelope());
+        refreshTransferBucketLabels(transferViews);
+    }
+
+    private void rebindTransferBucketDestinations(TransferDialogViews transferViews, @Nullable String sourceEnvelopeName) {
+        for (TransferBucketRowController controller : transferViews.bucketControllers) {
+            controller.bindDestinations(sourceEnvelopeName, controller.getAllocation().getToEnvelope());
+        }
+        refreshTransferBucketLabels(transferViews);
+    }
+
+    private void refreshTransferBucketLabels(TransferDialogViews transferViews) {
+        boolean canRemove = transferViews.bucketControllers.size() > 1;
+        for (int i = 0; i < transferViews.bucketControllers.size(); i++) {
+            transferViews.bucketControllers.get(i).setIndex(i, canRemove);
+        }
+    }
+
+    private void setTransferControlsVisibility(boolean visible, TransferDialogViews transferViews) {
+        dismissTransferDropdowns(transferViews);
+        transferViews.section.setVisibility(visible ? View.VISIBLE : View.GONE);
+        if (visible && transferViews.bucketControllers.isEmpty()) {
+            addTransferBucketRow(transferViews, getSelectedDropdownValue(transferViews.sourceDropdown), null);
+        }
+        if (!visible) {
+            transferViews.hasMeaningfulInteraction = false;
+            transferViews.saveAttempted = false;
+        } else {
+            applyTransferDefaultAllocations(transferViews, parseAmountOrZero(activeTransferAmountInput), false);
+            scrollTransferDialogToView(transferViews, transferViews.section, true);
+        }
+        updateTransferSectionSummary(transferViews);
+    }
+
+    private void updateTransferSectionSummary(@Nullable TransferDialogViews transferViews) {
+        if (transferViews == null || activeTransferAmountInput == null) {
+            return;
+        }
+        double totalAmount = parseAmountOrZero(activeTransferAmountInput);
+        for (TransferBucketRowController controller : transferViews.bucketControllers) {
+            controller.refreshSliderBounds(totalAmount);
+        }
+
+        List<TransferBucketAllocation> allocations = new ArrayList<>();
+        for (TransferBucketRowController controller : transferViews.bucketControllers) {
+            allocations.add(controller.getAllocation());
+        }
+        double allocated = TransferGroupDraft.allocatedTotal(allocations);
+        double spentHere = Math.max(0d, totalAmount - allocated);
+        double remaining = Math.max(0d, totalAmount - allocated);
+
+        transferViews.allocatedSummary.setText(String.format(Locale.getDefault(),
+                "Allocated: $%.2f", allocated));
+        transferViews.spentHereSummary.setText(String.format(Locale.getDefault(),
+                "Spent in this pond: $%.2f", spentHere));
+        transferViews.remainingSummary.setText(String.format(Locale.getDefault(),
+                "Left to allocate: $%.2f", remaining));
+
+        String sourceEnvelopeName = getSelectedDropdownValue(transferViews.sourceDropdown);
+
+        boolean visible = transferViews.section.getVisibility() == View.VISIBLE;
+        TransferGroupValidationResult validation = visible
+                ? TransferGroupDraft.validate(totalAmount, sourceEnvelopeName, allocations)
+                : TransferGroupValidationResult.valid();
+        boolean showValidation = TransferBucketUiHelper.shouldShowValidationMessage(
+                visible,
+                transferViews.hasMeaningfulInteraction,
+                transferViews.saveAttempted,
+                validation);
+        if (showValidation) {
+            transferViews.validationMessage.setVisibility(View.VISIBLE);
+            transferViews.validationMessage.setText(validation.getMessage());
+        } else {
+            transferViews.validationMessage.setText("");
+            transferViews.validationMessage.setVisibility(View.GONE);
+        }
+        if (transferViews.positiveButton != null) {
+            transferViews.positiveButton.setEnabled(!visible || validation.isValid());
+        }
+    }
+
+    private void markTransferInteraction(@Nullable TransferDialogViews transferViews) {
+        if (transferViews == null) {
+            return;
+        }
+        transferViews.hasMeaningfulInteraction = true;
+    }
+
+    private void bindDialogDropdownOptions(MaterialAutoCompleteTextView dropdown, List<String> options) {
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, options);
+        dropdown.setAdapter(adapter);
+    }
+
+    private void configureDialogDropdown(MaterialAutoCompleteTextView dropdown, Runnable onOpen) {
+        dropdown.setKeyListener(null);
+        dropdown.setCursorVisible(false);
+        dropdown.setOnClickListener(view -> {
+            onOpen.run();
+            dropdown.showDropDown();
+        });
+    }
+
+    @Nullable
+    private String getSelectedDropdownValue(@Nullable MaterialAutoCompleteTextView dropdown) {
+        if (dropdown == null || dropdown.getText() == null) {
+            return null;
+        }
+        String selected = dropdown.getText().toString().trim();
+        return selected.isEmpty() ? null : selected;
+    }
+
+    private void prepareDialogDropdownForOpen(TransferDialogViews transferViews,
+                                              MaterialAutoCompleteTextView targetDropdown,
+                                              View anchorView) {
+        dismissTransferDropdownsExcept(transferViews, targetDropdown);
+        scrollTransferDialogToView(transferViews, anchorView, false);
+    }
+
+    private void dismissTransferDropdowns(TransferDialogViews transferViews) {
+        dismissTransferDropdownsExcept(transferViews, null);
+    }
+
+    private void dismissTransferDropdownsExcept(TransferDialogViews transferViews,
+                                                @Nullable MaterialAutoCompleteTextView keepOpen) {
+        if (transferViews == null) {
+            return;
+        }
+        if (transferViews.sourceDropdown != keepOpen) {
+            transferViews.sourceDropdown.dismissDropDown();
+        }
+        for (TransferBucketRowController controller : transferViews.bucketControllers) {
+            if (controller.destinationDropdown != keepOpen) {
+                controller.dismissDropdown();
+            }
+        }
+    }
+
+    private void scrollTransferDialogToView(TransferDialogViews transferViews,
+                                            @Nullable View targetView,
+                                            boolean smooth) {
+        if (transferViews == null || targetView == null) {
+            return;
+        }
+        transferViews.scrollView.post(() -> {
+            Rect targetRect = new Rect();
+            targetView.getDrawingRect(targetRect);
+            transferViews.scrollView.offsetDescendantRectToMyCoords(targetView, targetRect);
+            int targetTop = Math.max(0, targetRect.top - dp(12));
+            if (smooth) {
+                transferViews.scrollView.smoothScrollTo(0, targetTop);
+            } else {
+                transferViews.scrollView.scrollTo(0, targetTop);
+            }
+        });
+    }
+
+    private void configureTransactionDialogWindow(AlertDialog dialog) {
+        dialog.setCanceledOnTouchOutside(false);
+        Window window = dialog.getWindow();
+        if (window == null) {
+            return;
+        }
+        window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+        window.setDimAmount(0.82f);
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+    }
+
+    private List<TransferBucketAllocation> snapshotTransferAllocations(TransferDialogViews transferViews) {
+        List<TransferBucketAllocation> snapshot = new ArrayList<>();
+        for (TransferBucketRowController controller : transferViews.bucketControllers) {
+            TransferBucketAllocation allocation = controller.getAllocation();
+            snapshot.add(new TransferBucketAllocation(
+                    allocation.getBucketId(),
+                    allocation.getToEnvelope(),
+                    allocation.getAmount()
+            ));
+        }
+        return snapshot;
+    }
+
+    private double allocatedExcluding(TransferBucketRowController excludedController) {
+        if (activeTransferDialogViews == null) {
+            return 0d;
+        }
+        double total = 0d;
+        for (TransferBucketRowController controller : activeTransferDialogViews.bucketControllers) {
+            if (controller == excludedController) {
+                continue;
+            }
+            total += Math.max(0d, controller.getAllocation().getAmount());
+        }
+        return total;
+    }
+
+    private double parseAmountOrZero(@Nullable EditText input) {
+        return input == null ? 0d : parseAmountOrZero(input.getText().toString());
+    }
+
+    private double parseAmountOrZero(@Nullable String value) {
+        if (value == null) {
+            return 0d;
+        }
+        String trimmed = value.trim();
+        if (trimmed.isEmpty()) {
+            return 0d;
+        }
+        try {
+            return Double.parseDouble(trimmed);
+        } catch (NumberFormatException ignored) {
+            return 0d;
+        }
+    }
+
+    private String formatCurrency(double amount) {
+        return String.format(Locale.getDefault(), "$%.2f", amount);
+    }
+
     private void setRecurringControlsVisibility(boolean visible,
                                                 TextView frequencyLabel,
                                                 View frequencyOptionsView,
@@ -1491,15 +5038,15 @@ public class MainActivity extends AppCompatActivity {
 
     private void applyRecurringWeekdayButtonSelection(Map<Integer, TextView> dayButtons,
                                                        List<Integer> selectedDays) {
-        int selectedColor = ContextCompat.getColor(this, android.R.color.black);
-        int normalColor = ContextCompat.getColor(this, android.R.color.darker_gray);
+        int selectedColor = ContextCompat.getColor(this, R.color.mountain_primary);
+        int unselectedColor = resolveThemeColor(android.R.attr.textColorPrimary);
         for (Map.Entry<Integer, TextView> entry : dayButtons.entrySet()) {
             boolean selected = selectedDays.contains(entry.getKey());
             TextView button = entry.getValue();
             button.setBackgroundResource(selected
-                    ? R.drawable.recurring_option_selected
-                    : R.drawable.recurring_option_unselected);
-            button.setTextColor(selected ? selectedColor : normalColor);
+                    ? R.drawable.recurring_option_selected_ripple
+                    : R.drawable.recurring_option_unselected_ripple);
+            button.setTextColor(selected ? selectedColor : unselectedColor);
         }
     }
 
@@ -1508,20 +5055,20 @@ public class MainActivity extends AppCompatActivity {
                                                         TextView monthly,
                                                         String selectedFrequency) {
         weekly.setBackgroundResource("weekly".equals(selectedFrequency)
-                ? R.drawable.recurring_option_selected
-                : R.drawable.recurring_option_unselected);
+                ? R.drawable.recurring_option_selected_ripple
+                : R.drawable.recurring_option_unselected_ripple);
         biWeekly.setBackgroundResource("bi-weekly".equals(selectedFrequency)
-                ? R.drawable.recurring_option_selected
-                : R.drawable.recurring_option_unselected);
+                ? R.drawable.recurring_option_selected_ripple
+                : R.drawable.recurring_option_unselected_ripple);
         monthly.setBackgroundResource("monthly".equals(selectedFrequency)
-                ? R.drawable.recurring_option_selected
-                : R.drawable.recurring_option_unselected);
+                ? R.drawable.recurring_option_selected_ripple
+                : R.drawable.recurring_option_unselected_ripple);
 
-        int selectedColor = ContextCompat.getColor(this, android.R.color.black);
-        int normalColor = ContextCompat.getColor(this, android.R.color.darker_gray);
-        weekly.setTextColor("weekly".equals(selectedFrequency) ? selectedColor : normalColor);
-        biWeekly.setTextColor("bi-weekly".equals(selectedFrequency) ? selectedColor : normalColor);
-        monthly.setTextColor("monthly".equals(selectedFrequency) ? selectedColor : normalColor);
+        int selectedColor = ContextCompat.getColor(this, R.color.mountain_primary);
+        int unselectedColor = resolveThemeColor(android.R.attr.textColorPrimary);
+        weekly.setTextColor("weekly".equals(selectedFrequency) ? selectedColor : unselectedColor);
+        biWeekly.setTextColor("bi-weekly".equals(selectedFrequency) ? selectedColor : unselectedColor);
+        monthly.setTextColor("monthly".equals(selectedFrequency) ? selectedColor : unselectedColor);
     }
 
     private String normalizeRecurringFrequency(String selectedDisplay) {
@@ -1601,9 +5148,9 @@ public class MainActivity extends AppCompatActivity {
             checked[i] = selectedDays.contains(values.get(i));
         }
 
-        new AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder dayBuilder = new MaterialAlertDialogBuilder(this)
                 .setTitle("Choose recurring days")
-                .setMultiChoiceItems(labels, checked, (dialog, which, isChecked) -> {
+                .setMultiChoiceItems(labels, checked, (dlg, which, isChecked) -> {
                     Integer value = values.get(which);
                     if (isChecked) {
                         if (!selectedDays.contains(value)) {
@@ -1613,14 +5160,16 @@ public class MainActivity extends AppCompatActivity {
                         selectedDays.remove(value);
                     }
                 })
-                .setPositiveButton("OK", (dialog, which) -> {
+                .setPositiveButton(android.R.string.ok, (dlg, which) -> {
                     Collections.sort(selectedDays);
                     if (onSelectionChanged != null) {
                         onSelectionChanged.run();
                     }
                 })
-                .setNegativeButton("Cancel", null)
-                .show();
+                .setNegativeButton(android.R.string.cancel, null);
+        AlertDialog dayDialog = dayBuilder.create();
+        dayDialog.setOnShowListener(ignored -> applyIconMaterialDialogActions(dayDialog));
+        dayDialog.show();
     }
 
     private void showMonthlyRecurringCalendarDialog(List<Integer> selectedDays, Runnable onSelectionChanged) {
@@ -1640,7 +5189,7 @@ public class MainActivity extends AppCompatActivity {
         btnPrev.setText("\u2039");
         btnPrev.setTextSize(22f);
         btnPrev.setTypeface(btnPrev.getTypeface(), android.graphics.Typeface.BOLD);
-        btnPrev.setTextColor(ContextCompat.getColor(this, android.R.color.black));
+        btnPrev.setTextColor(resolveThemeColor(android.R.attr.textColorPrimary));
         btnPrev.setGravity(android.view.Gravity.CENTER);
         btnPrev.setMinWidth(dp(40));
         btnPrev.setContentDescription("Previous month");
@@ -1658,7 +5207,7 @@ public class MainActivity extends AppCompatActivity {
         btnNext.setText("\u203A");
         btnNext.setTextSize(22f);
         btnNext.setTypeface(btnNext.getTypeface(), android.graphics.Typeface.BOLD);
-        btnNext.setTextColor(ContextCompat.getColor(this, android.R.color.black));
+        btnNext.setTextColor(resolveThemeColor(android.R.attr.textColorPrimary));
         btnNext.setGravity(android.view.Gravity.CENTER);
         btnNext.setMinWidth(dp(40));
         btnNext.setContentDescription("Next month");
@@ -1676,6 +5225,10 @@ public class MainActivity extends AppCompatActivity {
         Runnable renderCalendar = () -> {
             calendarBody.removeAllViews();
             tvMonth.setText(new SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(displayedMonth.getTime()));
+            tvMonth.setTextColor(resolveThemeColor(android.R.attr.textColorPrimary));
+
+            int onSurface = resolveThemeColor(android.R.attr.textColorPrimary);
+            int onChip = ContextCompat.getColor(MainActivity.this, R.color.mountain_primary);
 
             String[] dow = new String[]{"S", "M", "T", "W", "T", "F", "S"};
             LinearLayout dowRow = new LinearLayout(this);
@@ -1684,7 +5237,7 @@ public class MainActivity extends AppCompatActivity {
                 TextView t = new TextView(this);
                 t.setText(label);
                 t.setGravity(android.view.Gravity.CENTER);
-                t.setTextColor(ContextCompat.getColor(this, android.R.color.holo_green_dark));
+                t.setTextColor(ContextCompat.getColor(this, R.color.mountain_primary));
                 t.setTypeface(t.getTypeface(), android.graphics.Typeface.BOLD);
                 LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
                 t.setLayoutParams(lp);
@@ -1715,7 +5268,6 @@ public class MainActivity extends AppCompatActivity {
                 dayCell.setGravity(android.view.Gravity.CENTER);
                 dayCell.setTextSize(13f);
                 dayCell.setPadding(0, dp(4), 0, dp(4));
-                dayCell.setTextColor(ContextCompat.getColor(this, android.R.color.black));
                 LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(40), 1f);
                 lp.setMargins(dp(2), dp(2), dp(2), dp(2));
                 dayCell.setLayoutParams(lp);
@@ -1724,6 +5276,7 @@ public class MainActivity extends AppCompatActivity {
                 dayCell.setBackgroundResource(isSelected
                         ? R.drawable.recurring_calendar_day_selected
                         : R.drawable.recurring_calendar_day_unselected);
+                dayCell.setTextColor(isSelected ? onChip : onSurface);
                 dayCell.setOnClickListener(v -> {
                     if (workingSelection.contains(dayValue)) {
                         workingSelection.remove(dayValue);
@@ -1734,7 +5287,7 @@ public class MainActivity extends AppCompatActivity {
                     dayCell.setBackgroundResource(selected
                             ? R.drawable.recurring_calendar_day_selected
                             : R.drawable.recurring_calendar_day_unselected);
-                    dayCell.setTextColor(ContextCompat.getColor(this, android.R.color.black));
+                    dayCell.setTextColor(selected ? onChip : onSurface);
                 });
 
                 weekRow.addView(dayCell);
@@ -1771,10 +5324,10 @@ public class MainActivity extends AppCompatActivity {
         root.addView(calendarBody);
         renderCalendar.run();
 
-        new AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder monthBuilder = new MaterialAlertDialogBuilder(this)
                 .setTitle("Select monthly days")
                 .setView(root)
-                .setPositiveButton("OK", (dialog, which) -> {
+                .setPositiveButton(android.R.string.ok, (dlg, which) -> {
                     selectedDays.clear();
                     selectedDays.addAll(workingSelection);
                     Collections.sort(selectedDays);
@@ -1782,8 +5335,58 @@ public class MainActivity extends AppCompatActivity {
                         onSelectionChanged.run();
                     }
                 })
-                .setNegativeButton("Cancel", null)
-                .show();
+                .setNegativeButton(android.R.string.cancel, null);
+        AlertDialog monthDialog = monthBuilder.create();
+        monthDialog.setOnShowListener(ignored -> applyIconMaterialDialogActions(monthDialog));
+        monthDialog.show();
+    }
+
+    /** Check (primary) and close (neutral) icons on Material alert actions; clears button labels. */
+    private void applyIconMaterialDialogActions(AlertDialog dialog) {
+        if (dialog == null) {
+            return;
+        }
+        Button positive = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+        Button negative = dialog.getButton(AlertDialog.BUTTON_NEGATIVE);
+        int pad = dp(8);
+        Drawable check = ContextCompat.getDrawable(this, R.drawable.ic_dialog_check);
+        Drawable close = ContextCompat.getDrawable(this, R.drawable.ic_dialog_close);
+        if (positive != null && check != null) {
+            Drawable wrap = DrawableCompat.wrap(check.mutate());
+            DrawableCompat.setTint(wrap, ContextCompat.getColor(this, R.color.mountain_primary));
+            positive.setText("");
+            positive.setContentDescription(getString(R.string.content_desc_dialog_save));
+            positive.setCompoundDrawablesRelativeWithIntrinsicBounds(wrap, null, null, null);
+            positive.setCompoundDrawablePadding(0);
+            positive.setPadding(pad, positive.getPaddingTop(), pad, positive.getPaddingBottom());
+        }
+        if (negative != null && close != null) {
+            Drawable wrap = DrawableCompat.wrap(close.mutate());
+            DrawableCompat.setTint(wrap, resolveThemeColor(androidx.appcompat.R.attr.colorControlNormal));
+            negative.setText("");
+            negative.setContentDescription(getString(R.string.content_desc_dialog_cancel));
+            negative.setCompoundDrawablesRelativeWithIntrinsicBounds(wrap, null, null, null);
+            negative.setCompoundDrawablePadding(0);
+            negative.setPadding(pad, negative.getPaddingTop(), pad, negative.getPaddingBottom());
+        }
+    }
+
+    private int resolveThemeColor(int attrId) {
+        TypedValue tv = new TypedValue();
+        if (!getTheme().resolveAttribute(attrId, tv, true)) {
+            return ContextCompat.getColor(this, R.color.mountain_primary);
+        }
+        if (tv.type >= TypedValue.TYPE_FIRST_COLOR_INT && tv.type <= TypedValue.TYPE_LAST_COLOR_INT) {
+            return tv.data;
+        }
+        if (tv.resourceId != 0) {
+            try {
+                return ContextCompat.getColor(this, tv.resourceId);
+            } catch (Resources.NotFoundException e) {
+                return ContextCompat.getColor(this, R.color.mountain_primary);
+            }
+        }
+        return ContextCompat.getColor(this, R.color.mountain_primary);
     }
 
     private int dp(int value) {
@@ -1938,199 +5541,52 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void upsertTransferForTransaction(Transaction transaction, String sourceEnvelopeName, String destinationEnvelopeName, double amount) {
-        String transferId = transaction.getTransferId();
-        if (transferId == null || transferId.isEmpty()) {
-            transferId = UUID.randomUUID().toString();
-            transaction.setTransferId(transferId);
-        }
-
-        Envelope sourceEnvelope = findEnvelopeByName(sourceEnvelopeName);
-        if (sourceEnvelope == null) {
+    private void synchronizeAllEnvelopesForMonth(@Nullable String month) {
+        if (month == null || month.isEmpty()) {
             return;
         }
-
-        Envelope currentOwner = findTransferOwner(transferId);
-        if (currentOwner != null && !Objects.equals(currentOwner.getName(), sourceEnvelopeName)) {
-            currentOwner.removeTransfer(transferId);
-            currentOwner = null;
-        }
-
-        if (currentOwner == null) {
-            sourceEnvelope.addTransfer(transferId, destinationEnvelopeName, amount);
-        } else {
-            currentOwner.updateTransfer(transferId, destinationEnvelopeName, amount);
-        }
-
-        Transaction sourceTransaction = resolveTransferAnchorTransaction(transaction);
-        if (sourceTransaction == null) {
-            sourceTransaction = transaction;
-        }
-
-        String sourceTransactionMonth = resolveTransactionMonth(sourceTransaction);
-        Envelope sourceHolder = findEnvelopeByName(sourceTransaction.getEnvelopeName());
-        if (sourceHolder != null && sourceHolder != sourceEnvelope) {
-            sourceHolder.getTransactions().remove(sourceTransaction);
-            synchronizeEnvelopeMonth(sourceHolder, sourceTransactionMonth);
-            sourceEnvelope.addTransaction(sourceTransaction, sourceTransactionMonth);
-        }
-
-        sourceTransaction.setEnvelopeName(sourceEnvelopeName);
-        sourceTransaction.setDate(transaction.getDate());
-        sourceTransaction.setComment(transaction.getComment());
-        String updatedSourceMonth = resolveTransactionMonth(sourceTransaction);
-        sourceEnvelope.updateTransaction(sourceTransaction, Math.abs(amount), updatedSourceMonth);
-        synchronizeEnvelopeMonth(sourceEnvelope, sourceTransactionMonth);
-        synchronizeEnvelopeMonth(sourceEnvelope, updatedSourceMonth);
-
-        syncMirrorTransferTransaction(sourceTransaction, sourceEnvelopeName, destinationEnvelopeName, amount);
-    }
-
-    private void detachTransferFromTransaction(Transaction transaction) {
-        String transferId = transaction.getTransferId();
-        if (transferId == null || transferId.isEmpty()) {
-            return;
-        }
-
-        removeTransferById(transferId);
-        removeMirrorTransactions(transferId, transaction);
-        transaction.setTransferId(null);
-    }
-
-    private Transaction resolveTransferAnchorTransaction(Transaction transaction) {
-        if (transaction == null) {
-            return null;
-        }
-
-        String transferId = transaction.getTransferId();
-        if (transferId == null || transferId.isEmpty()) {
-            return transaction;
-        }
-
-        Envelope owner = findTransferOwner(transferId);
-        if (owner == null) {
-            return transaction;
-        }
-
-        for (Transaction candidate : owner.getTransactions()) {
-            if (Objects.equals(candidate.getTransferId(), transferId)) {
-                return candidate;
-            }
-        }
-
-        return transaction;
-    }
-
-    private void syncMirrorTransferTransaction(Transaction sourceTransaction,
-                                               String sourceEnvelopeName,
-                                               String destinationEnvelopeName,
-                                               double amount) {
-        String transferId = sourceTransaction.getTransferId();
-        if (transferId == null || transferId.isEmpty()) {
-            return;
-        }
-
-        Envelope destinationEnvelope = findEnvelopeByName(destinationEnvelopeName);
-        if (destinationEnvelope == null) {
-            return;
-        }
-
-        String mirrorTargetMonth = resolveTransactionMonth(sourceTransaction);
-        Transaction mirror = null;
-        Envelope mirrorEnvelope = null;
         for (Envelope envelope : envelopes) {
-            Iterator<Transaction> iterator = envelope.getTransactions().iterator();
-            while (iterator.hasNext()) {
-                Transaction candidate = iterator.next();
-                if (!Objects.equals(candidate.getTransferId(), transferId) || candidate == sourceTransaction) {
-                    continue;
-                }
-
-                if (Objects.equals(candidate.getEnvelopeName(), destinationEnvelopeName)) {
-                    mirror = candidate;
-                    mirrorEnvelope = envelope;
-                } else {
-                    iterator.remove();
-                    synchronizeEnvelopeMonth(envelope, resolveTransactionMonth(candidate));
-                }
-            }
-        }
-
-        String sourceComment = sourceTransaction.getComment();
-        String mirrorComment = (sourceComment == null || sourceComment.isEmpty())
-                ? "Transfer from " + sourceEnvelopeName
-                : "Transfer from " + sourceEnvelopeName + " | " + sourceComment;
-
-        if (mirror == null) {
-            mirror = new Transaction(destinationEnvelopeName, -Math.abs(amount), sourceTransaction.getDate(), mirrorComment);
-            mirror.setTransferId(transferId);
-            destinationEnvelope.addTransaction(mirror, mirrorTargetMonth);
-            synchronizeEnvelopeMonth(destinationEnvelope, mirrorTargetMonth);
-            return;
-        }
-
-        if (mirrorEnvelope != null && mirrorEnvelope != destinationEnvelope) {
-            String previousMirrorMonth = resolveTransactionMonth(mirror);
-            mirrorEnvelope.getTransactions().remove(mirror);
-            synchronizeEnvelopeMonth(mirrorEnvelope, previousMirrorMonth);
-            destinationEnvelope.addTransaction(mirror, previousMirrorMonth);
-        }
-
-        String previousMirrorMonth = resolveTransactionMonth(mirror);
-        mirror.setEnvelopeName(destinationEnvelopeName);
-        mirror.setDate(sourceTransaction.getDate());
-        mirror.setComment(mirrorComment);
-        String updatedMirrorMonth = resolveTransactionMonth(mirror);
-        destinationEnvelope.updateTransaction(mirror, -Math.abs(amount), updatedMirrorMonth);
-        synchronizeEnvelopeMonth(destinationEnvelope, previousMirrorMonth);
-        synchronizeEnvelopeMonth(destinationEnvelope, updatedMirrorMonth);
-    }
-
-    private void removeMirrorTransactions(String transferId, Transaction anchorTransaction) {
-        for (Envelope envelope : envelopes) {
-            Iterator<Transaction> iterator = envelope.getTransactions().iterator();
-            while (iterator.hasNext()) {
-                Transaction candidate = iterator.next();
-                if (!Objects.equals(candidate.getTransferId(), transferId)) {
-                    continue;
-                }
-                if (candidate == anchorTransaction) {
-                    continue;
-                }
-
-                iterator.remove();
-                if (Objects.equals(candidate.getMonth(), currentMonth)) {
-                    envelope.calculateRemaining(currentMonth);
-                }
-            }
+            synchronizeEnvelopeMonth(envelope, month);
         }
     }
+
     private void ensureMirrorTransactionsForExistingTransfers() {
+        // Snapshot transfer groups first because grouped repair rewrites the owner's transfer list.
+        Map<String, Envelope> transferOwnersById = new HashMap<>();
         for (Envelope owner : envelopes) {
             for (Envelope.TransferData transfer : owner.getTransfers()) {
                 if (transfer.getId() == null || transfer.getId().isEmpty()) {
                     continue;
                 }
-
-                Transaction sourceTransaction = null;
-                for (Transaction candidate : owner.getTransactions()) {
-                    if (Objects.equals(candidate.getTransferId(), transfer.getId())) {
-                        sourceTransaction = candidate;
-                        break;
-                    }
-                }
-
-                if (sourceTransaction == null) {
-                    continue;
-                }
-
-                syncMirrorTransferTransaction(
-                        sourceTransaction,
-                        owner.getName(),
-                        transfer.getToEnvelope(),
-                        Math.abs(sourceTransaction.getAmount())
-                );
+                transferOwnersById.putIfAbsent(transfer.getId(), owner);
             }
+        }
+
+        for (Map.Entry<String, Envelope> entry : transferOwnersById.entrySet()) {
+            String transferId = entry.getKey();
+            Envelope owner = entry.getValue();
+            if (owner == null) {
+                continue;
+            }
+
+            Transaction sourceTransaction = null;
+            for (Transaction candidate : owner.getTransactions()) {
+                if (Objects.equals(candidate.getTransferId(), transferId)
+                        && (candidate.getTransferBucketId() == null || candidate.getTransferBucketId().isEmpty())) {
+                    sourceTransaction = candidate;
+                    break;
+                }
+            }
+            if (sourceTransaction == null) {
+                continue;
+            }
+
+            TransferSyncHelper.applyTransferGroup(
+                    envelopes,
+                    sourceTransaction,
+                    owner.getName(),
+                    TransferSyncHelper.getAllocations(envelopes, transferId));
+            synchronizeAllEnvelopesForMonth(resolveTransactionMonth(sourceTransaction));
         }
     }
     private void updateTransferTotalsPanel(List<TransferTotalsOption> options) {
@@ -2146,13 +5602,7 @@ public class MainActivity extends AppCompatActivity {
 
         layoutTransferTotals.setVisibility(View.VISIBLE);
 
-        options.sort((a, b) -> {
-            int prefixCompare = a.labelPrefix.compareToIgnoreCase(b.labelPrefix);
-            if (prefixCompare != 0) {
-                return prefixCompare;
-            }
-            return a.envelopeName.compareToIgnoreCase(b.envelopeName);
-        });
+        options.sort((a, b) -> a.envelopeName.compareToIgnoreCase(b.envelopeName));
 
         if (options.isEmpty()) {
             spinnerTransferTotals.setOnItemSelectedListener(null);
@@ -2219,15 +5669,640 @@ public class MainActivity extends AppCompatActivity {
     private String formatTransferTotalsSummary(TransferTotalsOption option) {
         return String.format(Locale.getDefault(), "%s %s: $%.2f", option.labelPrefix, option.envelopeName, option.total);
     }
+
+    /** Start of local today (00:00) for consistent range end when the bills-period filter is on. */
+    private static Date startOfToday() {
+        Calendar c = Calendar.getInstance();
+        c.set(Calendar.HOUR_OF_DAY, 0);
+        c.set(Calendar.MINUTE, 0);
+        c.set(Calendar.SECOND, 0);
+        c.set(Calendar.MILLISECOND, 0);
+        return c.getTime();
+    }
+
+    private void clearBillsPeriodFilterState() {
+        billsPeriodFilterActive = false;
+        PrefManager.setBillsFilterActive(this, false);
+        PrefManager.clearBillsFilterSavedRange(this);
+        updateBillsPeriodFilterButton(findViewById(R.id.btnBillsPeriodFilter));
+    }
+
+    private void applyPersistedBillsFilterState() {
+        if (!PrefManager.isBillsFilterActive(this)) {
+            return;
+        }
+        List<Integer> days = PrefManager.getBillsDays(this);
+        if (days.isEmpty()) {
+            PrefManager.setBillsFilterActive(this, false);
+            return;
+        }
+        TextView tvStart = findViewById(R.id.tvStartDate);
+        TextView tvEnd = findViewById(R.id.tvEndDate);
+        SimpleDateFormat sdf = new SimpleDateFormat("MMM d, yyyy", Locale.getDefault());
+        Date anchor = BillsDayAnchor.computeAnchorDate(Calendar.getInstance(), days);
+        if (anchor == null) {
+            PrefManager.setBillsFilterActive(this, false);
+            return;
+        }
+        tvStart.setText(sdf.format(anchor));
+        tvEnd.setText(sdf.format(startOfToday()));
+        billsPeriodFilterActive = true;
+        updateBillsPeriodFilterButton(findViewById(R.id.btnBillsPeriodFilter));
+    }
+
+    private void toggleBillsPeriodFilter() {
+        List<Integer> days = PrefManager.getBillsDays(this);
+        if (days.isEmpty()) {
+            Toast.makeText(this, R.string.toast_configure_bills_days_first, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        TextView tvStart = findViewById(R.id.tvStartDate);
+        TextView tvEnd = findViewById(R.id.tvEndDate);
+        SimpleDateFormat sdf = new SimpleDateFormat("MMM d, yyyy", Locale.getDefault());
+        if (!billsPeriodFilterActive) {
+            PrefManager.saveBillsFilterSavedRange(this, tvStart.getText().toString(), tvEnd.getText().toString());
+            Date anchor = BillsDayAnchor.computeAnchorDate(Calendar.getInstance(), days);
+            if (anchor == null) {
+                Toast.makeText(this, R.string.toast_no_bills_anchor, Toast.LENGTH_SHORT).show();
+                return;
+            }
+            tvStart.setText(sdf.format(anchor));
+            tvEnd.setText(sdf.format(startOfToday()));
+            billsPeriodFilterActive = true;
+            PrefManager.setBillsFilterActive(this, true);
+        } else {
+            String rs = PrefManager.getBillsFilterSavedStartDisplay(this);
+            String re = PrefManager.getBillsFilterSavedEndDisplay(this);
+            if (rs != null) {
+                tvStart.setText(rs);
+            }
+            if (re != null) {
+                tvEnd.setText(re);
+            }
+            billsPeriodFilterActive = false;
+            PrefManager.setBillsFilterActive(this, false);
+            PrefManager.clearBillsFilterSavedRange(this);
+        }
+        updateBillsPeriodFilterButton(findViewById(R.id.btnBillsPeriodFilter));
+        updateTransactionHistory();
+    }
+
+    private void updateBillsPeriodFilterButton(ImageButton button) {
+        if (button == null) {
+            return;
+        }
+        if (billsPeriodFilterActive) {
+            button.setColorFilter(ContextCompat.getColor(this, R.color.mountain_primary), PorterDuff.Mode.SRC_IN);
+            button.setAlpha(1f);
+        } else {
+            button.setColorFilter(resolveThemeColor(androidx.appcompat.R.attr.colorControlNormal), PorterDuff.Mode.SRC_IN);
+            button.setAlpha(0.65f);
+        }
+    }
+
+    private void onManualDateRangeChanged() {
+        if (billsPeriodFilterActive) {
+            billsPeriodFilterActive = false;
+            PrefManager.setBillsFilterActive(this, false);
+            PrefManager.clearBillsFilterSavedRange(this);
+            updateBillsPeriodFilterButton(findViewById(R.id.btnBillsPeriodFilter));
+        }
+        updateTransactionHistory();
+    }
+
+    private boolean isGlobalPaydayReconciliationEnabled() {
+        return !PrefManager.getPaydays(this).isEmpty();
+    }
+
+    private Calendar calendarForCurrentMonth() {
+        Calendar cal = Calendar.getInstance();
+        if (currentMonth != null && !currentMonth.isEmpty()) {
+            try {
+                SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM", Locale.getDefault());
+                Date d = sdf.parse(currentMonth);
+                if (d != null) {
+                    cal.setTime(d);
+                }
+            } catch (ParseException ignored) {
+            }
+        }
+        cal.set(Calendar.DAY_OF_MONTH, 1);
+        cal.set(Calendar.HOUR_OF_DAY, 0);
+        cal.set(Calendar.MINUTE, 0);
+        cal.set(Calendar.SECOND, 0);
+        cal.set(Calendar.MILLISECOND, 0);
+        return cal;
+    }
+
+    private void applyPaydayReconciliationIfActive(Envelope envelope) {
+        List<Integer> paydays = PrefManager.getPaydays(this);
+        if (!PondBankReconciliationHelper.isReconciliationModeActive(envelope.getAccountBalance(), paydays)) {
+            return;
+        }
+        PondBankReconciliationHelper.Result result = PondBankReconciliationHelper.compute(
+                envelope.getLimit(),
+                envelope.getAccountBalance(),
+                paydays,
+                calendarForCurrentMonth(),
+                Calendar.getInstance(),
+                monthSpendForEnvelope(envelope));
+        envelope.clearManualRemainingOverride();
+        envelope.setRemaining(MoneyMath.roundToCents(result.getEstimatedRemaining()));
+    }
+
+    private void applyPaydayReconciliationToAllEligibleEnvelopes() {
+        if (!isGlobalPaydayReconciliationEnabled()) {
+            return;
+        }
+        for (Envelope envelope : envelopes) {
+            applyPaydayReconciliationIfActive(envelope);
+        }
+    }
+
+    /** Sum of this pond's transaction amounts for {@link #currentMonth} (same month match as Envelope). */
+    private double monthSpendForEnvelope(Envelope envelope) {
+        if (envelope == null || currentMonth == null) {
+            return 0d;
+        }
+        double spent = 0d;
+        List<Transaction> transactions = envelope.getTransactions();
+        if (transactions == null) {
+            return 0d;
+        }
+        for (Transaction transaction : transactions) {
+            if (transaction == null) {
+                continue;
+            }
+            String transactionMonth = transaction.getMonth();
+            if (transactionMonth != null && transactionMonth.equals(currentMonth)) {
+                spent += safe(transaction.getAmount());
+            }
+        }
+        return MoneyMath.roundToCents(spent);
+    }
+
+    @Nullable
+    private PondBankReconciliationHelper.Result computePondReconciliation(Envelope envelope) {
+        List<Integer> paydays = PrefManager.getPaydays(this);
+        return PondBankReconciliationHelper.compute(
+                envelope.getLimit(),
+                envelope.getAccountBalance(),
+                paydays,
+                calendarForCurrentMonth(),
+                Calendar.getInstance(),
+                monthSpendForEnvelope(envelope));
+    }
+
+    private void refreshBankReconcilePreview(TextView preview, double limit, String accountText) {
+        if (preview == null) {
+            return;
+        }
+        List<Integer> paydays = PrefManager.getPaydays(this);
+        String trimmed = accountText == null ? "" : accountText.trim();
+        if (paydays.isEmpty() || trimmed.isEmpty()) {
+            preview.setVisibility(View.GONE);
+            return;
+        }
+        try {
+            double account = MoneyMath.roundToCents(Double.parseDouble(trimmed));
+            PondBankReconciliationHelper.Result r = PondBankReconciliationHelper.compute(
+                    limit, account, paydays, calendarForCurrentMonth(), Calendar.getInstance());
+            preview.setVisibility(View.VISIBLE);
+            preview.setText(getString(R.string.pond_edit_reconcile_preview,
+                    r.getInBank(), r.getStillToDepositForMonth()));
+        } catch (NumberFormatException ignored) {
+            preview.setVisibility(View.GONE);
+        }
+    }
+
+    private void fillDayOfMonthGrid(TableLayout table, HashSet<Integer> selected) {
+        table.removeAllViews();
+        int pad = (int) (8 * getResources().getDisplayMetrics().density);
+        table.setPadding(pad, pad, pad, pad);
+        int day = 1;
+        while (day <= 31) {
+            TableRow row = new TableRow(this);
+            for (int c = 0; c < 7 && day <= 31; c++) {
+                final int d = day;
+                day++;
+                TextView cell = new TextView(this);
+                cell.setText(String.valueOf(d));
+                cell.setGravity(Gravity.CENTER);
+                cell.setPadding(pad, pad, pad, pad);
+                billsDayRefreshCell(cell, selected.contains(d));
+                cell.setOnClickListener(v -> {
+                    if (selected.contains(d)) {
+                        selected.remove(d);
+                    } else {
+                        selected.add(d);
+                    }
+                    billsDayRefreshCell(cell, selected.contains(d));
+                });
+                row.addView(cell);
+            }
+            table.addView(row);
+        }
+    }
+
+    private void updatePondTotalsFooter() {
+        if (tvPondTotalsFooter == null) {
+            return;
+        }
+        double sumRem = 0d;
+        for (Envelope e : envelopes) {
+            sumRem += e.getRemaining();
+        }
+        List<Integer> paydays = PrefManager.getPaydays(this);
+        boolean reconcileFooter = !paydays.isEmpty();
+        double sumInBank = 0d;
+        double sumStillToDeposit = 0d;
+        int acctCount = 0;
+        for (Envelope e : envelopes) {
+            if (e.getAccountBalance() == null) {
+                continue;
+            }
+            acctCount++;
+            PondBankReconciliationHelper.Result r = computePondReconciliation(e);
+            if (r.isActive()) {
+                sumInBank += r.getInBank();
+                sumStillToDeposit += r.getStillToDepositForMonth();
+            }
+        }
+        if (acctCount == 0) {
+            tvPondTotalsFooter.setText(String.format(Locale.getDefault(), getString(R.string.pond_footer_partial), sumRem));
+            return;
+        }
+        if (reconcileFooter) {
+            tvPondTotalsFooter.setText(getString(R.string.pond_footer_reconcile,
+                    MoneyMath.roundToCents(sumInBank),
+                    MoneyMath.roundToCents(sumStillToDeposit)));
+            return;
+        }
+        double sumAcct = 0d;
+        for (Envelope e : envelopes) {
+            if (e.getAccountBalance() != null) {
+                sumAcct += e.getAccountBalance();
+            }
+        }
+        double diff = sumAcct - sumRem;
+        tvPondTotalsFooter.setText(String.format(Locale.getDefault(), getString(R.string.pond_footer_full), sumAcct, sumRem, diff));
+    }
+
+    private void showAnalysisDialog() {
+        View dialogView = getLayoutInflater().inflate(R.layout.dialog_analysis, null);
+        final TextView chipLast3 = dialogView.findViewById(R.id.chipAnalysisLast3);
+        final TextView chipLast6 = dialogView.findViewById(R.id.chipAnalysisLast6);
+        final TextView chipLast12 = dialogView.findViewById(R.id.chipAnalysisLast12);
+        final ChipGroup chipGroupPonds = dialogView.findViewById(R.id.chipGroupAnalysisPonds);
+        final CheckBox cbIncludeTransfers = dialogView.findViewById(R.id.cbAnalysisIncludeTransfers);
+        final TextView tvThisMonthTitle = dialogView.findViewById(R.id.tvAnalysisThisMonthTitle);
+        final LinearLayout layoutSnapshot = dialogView.findViewById(R.id.layoutAnalysisSnapshot);
+        final SpendBarChartView chartMonths = dialogView.findViewById(R.id.chartAnalysisMonths);
+        final TextView tvOverTitle = dialogView.findViewById(R.id.tvAnalysisOverBudgetTitle);
+        final LinearLayout layoutOver = dialogView.findViewById(R.id.layoutAnalysisOverBudget);
+        final TextView tvNoSpending = dialogView.findViewById(R.id.tvAnalysisNoSpending);
+        final TextView tvByPondTitle = dialogView.findViewById(R.id.tvAnalysisByPondTitle);
+        final SpendBarChartView chartPonds = dialogView.findViewById(R.id.chartAnalysisPonds);
+
+        final int[] lastN = { SpendAnalysisHelper.DEFAULT_LAST_N };
+        final LinkedHashSet<String> pondNames = new LinkedHashSet<>(initialAnalysisPondNames());
+        final List<String> allPondNames = allAnalysisPondNames();
+
+        final Runnable refresh = () -> bindAnalysisDialog(
+                lastN[0],
+                new ArrayList<>(pondNames),
+                cbIncludeTransfers.isChecked(),
+                tvThisMonthTitle,
+                layoutSnapshot,
+                chartMonths,
+                tvOverTitle,
+                layoutOver,
+                tvNoSpending,
+                tvByPondTitle,
+                chartPonds);
+
+        chipLast3.setOnClickListener(v -> {
+            lastN[0] = 3;
+            applyAnalysisMonthChipSelection(chipLast3, chipLast6, chipLast12, lastN[0]);
+            refresh.run();
+        });
+        chipLast6.setOnClickListener(v -> {
+            lastN[0] = 6;
+            applyAnalysisMonthChipSelection(chipLast3, chipLast6, chipLast12, lastN[0]);
+            refresh.run();
+        });
+        chipLast12.setOnClickListener(v -> {
+            lastN[0] = 12;
+            applyAnalysisMonthChipSelection(chipLast3, chipLast6, chipLast12, lastN[0]);
+            refresh.run();
+        });
+        cbIncludeTransfers.setOnCheckedChangeListener((button, checked) -> refresh.run());
+        populateAnalysisPondChips(chipGroupPonds, allPondNames, pondNames, refresh);
+        applyAnalysisMonthChipSelection(chipLast3, chipLast6, chipLast12, lastN[0]);
+        refresh.run();
+
+        MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(this);
+        builder.setTitle(R.string.dialog_analysis_title)
+                .setView(dialogView)
+                .setPositiveButton(R.string.save, null)
+                .setNegativeButton(android.R.string.cancel, null);
+        AlertDialog dialog = builder.create();
+        dialog.setOnShowListener(ignored -> applyIconMaterialDialogActions(dialog));
+        dialog.show();
+    }
+
+    private List<String> allAnalysisPondNames() {
+        List<String> names = new ArrayList<>();
+        if (envelopes == null) {
+            return names;
+        }
+        for (Envelope envelope : envelopes) {
+            if (envelope != null && envelope.getName() != null && !envelope.getName().trim().isEmpty()) {
+                names.add(envelope.getName());
+            }
+        }
+        return names;
+    }
+
+    private List<String> initialAnalysisPondNames() {
+        List<String> selected = new ArrayList<>();
+        if (envelopes == null) {
+            return selected;
+        }
+        for (Envelope envelope : envelopes) {
+            if (envelope != null && envelope.isSelected() && envelope.getName() != null) {
+                selected.add(envelope.getName());
+            }
+        }
+        if (selected.isEmpty()) {
+            selected.addAll(allAnalysisPondNames());
+        }
+        return selected;
+    }
+
+    private void applyAnalysisMonthChipSelection(TextView last3, TextView last6, TextView last12, int lastN) {
+        styleAnalysisFilterChip(last3, lastN == 3);
+        styleAnalysisFilterChip(last6, lastN == 6);
+        styleAnalysisFilterChip(last12, lastN == 12);
+    }
+
+    private void styleAnalysisFilterChip(TextView chip, boolean selected) {
+        chip.setBackgroundResource(selected
+                ? R.drawable.recurring_option_selected_ripple
+                : R.drawable.recurring_option_unselected_ripple);
+        chip.setTextColor(selected
+                ? ContextCompat.getColor(this, R.color.mountain_primary)
+                : resolveThemeColor(android.R.attr.textColorPrimary));
+    }
+
+    private void populateAnalysisPondChips(ChipGroup group,
+                                           List<String> allPondNames,
+                                           LinkedHashSet<String> selectedNames,
+                                           Runnable onChange) {
+        group.removeAllViews();
+        boolean allSelected = !allPondNames.isEmpty() && selectedNames.containsAll(allPondNames);
+        Chip allChip = createAnalysisPondChip(getString(R.string.analysis_all_ponds), allSelected);
+        allChip.setOnClickListener(v -> {
+            selectedNames.clear();
+            selectedNames.addAll(allPondNames);
+            populateAnalysisPondChips(group, allPondNames, selectedNames, onChange);
+            onChange.run();
+        });
+        group.addView(allChip);
+        for (final String name : allPondNames) {
+            Chip chip = createAnalysisPondChip(name, selectedNames.contains(name));
+            chip.setOnClickListener(v -> {
+                if (selectedNames.contains(name)) {
+                    if (selectedNames.size() == 1) {
+                        populateAnalysisPondChips(group, allPondNames, selectedNames, onChange);
+                        return;
+                    }
+                    selectedNames.remove(name);
+                } else {
+                    selectedNames.add(name);
+                }
+                populateAnalysisPondChips(group, allPondNames, selectedNames, onChange);
+                onChange.run();
+            });
+            group.addView(chip);
+        }
+    }
+
+    private Chip createAnalysisPondChip(String label, boolean checked) {
+        Chip chip = new Chip(this);
+        chip.setText(label);
+        chip.setCheckable(true);
+        chip.setChecked(checked);
+        chip.setCheckedIconVisible(false);
+        chip.setClickable(true);
+        chip.setChipStrokeWidth(dp(1));
+        int stroke = ContextCompat.getColor(this, R.color.recurring_chip_stroke);
+        chip.setChipStrokeColor(ColorStateList.valueOf(stroke));
+        int selectedFill = ContextCompat.getColor(this, R.color.recurring_chip_fill_selected);
+        int unselectedFill = ContextCompat.getColor(this, R.color.recurring_chip_fill_unselected);
+        chip.setChipBackgroundColor(new ColorStateList(
+                new int[][]{
+                        new int[]{android.R.attr.state_checked},
+                        new int[]{}
+                },
+                new int[]{selectedFill, unselectedFill}
+        ));
+        int selectedText = ContextCompat.getColor(this, R.color.mountain_primary);
+        int unselectedText = resolveThemeColor(android.R.attr.textColorPrimary);
+        chip.setTextColor(checked ? selectedText : unselectedText);
+        return chip;
+    }
+
+    private void bindAnalysisDialog(int lastN,
+                                    List<String> pondNames,
+                                    boolean includeTransfers,
+                                    TextView tvThisMonthTitle,
+                                    LinearLayout layoutSnapshot,
+                                    SpendBarChartView chartMonths,
+                                    TextView tvOverTitle,
+                                    LinearLayout layoutOver,
+                                    TextView tvNoSpending,
+                                    TextView tvByPondTitle,
+                                    SpendBarChartView chartPonds) {
+        String endMonth = currentMonth != null ? currentMonth : MonthTracker.getCurrentMonth(this);
+        SpendAnalysisHelper.SpendAnalysisResult result = SpendAnalysisHelper.analyze(
+                envelopes,
+                new SpendAnalysisHelper.SpendAnalysisQuery(endMonth, lastN, pondNames, includeTransfers));
+
+        tvThisMonthTitle.setText(getString(R.string.analysis_this_month, formatDisplayMonth(endMonth)));
+        layoutSnapshot.removeAllViews();
+        boolean hidePondName = result.thisMonth.size() == 1;
+        for (SpendAnalysisHelper.SnapshotRow row : result.thisMonth) {
+            layoutSnapshot.addView(createAnalysisSnapshotRow(row, hidePondName));
+        }
+
+        List<String> monthLabels = new ArrayList<>();
+        List<Double> monthValues = new ArrayList<>();
+        StringBuilder monthDescription = new StringBuilder();
+        for (SpendAnalysisHelper.MonthSpend monthSpend : result.months) {
+            monthLabels.add(SpendAnalysisHelper.shortMonthLabel(monthSpend.month));
+            monthValues.add(monthSpend.totalSpend);
+            if (monthDescription.length() > 0) {
+                monthDescription.append(". ");
+            }
+            monthDescription.append(getString(R.string.analysis_month_bar_description,
+                    SpendAnalysisHelper.fullMonthLabel(monthSpend.month),
+                    formatCurrency(monthSpend.totalSpend)));
+        }
+        chartMonths.setVerticalBars(monthLabels, monthValues, monthDescription.toString());
+
+        tvOverTitle.setText(getString(R.string.analysis_over_budget_count, result.overBudget.size()));
+        layoutOver.removeAllViews();
+        for (SpendAnalysisHelper.OverBudgetRow row : result.overBudget) {
+            TextView line = new TextView(this);
+            line.setTextColor(resolveThemeColor(android.R.attr.textColorPrimary));
+            line.setText(getString(R.string.analysis_over_budget_row,
+                    SpendAnalysisHelper.shortMonthLabel(row.month),
+                    row.pondName,
+                    formatCurrency(row.spend),
+                    formatCurrency(row.limit),
+                    formatCurrency(row.overBy)));
+            line.setPadding(0, dp(4), 0, dp(4));
+            layoutOver.addView(line);
+        }
+        tvNoSpending.setVisibility(result.hasSpendInRange ? View.GONE : View.VISIBLE);
+
+        String rangeStart = result.months.isEmpty()
+                ? ""
+                : SpendAnalysisHelper.shortMonthLabel(result.months.get(0).month);
+        String rangeEnd = result.months.isEmpty()
+                ? ""
+                : SpendAnalysisHelper.shortMonthLabel(result.months.get(result.months.size() - 1).month);
+        tvByPondTitle.setText(getString(R.string.analysis_by_pond, rangeStart, rangeEnd));
+        List<String> pondLabels = new ArrayList<>();
+        List<Double> pondValues = new ArrayList<>();
+        StringBuilder pondDescription = new StringBuilder();
+        for (SpendAnalysisHelper.PondSpend pondSpend : result.byPond) {
+            pondLabels.add(pondSpend.pondName);
+            pondValues.add(pondSpend.spend);
+            if (pondDescription.length() > 0) {
+                pondDescription.append(". ");
+            }
+            pondDescription.append(pondSpend.pondName)
+                    .append(" ")
+                    .append(formatCurrency(pondSpend.spend));
+        }
+        chartPonds.setHorizontalBars(pondLabels, pondValues, pondDescription.toString());
+    }
+
+    private TextView createAnalysisSnapshotRow(SpendAnalysisHelper.SnapshotRow row, boolean hidePondName) {
+        TextView line = new TextView(this);
+        line.setTextColor(resolveThemeColor(android.R.attr.textColorPrimary));
+        line.setPadding(0, dp(4), 0, dp(4));
+        String status = getString(row.overBudget ? R.string.analysis_over : R.string.analysis_ok);
+        String text = hidePondName
+                ? getString(R.string.analysis_snapshot_line_single,
+                formatCurrency(row.spend),
+                formatCurrency(row.limit),
+                formatCurrency(row.remaining),
+                status)
+                : getString(R.string.analysis_snapshot_line,
+                row.pondName,
+                formatCurrency(row.spend),
+                formatCurrency(row.limit),
+                formatCurrency(row.remaining),
+                status);
+        SpannableString spannable = new SpannableString(text);
+        if (row.overBudget) {
+            int start = text.lastIndexOf(status);
+            if (start >= 0) {
+                spannable.setSpan(
+                        new ForegroundColorSpan(ContextCompat.getColor(this, R.color.mountain_primary)),
+                        start,
+                        text.length(),
+                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            }
+        }
+        line.setText(spannable);
+        return line;
+    }
+
+    private void showBillsPaydaysSettingsDialog() {
+        View dialogView = getLayoutInflater().inflate(R.layout.dialog_bills_paydays_settings, null);
+        TabLayout tabBillsPaydays = dialogView.findViewById(R.id.tabBillsPaydays);
+        TextView tvMessage = dialogView.findViewById(R.id.tvBillsPaydaysTabMessage);
+        View scrollBills = dialogView.findViewById(R.id.scrollBillsDaysGrid);
+        View scrollPaydays = dialogView.findViewById(R.id.scrollPaydaysGrid);
+        TableLayout tableBills = dialogView.findViewById(R.id.tableBillsDays);
+        TableLayout tablePaydays = dialogView.findViewById(R.id.tablePaydays);
+
+        final HashSet<Integer> billsSelected = new HashSet<>(PrefManager.getBillsDays(this));
+        final HashSet<Integer> paydaysSelected = new HashSet<>(PrefManager.getPaydays(this));
+
+        fillDayOfMonthGrid(tableBills, billsSelected);
+        fillDayOfMonthGrid(tablePaydays, paydaysSelected);
+
+        tabBillsPaydays.addTab(tabBillsPaydays.newTab().setText(R.string.tab_bills_days));
+        tabBillsPaydays.addTab(tabBillsPaydays.newTab().setText(R.string.tab_paydays));
+        tabBillsPaydays.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
+            @Override
+            public void onTabSelected(TabLayout.Tab tab) {
+                boolean paydaysTab = tab.getPosition() == 1;
+                scrollBills.setVisibility(paydaysTab ? View.GONE : View.VISIBLE);
+                scrollPaydays.setVisibility(paydaysTab ? View.VISIBLE : View.GONE);
+                tvMessage.setText(paydaysTab
+                        ? R.string.dialog_paydays_message
+                        : R.string.dialog_bills_days_message);
+            }
+
+            @Override
+            public void onTabUnselected(TabLayout.Tab tab) {
+            }
+
+            @Override
+            public void onTabReselected(TabLayout.Tab tab) {
+            }
+        });
+        Objects.requireNonNull(tabBillsPaydays.getTabAt(0)).select();
+
+        MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(this);
+        builder.setTitle(R.string.dialog_bills_paydays_title)
+                .setView(dialogView)
+                .setPositiveButton(R.string.save, null)
+                .setNegativeButton(android.R.string.cancel, null);
+        AlertDialog dialog = builder.create();
+        dialog.setOnShowListener(d -> {
+            applyIconMaterialDialogActions(dialog);
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+                ArrayList<Integer> billsList = new ArrayList<>(billsSelected);
+                ArrayList<Integer> paydaysList = new ArrayList<>(paydaysSelected);
+                Collections.sort(billsList);
+                Collections.sort(paydaysList);
+                PrefManager.saveBillsDays(MainActivity.this, billsList);
+                PrefManager.savePaydays(MainActivity.this, paydaysList);
+                applyPaydayReconciliationToAllEligibleEnvelopes();
+                PrefManager.saveEnvelopes(MainActivity.this, envelopes);
+                updateDisplay();
+                dialog.dismiss();
+            });
+        });
+        dialog.show();
+    }
+
+    private void billsDayRefreshCell(TextView cell, boolean on) {
+        if (on) {
+            cell.setBackgroundResource(R.drawable.recurring_option_selected);
+            cell.setTextColor(ContextCompat.getColor(this, R.color.mountain_primary));
+        } else {
+            cell.setBackgroundColor(ContextCompat.getColor(this, android.R.color.transparent));
+            cell.setTextColor(resolveThemeColor(android.R.attr.textColorPrimary));
+        }
+    }
+
     private void updateTransferToggleButton(ImageButton button) {
         int color = showTransfers
-                ? ContextCompat.getColor(this, android.R.color.holo_green_dark)
-                : ContextCompat.getColor(this, android.R.color.darker_gray);
-        button.setColorFilter(color);
+                ? ContextCompat.getColor(this, R.color.mountain_primary)
+                : resolveThemeColor(androidx.appcompat.R.attr.colorControlNormal);
+        button.setColorFilter(color, PorterDuff.Mode.SRC_IN);
         button.setAlpha(showTransfers ? 1.0f : 0.65f);
     }
     private void showError(String message) {
-        new AlertDialog.Builder(this)
+        new MaterialAlertDialogBuilder(this)
                 .setMessage(message)
                 .setPositiveButton("OK", null)
                 .show();
