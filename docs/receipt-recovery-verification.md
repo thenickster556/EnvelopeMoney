@@ -254,13 +254,13 @@ Copy a renamed, EXIF-dated JPEG into the folder weeks after its transaction date
 ## Delivered behavior (delta)
 Copied JPEGs often have a **wrong DATE_TAKEN** (import day). The previous EXIF probe ran only when DATE_TAKEN was 0, so those files stayed outside the ±1 window and a tap showed **Open receipt picture / Retry automatic search** forever. Capture precedence is now filename epoch → **EXIF DateTimeOriginal** (probed for non-epoch names even when DATE_TAKEN is set) → DATE_TAKEN → DATE_ADDED.
 
-When unique auto-bind fails, tap and Retry now call `ReceiptReferenceRepair.unusedNearby` (unused Pictures/Mountain Money files whose capture day is the transaction date ±1, minus other rows' URIs and session picks). A non-empty pool opens the existing OCR-ranked chooser. The retry dialog remains only when that window is truly empty. Unique auto-bind, **Use this picture**, and no Files picker are unchanged.
+When unique auto-bind fails, tap and Retry now call `ReceiptReferenceRepair.unusedNearby` (unused Pictures/Mountain Money files whose capture day is the transaction date ±1 first, minus other rows' URIs and session picks). If that window is empty, every other unused album file is still offered — including later photos of older receipts and undated rows. Restricted-but-listable albums (Android 14 Select photos) still list what `readAlbum()` can see. A non-empty pool opens the existing OCR-ranked chooser. The retry dialog remains only when the album is truly empty or access is denied. Unique auto-bind stays ±1-only. `inspect()` reads `file://` via `ReceiptBitmapLoader` so disk-supplemented rows survive chooser verification. **Use this picture** and no Files picker are unchanged.
 
 ## Automated results
-- Tests first (compile-red for `unusedNearby`, assertion-red for EXIF-over-DATE_TAKEN), then green: `AndroidReceiptSourceTest` precedence + copied DATE_TAKEN with EXIF original; `ReceiptReferenceRepairTest.unusedNearby*` (±1 minus reserved, two-day exclusion, empty/denied/restricted, fragment strip, null reserved).
-- Full `:app:testDebugUnitTest`: **303 tests, 301 passed, same 2 baseline failures**.
-- Recovery JaCoCo: 97.60% lines (690/707) / 80.79% branches (572/708); gates pass.
+- Tests first (compile-red for `unusedNearby`, assertion-red for EXIF-over-DATE_TAKEN), then green: `AndroidReceiptSourceTest` precedence + copied DATE_TAKEN with EXIF original; `ReceiptReferenceRepairTest.unusedNearby*` (±1 minus reserved, two-day exclusion while ±1 is non-empty, fallback to all unused when ±1 is empty, invalid date, restricted-but-listable, denied/null/empty, fragment strip).
+- Full `:app:testDebugUnitTest`: **305 tests, 303 passed, same 2 baseline failures**.
+- Recovery JaCoCo: 97.50% lines (703/721) / 81.02% branches (585/722); gates pass.
 - `:app:lintDebug`: **43 existing errors**. `:app:assembleDebug` and `git diff --check`: passed.
 
 ## On-device check (recommended, not yet run)
-Tap the red camera on a dead Aug receipt that has unused album JPEGs from that day or the next door: chooser, not Retry. Copied/renamed JPEG whose MediaStore date is weeks later but EXIF is the receipt day appears in the chooser. Already-linked pictures stay out. Truly empty window: retry dialog. No launch popup.
+Tap the red camera on a dead Aug receipt that has unused album JPEGs **from any day**: chooser, not Retry. Copied/renamed JPEG whose MediaStore date is weeks later but EXIF is the receipt day appears in the chooser. Already-linked pictures stay out. Truly empty album: retry dialog. Rebuild/install this APK before judging the tap. No launch popup.

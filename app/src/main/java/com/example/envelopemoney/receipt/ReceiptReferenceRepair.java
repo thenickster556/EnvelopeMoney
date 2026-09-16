@@ -202,15 +202,15 @@ public final class ReceiptReferenceRepair {
     }
 
     /**
-     * Unused album files whose capture local day is {@code transactionDate} or one day either
-     * side, ranked closer-to-target first. Restricted or denied albums return empty so the caller
-     * can keep today's retry/permission path. Does not unique-bind or attach.
+     * Unused album files for a tap/Retry chooser: capture day ±1 first, otherwise every unused
+     * Pictures/Mountain Money file (minus reserved). Restricted-but-listable albums still return
+     * what {@link ReceiptReferenceResolver.Source#readAlbum()} can see — unique auto-bind stays
+     * identity-only when restricted. Denied albums return empty. Does not unique-bind or attach.
      */
     public static List<ReceiptReferenceResolver.Result> unusedNearby(
             ReceiptReferenceResolver.Source source, String transactionDate,
             Set<String> reservedReferences, TimeZone zone) {
         if (source == null) return new ArrayList<>();
-        if (source.albumAccessRestricted()) return new ArrayList<>();
         List<ReceiptReferenceResolver.Result> album;
         try {
             album = source.readAlbum();

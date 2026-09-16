@@ -2148,8 +2148,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * Unique auto still first. When that fails, unused nearby (±1 day, not already linked)
-     * opens the existing chooser instead of looping the missing retry sheet.
+     * Unique auto still first. When that fails, unused Mountain Money files open the existing
+     * chooser (±1 day first, then the rest of the unused album) instead of looping Retry.
      */
     private void presentUnresolvedReceipt(String reference, List<ReceiptReferenceRepair.Entry> entries,
                                           ReceiptReferenceResolver.Result result,
@@ -2186,9 +2186,9 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * Unused Pictures/Mountain Money files captured on the transaction day ±1, minus other
-     * rows' URIs and this session's picks. Empty when unique already won, permission is still
-     * missing, or the window is truly empty.
+     * Unused Pictures/Mountain Money files for the tap chooser: capture day ±1 first, otherwise
+     * every unused album file, minus other rows' URIs and this session's picks. Empty when unique
+     * already won, permission is still missing, or the album is truly empty.
      */
     private List<ReceiptReferenceResolver.Result> nearbyChooserPool(String reference,
             List<ReceiptReferenceRepair.Entry> entries, ReceiptReferenceResolver.Result result,
@@ -2350,7 +2350,13 @@ public class MainActivity extends AppCompatActivity {
                 if (candidate == null || candidate.reference == null
                         || receiptChosenReferences.contains(candidate.reference)) continue;
                 ReceiptReferenceResolver.Result verified = source.inspect(candidate.reference);
-                if (verified.status == ReceiptReferenceResolver.Status.RESOLVED) readable.add(verified);
+                if (verified.status == ReceiptReferenceResolver.Status.RESOLVED) {
+                    long capture = candidate.captureTimeMs > 0
+                            ? candidate.captureTimeMs : verified.captureTimeMs;
+                    String name = verified.fileName != null ? verified.fileName : candidate.fileName;
+                    readable.add(ReceiptReferenceResolver.Result.resolved(
+                            verified.reference, name, capture));
+                }
             }
             runOnUiThread(() -> {
                 if (isFinishing() || isDestroyed()) return;

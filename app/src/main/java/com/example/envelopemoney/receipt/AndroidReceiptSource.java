@@ -103,8 +103,9 @@ public final class AndroidReceiptSource implements ReceiptReferenceResolver.Sour
         try {
             BitmapFactory.Options options = new BitmapFactory.Options();
             options.inJustDecodeBounds = true;
-            try (InputStream stream = context.getContentResolver().openInputStream(uri)) {
-                if (stream == null) return failure(unavailableStatus(), name);
+            // File URIs from the disk supplement must use FileInputStream; ContentResolver
+            // openInputStream(file://) fails on device and emptied the tap chooser.
+            try (InputStream stream = ReceiptBitmapLoader.openInputStream(context, uri)) {
                 BitmapFactory.decodeStream(stream, null, options);
             }
             // The header decode proves the stream is a readable image; a second sampled pixel
@@ -115,6 +116,9 @@ public final class AndroidReceiptSource implements ReceiptReferenceResolver.Sour
         } catch (SecurityException denied) {
             return failure(ReceiptReferenceResolver.Status.PERMISSION_REQUIRED, name);
         } catch (IOException | RuntimeException unavailable) {
+            if (unavailable.getCause() instanceof SecurityException) {
+                return failure(ReceiptReferenceResolver.Status.PERMISSION_REQUIRED, name);
+            }
             return failure(unavailableStatus(), name);
         }
     }

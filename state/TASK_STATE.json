@@ -1,6 +1,7 @@
 {
   "active_tasks": [
     {"id":"receipt-reference-recovery-2026-09-08","title":"Automatic receipt-folder recovery implemented; final UI verification blocked","status":"verification_blocked","intent":"Automatic exact-folder discovery replaces manual selection. Implementation, history backfill, metadata copying and restart recovery are complete. Photo-library prompt for legacy search is included (launch/resume). Build and 80% recovery coverage gate pass (96.76% lines, 83.87% branches). Full suite: 192/195 passed; three failures reproduced in baseline. Lint: same 43 baseline errors. API 36 startup/restart/render test passes from prior work. Permission-dialog UI on a device was not re-run in this patch. See docs/receipt-recovery-verification.md."},
+    {"id":"receipt-reference-recovery-2026-09-08","title":"Automatic receipt-folder recovery implemented; final UI verification blocked","status":"verification_blocked","intent":"Automatic exact-folder discovery replaces manual selection. Implementation, history backfill, metadata copying and restart recovery are complete. Photo-library prompt for legacy search is included (launch/resume). Build and 80% recovery coverage gate pass (96.76% lines, 83.87% branches). Full suite: 192/195 passed; three failures reproduced in baseline. Lint: same 43 baseline errors. API 36 startup/restart/render test passes from prior work. Permission-dialog UI on a device was not re-run in this patch. See docs/receipt-recovery-verification.md."},
     {
       "id": "transfer-dialog-ux-polish-2026-05",
       "title": "Polish grouped transfer dialog scrolling, dropdowns, and slider readability",
@@ -20,6 +21,12 @@
     }
   ],
   "completed_tasks": [
+    {
+      "id": "receipt-tap-all-unused-fallback-2026-09-16",
+      "title": "Tap still shows Open receipt picture; offer all unused album files",
+      "status": "completed",
+      "intent": "Device still hit Open receipt picture because unusedNearby required capture-day ±1 and emptied out when albumAccessRestricted. Unique auto-bind stays ±1-only. Tap/Retry: ±1 first, then all unused Pictures/Mountain Money files (minus reserved), including restricted-but-listable albums and undated rows. inspect() reads file:// via ReceiptBitmapLoader. Tests first. Full suite 305 / 2 baseline. Recovery 97.50% lines / 81.02% branches. Lint 43. assembleDebug + git diff --check pass. Device UI not re-run — rebuild the APK."
+    },
     {
       "id": "receipt-tap-nearby-picker-2026-09-16",
       "title": "Tap a broken receipt: unused ±1-day OCR picker, not Retry",

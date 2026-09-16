@@ -90,16 +90,16 @@ public final class ReceiptAlbumMatcher {
     }
 
     /**
-     * Unused album files whose capture local day is {@code transactionDate} or one day either
-     * side, ranked closer-to-target first. Reserved references (exact or fragment-stripped)
-     * stay out. Does not unique-bind.
+     * Unused album files for a tap/Retry chooser. Prefers capture local day
+     * {@code transactionDate} ±1, ranked closer-to-target first. When that window is empty (or
+     * the date is unusable), falls back to every unused album file — including undated rows —
+     * so a later photo of an older receipt is still offered. Reserved references (exact or
+     * fragment-stripped) stay out. Does not unique-bind.
      */
     public static List<ReceiptReferenceResolver.Result> unusedNearby(
             List<ReceiptReferenceResolver.Result> album, String transactionDate,
             Set<String> reservedReferences, TimeZone zone) {
         TimeZone tz = zone != null ? zone : TimeZone.getDefault();
-        String day = normalizeDay(transactionDate);
-        if (day == null) return Collections.emptyList();
         Set<String> bound = new HashSet<>();
         if (reservedReferences != null) {
             for (String reserved : reservedReferences) {
@@ -109,9 +109,17 @@ public final class ReceiptAlbumMatcher {
                 bound.add(hash >= 0 ? reserved.substring(0, hash) : reserved);
             }
         }
-        Map<String, List<ReceiptReferenceResolver.Result>> unusedByDay =
-                unusedFilesByDay(new AlbumIndex(album), tz, bound);
-        List<ReceiptReferenceResolver.Result> pool = windowUnused(day, unusedByDay, bound);
+        AlbumIndex index = new AlbumIndex(album);
+        String day = normalizeDay(transactionDate);
+        List<ReceiptReferenceResolver.Result> pool = Collections.emptyList();
+        if (day != null) {
+            Map<String, List<ReceiptReferenceResolver.Result>> unusedByDay =
+                    unusedFilesByDay(index, tz, bound);
+            pool = windowUnused(day, unusedByDay, bound);
+        }
+        if (pool.isEmpty()) {
+            pool = unusedAlbum(index, bound);
+        }
         List<ReceiptReferenceResolver.Result> unused = new ArrayList<>();
         Set<String> seen = new HashSet<>();
         for (ReceiptReferenceResolver.Result picture : pool) {
@@ -122,6 +130,23 @@ public final class ReceiptAlbumMatcher {
             if (seen.add(bare)) unused.add(picture);
         }
         return rankByLikelihood(new Claim("nearby", null, transactionDate), unused, tz);
+    }
+
+    /** Every unused album row, including files with no capture day. */
+    private static List<ReceiptReferenceResolver.Result> unusedAlbum(
+            AlbumIndex index, Set<String> bound) {
+        List<ReceiptReferenceResolver.Result> pool = new ArrayList<>();
+        if (index == null) return pool;
+        for (ReceiptReferenceResolver.Result picture : index.files) {
+            if (picture == null || picture.reference == null) continue;
+            int hash = picture.reference.indexOf('#');
+            String bare = hash >= 0 ? picture.reference.substring(0, hash) : picture.reference;
+            if (bound != null && (bound.contains(picture.reference) || bound.contains(bare))) {
+                continue;
+            }
+            pool.add(picture);
+        }
+        return pool;
     }
 
     /** Immutable filename inventory of the album, queried per identity tier. */
