@@ -211,3 +211,21 @@ Startup still runs whole-app `resolveAll` and unique-binds readable files withou
 
 ## On-device check (recommended, not yet run)
 Launch with one unique receipt, one ambiguous, one missing, one spend with no URI: only the middle two icons go red after repair; no dialogs appear by themselves. Recycle the list: red stays on the broken rows, healthy stay normal, edit icon never red. Tap red ambiguous → chooser → Use this picture → icon returns to normal. Grant photos when PERMISSION_REQUIRED: unique rows go normal; leftover failures stay red. Night mode: red still readable on the list background.
+
+---
+
+# Independent audit of 42274c5 / 23b79cf — 2026-09-15
+
+Re-verified in a fresh session that HEAD (`23b79cf`) matches the recorded intent before further
+work: unique auto-bind is unchanged and remains the only automatic attach; failed-unique claims
+offer unused Pictures/Mountain Money files from the transaction day ±1 as ranked AMBIGUOUS
+alternatives (stale-epoch/noon target, |capture−target| order, reference tie-break), MISSING only
+when that window is empty; restricted "Select photos" access still prompts instead of guessing;
+the candidate [FS] immersive keeps the translucent comment/pond/amount strip ("No comment"
+fallback) with Back/exit restoring chrome; red colorError list icons mark
+MISSING/AMBIGUOUS/CORRUPT/PERMISSION_REQUIRED rows after repair without changing tap flow.
+Independent verification run: 287 tests, 3 documented baseline failures; recovery coverage
+97.54% lines / 82.04% branches (gates pass); lint 43 baseline errors; assembleDebug and
+git diff --check pass. No code changed in this audit. Standing rules for later fixes: never
+auto-attach the first ranked file, never widen ±1 without a request, never open the system
+picker from recovery.
