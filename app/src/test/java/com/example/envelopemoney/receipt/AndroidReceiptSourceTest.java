@@ -204,16 +204,48 @@ public class AndroidReceiptSourceTest {
         assertTrue(receipt.exists());
     }
 
-    @Test public void captureTimePrefersFilenameThenDateTakenThenDateAdded() {
+    @Test public void captureTimePrefersFilenameThenDateTakenThenExifThenDateAdded() {
         long named = 1_783_776_000_000L;
-        assertEquals(named, AndroidReceiptSource.captureTimeMs("MountainMoney_" + named + ".jpg", 50L, 2L));
-        assertEquals(50L, AndroidReceiptSource.captureTimeMs("IMG_001.jpg", 50L, 2L));
-        assertEquals(2000L, AndroidReceiptSource.captureTimeMs("IMG_001.jpg", 0L, 2L));
-        assertEquals(1_700_000_000_000L, AndroidReceiptSource.captureTimeMs("IMG_001.jpg", 0L, 1_700_000_000_000L));
-        assertEquals(0L, AndroidReceiptSource.captureTimeMs("IMG_001.jpg", 0L, 0L));
+        assertEquals(named, AndroidReceiptSource.captureTimeMs("MountainMoney_" + named + ".jpg", 50L, 30L, 2L));
+        assertEquals(50L, AndroidReceiptSource.captureTimeMs("IMG_001.jpg", 50L, 30L, 2L));
+        // The real capture instant beats the scan/copy day.
+        assertEquals(30L, AndroidReceiptSource.captureTimeMs("IMG_001.jpg", 0L, 30L, 2L));
+        assertEquals(2000L, AndroidReceiptSource.captureTimeMs("IMG_001.jpg", 0L, 0L, 2L));
+        assertEquals(1_700_000_000_000L, AndroidReceiptSource.captureTimeMs("IMG_001.jpg", 0L, 0L, 1_700_000_000_000L));
+        assertEquals(0L, AndroidReceiptSource.captureTimeMs("IMG_001.jpg", 0L, 0L, 0L));
         assertEquals(0L, AndroidReceiptSource.captureTimeMs((File) null));
         File receipt = new File("MountainMoney_" + named + ".jpg");
         assertEquals(named, AndroidReceiptSource.captureTimeMs(receipt));
+    }
+
+    @Test public void albumRowsWithoutDatesFallBackToExifCaptureTime() throws Exception {
+        gallery.file = pictureWithExifOriginal("2026:09:07 12:04:00");
+        gallery.taken = 0L;
+        gallery.added = 1_760_000_000L;                      // Sep 2026 scan/copy day, seconds
+        List<ReceiptReferenceResolver.Result> album = new AndroidReceiptSource(context).readAlbum();
+        assertEquals(1, album.size());
+        Calendar expected = Calendar.getInstance();
+        expected.clear();
+        expected.set(2026, Calendar.SEPTEMBER, 7, 12, 4, 0);
+        assertEquals(expected.getTimeInMillis(), album.get(0).captureTimeMs);
+    }
+
+    @Test public void albumRowsWithoutDatesOrExifKeepDateAdded() throws Exception {
+        gallery.file = picture();                            // no EXIF date written
+        gallery.taken = 0L;
+        gallery.added = 2L;
+        List<ReceiptReferenceResolver.Result> album = new AndroidReceiptSource(context).readAlbum();
+        assertEquals(1, album.size());
+        assertEquals(2000L, album.get(0).captureTimeMs);
+    }
+
+    private File pictureWithExifOriginal(String exifOriginal) throws Exception {
+        File file = picture();
+        androidx.exifinterface.media.ExifInterface exif =
+                new androidx.exifinterface.media.ExifInterface(file.getAbsolutePath());
+        exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_DATETIME_ORIGINAL, exifOriginal);
+        exif.saveAttributes();
+        return file;
     }
 
     @Test public void rotationWritesResolvedPictureAndLeavesOriginalReferenceAlone() throws Exception {
@@ -243,6 +275,8 @@ public class AndroidReceiptSourceTest {
         boolean denied;
         boolean duplicate;
         boolean metadataUnavailable;
+        long taken;
+        long added;
         String displayName = NAME;
         String relativePath;
         String selection;
@@ -281,8 +315,8 @@ public class AndroidReceiptSourceTest {
                 else if (MediaStore.MediaColumns.DISPLAY_NAME.equals(column)) row[i] = name;
                 else if (MediaStore.MediaColumns.RELATIVE_PATH.equals(column)
                         || MediaStore.MediaColumns.DATA.equals(column)) row[i] = location;
-                else if (MediaStore.Images.Media.DATE_TAKEN.equals(column)) row[i] = 0L;
-                else if (MediaStore.MediaColumns.DATE_ADDED.equals(column)) row[i] = 0L;
+                else if (MediaStore.Images.Media.DATE_TAKEN.equals(column)) row[i] = taken;
+                else if (MediaStore.MediaColumns.DATE_ADDED.equals(column)) row[i] = added;
             }
             return row;
         }

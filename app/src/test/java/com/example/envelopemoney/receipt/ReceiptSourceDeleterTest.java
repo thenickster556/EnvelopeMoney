@@ -42,6 +42,19 @@ public class ReceiptSourceDeleterTest {
     }
 
     @Test
+    public void needsSystemDeleteConsent_api30AndMediaImagesOnly() {
+        assertTrue(ReceiptSourceDeleter.needsSystemDeleteConsent(
+                android.net.Uri.parse("content://media/external/images/media/12345"), 30));
+        assertTrue(ReceiptSourceDeleter.needsSystemDeleteConsent(
+                android.net.Uri.parse("content://media/external/images/media/12345"), 34));
+        assertFalse(ReceiptSourceDeleter.needsSystemDeleteConsent(
+                android.net.Uri.parse("content://media/external/images/media/12345"), 29));
+        assertFalse(ReceiptSourceDeleter.needsSystemDeleteConsent(
+                android.net.Uri.parse("content://media/picker_get_content/0/com.android.providers.media.photopicker/media/1"), 34));
+        assertFalse(ReceiptSourceDeleter.needsSystemDeleteConsent(null, 34));
+    }
+
+    @Test
     public void tryDeleteSource_falseForNullAndAppOwned() {
         assertFalse(ReceiptSourceDeleter.tryDeleteSource(null, null));
         assertFalse(ReceiptSourceDeleter.tryDeleteSource(

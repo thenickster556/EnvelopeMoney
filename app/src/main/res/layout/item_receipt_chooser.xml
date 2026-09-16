@@ -44,5 +44,16 @@
             android:layout_height="wrap_content"
             android:textColor="?android:attr/textColorSecondary"
             android:textSize="13sp" />
+
+        <!-- OCR content-match evidence; "Reading receipt…" until the scan lands. -->
+        <TextView
+            android:id="@+id/receiptChooserBadge"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:singleLine="true"
+            android:text="@string/receipt_chooser_badge_reading"
+            android:textColor="?android:attr/textColorTertiary"
+            android:textSize="12sp" />
     </LinearLayout>
 </LinearLayout>

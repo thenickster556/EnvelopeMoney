@@ -21,6 +21,53 @@ public class ReceiptPickerUriNormalizerTest {
     }
 
     @Test
+    @org.robolectric.annotation.Config(sdk = 33)
+    public void finishImportFlagsConsentWhenMediaSourceSurvives() {
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        RefusingGalleryProvider.register(context);
+        Uri album = Uri.parse("content://media/external/images/media/99999");
+        // The refusing provider models a GetContent grant: delete throws, the source survives.
+        ReceiptPickerUriNormalizer.ImportResult survived = ReceiptPickerUriNormalizer.finishImportMoveOrRollback(
+                context, album, Uri.parse("content://media/external/images/media/12345"));
+        assertFalse(survived.sourceDeleted);
+        assertTrue(survived.deleteNeedsConsent);
+        assertEquals(album, survived.uri);
+        // A file:// source that deletes cleanly needs no consent sheet.
+        try {
+            java.io.File temp = java.io.File.createTempFile("source", ".jpg",
+                    context.getCacheDir());
+            assertTrue(temp.exists());
+            ReceiptPickerUriNormalizer.ImportResult moved = ReceiptPickerUriNormalizer.finishImportMoveOrRollback(
+                    context, album, Uri.fromFile(temp));
+            assertTrue(moved.sourceDeleted);
+            assertFalse(moved.deleteNeedsConsent);
+        } catch (java.io.IOException unavailable) {
+            throw new AssertionError(unavailable);
+        }
+    }
+
+    /** Minimal media provider whose delete always throws, like a read-only GetContent grant. */
+    public static class RefusingGalleryProvider extends android.content.ContentProvider {
+        static void register(android.content.Context context) {
+            RefusingGalleryProvider provider = new RefusingGalleryProvider();
+            android.content.pm.ProviderInfo info = new android.content.pm.ProviderInfo();
+            info.authority = "media";
+            info.exported = true;
+            provider.attachInfo(context, info);
+            org.robolectric.shadows.ShadowContentResolver.registerProviderInternal("media", provider);
+        }
+
+        @Override public boolean onCreate() { return true; }
+        @Override public String getType(android.net.Uri uri) { return "image/jpeg"; }
+        @Override public android.net.Uri insert(android.net.Uri uri, android.content.ContentValues values) { return null; }
+        @Override public int delete(android.net.Uri uri, String selection, String[] arguments) {
+            throw new SecurityException("read-only grant");
+        }
+        @Override public int update(android.net.Uri uri, android.content.ContentValues values, String selection, String[] arguments) { return 0; }
+        @Override public android.database.Cursor query(android.net.Uri uri, String[] projection, String selection, String[] arguments, String sort) { return null; }
+    }
+
+    @Test
     public void isAppOwnedReceiptUri_trueForMountainMoneyAlbumPath() {
         assertTrue(ReceiptPickerUriNormalizer.isAppOwnedReceiptUri(
                 "file:///storage/emulated/0/Pictures/Mountain Money/MountainMoney_1.jpg"));

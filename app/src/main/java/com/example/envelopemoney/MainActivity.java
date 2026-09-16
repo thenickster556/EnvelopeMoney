@@ -8,6 +8,7 @@ import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Build;
+import android.provider.MediaStore;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.SpannableString;
@@ -53,6 +54,7 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import com.example.envelopemoney.receipt.PaddleOcrAdapter;
 import com.example.envelopemoney.receipt.ReceiptBitmapLoader;
+import com.example.envelopemoney.receipt.ReceiptCandidateScorer;
 import com.example.envelopemoney.receipt.ReceiptCandidateSummary;
 import com.example.envelopemoney.receipt.AndroidReceiptSource;
 import com.example.envelopemoney.receipt.ReceiptReferenceResolver;
@@ -112,7 +114,9 @@ import java.util.Set;
 import java.util.Objects;
 import java.util.TimeZone;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 public class MainActivity extends AppCompatActivity {
     private static final double TRANSFER_STEP_AMOUNT = 0.50d;
@@ -188,6 +192,16 @@ public class MainActivity extends AppCompatActivity {
     private final Map<String, ReceiptReferenceResolver.Result> pendingCandidateResults = new HashMap<>();
     /** Open picker dialog, dismissed once a fullscreen pick is applied. */
     private AlertDialog receiptChooserDialog;
+    /** Bumped whenever a chooser closes or is replaced; late OCR results check it before reordering. */
+    private int receiptChooserGeneration;
+    /** Badge text per candidate reference for the open chooser (OCR results fill this in). */
+    private final Map<String, String> receiptChooserBadges = new HashMap<>();
+    /** OCR content score per candidate reference; absent entries keep their capture-rank position. */
+    private final Map<String, Integer> receiptChooserScores = new HashMap<>();
+    /** Gallery sources the user declined to delete; each photo is asked at most once per session. */
+    private final Set<String> receiptDeclinedDeleteSources = new HashSet<>();
+    private ActivityResultLauncher<androidx.activity.result.IntentSenderRequest> receiptDeleteRequestLauncher;
+    private Uri pendingDeleteSourceUri;
     /**
      * Last resolveAll status by fragment-stripped URI. In-memory only — not Gson.
      * Missing keys mean repair has not finished for that pointer (list icon stays normal).
@@ -796,6 +810,15 @@ public class MainActivity extends AppCompatActivity {
                                 data.getStringExtra(ReceiptPreviewActivity.EXTRA_SWAP_REFERENCE));
                     }
                 });
+        receiptDeleteRequestLauncher = registerForActivityResult(
+                new ActivityResultContracts.StartIntentSenderForResult(), result -> {
+                    Uri source = pendingDeleteSourceUri;
+                    pendingDeleteSourceUri = null;
+                    if (source != null && result.getResultCode() != RESULT_OK) {
+                        // Ask once per photo: a declined delete keeps both copies quietly.
+                        receiptDeclinedDeleteSources.add(source.toString());
+                    }
+                });
         receiptCaptureLauncher = registerForActivityResult(
                 new ActivityResultContracts.StartActivityForResult(),
                 result -> {
@@ -827,11 +850,6 @@ public class MainActivity extends AppCompatActivity {
                     if (uri == null) {
                         ensureReceiptTransactionDialogVisible();
                         return;
-                    }
-                    try {
-                        getContentResolver().takePersistableUriPermission(
-                                uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                    } catch (SecurityException ignored) {
                     }
                     View host = resolveReceiptDialogHost();
                     if (host == null) {
@@ -1720,6 +1738,10 @@ public class MainActivity extends AppCompatActivity {
                     ensureReceiptTransactionDialogVisible();
                     activeHost.setTag(R.id.tag_receipt_image_uri, result.uri.toString());
                     syncReceiptActionUi(activeHost);
+                    if (result.deleteNeedsConsent) {
+                        // GetContent grants cannot delete silently; one system sheet finishes the move.
+                        offerGallerySourceDelete(originalUri);
+                    }
                     if (ReceiptPickerUriNormalizer.isAppOwnedReceiptUri(MainActivity.this, result.uri)) {
                         runReceiptOcrBackground(result.uri, mode, status);
                     } else {
@@ -2002,6 +2024,11 @@ public class MainActivity extends AppCompatActivity {
                 if (isFinishing() || isDestroyed()) return;
                 recordReceiptAttention(entries, resolved, false);
                 ReceiptReferenceResolver.Result result = firstReceiptResult(entries, resolved);
+                if (result == null || result.status != ReceiptReferenceResolver.Status.RESOLVED) {
+                    Log.d("EnvelopeMoney", "receipt chooser: status="
+                            + (result == null ? "null" : result.status)
+                            + ", alternatives=" + (result == null ? 0 : result.alternatives.size()));
+                }
                 if (result != null && result.status == ReceiptReferenceResolver.Status.RESOLVED) {
                     applyReceiptResolution(reference, entries, result);
                     launchReceiptPreviewActivity(Uri.parse(namedReceiptReference(result)));
@@ -2055,6 +2082,11 @@ public class MainActivity extends AppCompatActivity {
             runOnUiThread(() -> {
                 if (isFinishing() || isDestroyed()) return;
                 recordReceiptAttention(entries, resolved, false);
+                if (result == null || result.status != ReceiptReferenceResolver.Status.RESOLVED) {
+                    Log.d("EnvelopeMoney", "receipt chooser: status="
+                            + (result == null ? "null" : result.status)
+                            + ", alternatives=" + (result == null ? 0 : result.alternatives.size()));
+                }
                 if (result != null && result.status == ReceiptReferenceResolver.Status.RESOLVED) {
                     applyReceiptResolution(reference, entries, result);
                     launchReceiptPreviewActivity(Uri.parse(namedReceiptReference(result)));
@@ -2257,7 +2289,8 @@ public class MainActivity extends AppCompatActivity {
     /**
      * AMBIGUOUS with known candidates becomes a picker. Candidates that fail a fresh verification
      * never reach the user; every candidate — even a lone survivor — is confirmed on the
-     * fullscreen check screen before anything attaches.
+     * fullscreen check screen before anything attaches. With several candidates, background OCR
+     * re-sorts the rows by content match while the dialog is already usable.
      */
     private void showReceiptCandidateChooser(String reference,
                                              List<ReceiptReferenceResolver.Result> alternatives) {
@@ -2277,8 +2310,14 @@ public class MainActivity extends AppCompatActivity {
                 } else if (readable.size() == 1) {
                     launchReceiptCandidateCheck(reference, readable, 0);
                 } else {
-                    receiptChooserDialog = buildReceiptChooserDialog(reference, readable);
+                    final int generation = ++receiptChooserGeneration;
+                    receiptChooserBadges.clear();
+                    receiptChooserScores.clear();
+                    final List<ReceiptReferenceResolver.Result> ranked = new ArrayList<>(readable);
+                    receiptChooserDialog = buildReceiptChooserDialog(reference, ranked);
                     receiptChooserDialog.show();
+                    receiptRecoveryExecutor.execute(() ->
+                            scoreReceiptCandidatesByOcr(reference, ranked, generation));
                 }
             });
         });
@@ -2288,8 +2327,6 @@ public class MainActivity extends AppCompatActivity {
     private AlertDialog buildReceiptChooserDialog(String reference,
                                                   List<ReceiptReferenceResolver.Result> candidates) {
         ViewGroup body = (ViewGroup) LayoutInflater.from(this).inflate(R.layout.dialog_receipt_chooser, null);
-        ViewGroup rows = body.findViewById(R.id.receiptChooserRows);
-        SimpleDateFormat capturedAt = new SimpleDateFormat("MMM d, yyyy · h:mm a", Locale.getDefault());
         AlertDialog dialog = new MaterialAlertDialogBuilder(this)
                 .setTitle(R.string.receipt_chooser_title)
                 .setMessage(getString(R.string.receipt_chooser_message, candidates.size(),
@@ -2297,6 +2334,16 @@ public class MainActivity extends AppCompatActivity {
                 .setView(body)
                 .setNegativeButton(android.R.string.cancel, null)
                 .create();
+        populateReceiptChooserRows(reference, candidates, body.findViewById(R.id.receiptChooserRows));
+        return dialog;
+    }
+
+    /** One row per candidate; rebuilt in place when OCR scores re-order the list. */
+    private void populateReceiptChooserRows(String reference,
+                                            List<ReceiptReferenceResolver.Result> candidates,
+                                            ViewGroup rows) {
+        rows.removeAllViews();
+        SimpleDateFormat capturedAt = new SimpleDateFormat("MMM d, yyyy · h:mm a", Locale.getDefault());
         for (int index = 0; index < candidates.size(); index++) {
             ReceiptReferenceResolver.Result candidate = candidates.get(index);
             ViewGroup row = (ViewGroup) LayoutInflater.from(this).inflate(R.layout.item_receipt_chooser, rows, false);
@@ -2307,6 +2354,10 @@ public class MainActivity extends AppCompatActivity {
             TextView dateView = row.findViewById(R.id.receiptChooserDate);
             dateView.setText(candidate.captureTimeMs > 0
                     ? capturedAt.format(new Date(candidate.captureTimeMs)) : "");
+            TextView badge = row.findViewById(R.id.receiptChooserBadge);
+            String badgeText = receiptChooserBadges.get(candidate.reference);
+            badge.setText(badgeText != null ? badgeText
+                    : getString(R.string.receipt_chooser_badge_reading));
             ImageView thumbnail = row.findViewById(R.id.receiptChooserThumbnail);
             thumbnail.setContentDescription(name);
             loadReceiptChooserThumbnail(thumbnail, candidate.reference);
@@ -2314,7 +2365,111 @@ public class MainActivity extends AppCompatActivity {
             row.setOnClickListener(v -> launchReceiptCandidateCheck(reference, candidates, checkIndex));
             rows.addView(row);
         }
-        return dialog;
+    }
+
+    /**
+     * OCRs each candidate on the recovery executor and re-sorts the open dialog by content match:
+     * amount first, merchant tokens and date as secondary evidence. The dialog stays usable in
+     * capture-rank order while badges read "Reading receipt…"; each scored candidate settles the
+     * order a little more. A stale generation (dialog closed, replaced, or picked) drops updates.
+     */
+    private void scoreReceiptCandidatesByOcr(String reference,
+                                             List<ReceiptReferenceResolver.Result> ranked,
+                                             int generation) {
+        Transaction transaction = receiptTransactionFor(reference);
+        if (transaction == null) return;
+        for (int index = 0; index < ranked.size(); index++) {
+            if (receiptChooserGeneration != generation) return;
+            ReceiptReferenceResolver.Result candidate = ranked.get(index);
+            ReceiptDraft draft = ocrReceiptCandidateQuietly(candidate.reference);
+            int score = ReceiptCandidateScorer.score(
+                    draft != null ? draft.totalAmount : null,
+                    draft != null ? draft.merchantForComment : null,
+                    draft != null ? draft.dateYyyyMmDd : null,
+                    transaction.getAmount(), transaction.getComment(), transaction.getDate());
+            final int candidateScore = score;
+            final String badgeText = receiptChooserBadgeText(draft, score);
+            final int candidateIndex = index;
+            runOnUiThread(() -> {
+                if (receiptChooserGeneration != generation
+                        || receiptChooserDialog == null || !receiptChooserDialog.isShowing()) return;
+                receiptChooserScores.put(candidate.reference, candidateScore);
+                receiptChooserBadges.put(candidate.reference, badgeText);
+                List<ReceiptReferenceResolver.Result> sorted = ReceiptCandidateScorer.sortByScoreDesc(
+                        ranked, item -> receiptChooserScores.containsKey(item.reference)
+                                ? receiptChooserScores.get(item.reference) : 0);
+                ranked.clear();
+                ranked.addAll(sorted);
+                ViewGroup body = (ViewGroup) receiptChooserDialog.findViewById(R.id.receiptChooserRows);
+                if (body != null) {
+                    populateReceiptChooserRows(reference, ranked, body);
+                }
+            });
+        }
+    }
+
+    /** One OCR pass over a candidate picture; any failure just means "no content evidence". */
+    private ReceiptDraft ocrReceiptCandidateQuietly(String candidateReference) {
+        Bitmap bitmap = null;
+        try {
+            bitmap = ReceiptExifBitmapLoader.decodeUpright(this, Uri.parse(candidateReference));
+        } catch (IOException | RuntimeException unavailable) {
+            Log.d("EnvelopeMoney", "receipt candidate decode for OCR unavailable");
+        }
+        if (bitmap == null) return null;
+        final CountDownLatch done = new CountDownLatch(1);
+        final ReceiptDraft[] draftOut = new ReceiptDraft[1];
+        try {
+            ReceiptOcrPipeline pipeline = new ReceiptOcrPipeline(PaddleOcrAdapter.createDefaultEngine());
+            pipeline.runAsync(this, bitmap, ReceiptCaptureMode.AUTO, currentOcrWeights(),
+                    new ReceiptOcrPipeline.PipelineCallback() {
+                        @Override public void onResult(ReceiptDraft draft) {
+                            draftOut[0] = draft;
+                            done.countDown();
+                        }
+                        @Override public void onError(Throwable error) {
+                            done.countDown();
+                        }
+                    });
+            done.await(10, TimeUnit.SECONDS);
+        } catch (RuntimeException | InterruptedException pipelineUnavailable) {
+            Log.d("EnvelopeMoney", "receipt candidate OCR unavailable");
+        } finally {
+            bitmap.recycle();
+        }
+        return draftOut[0];
+    }
+
+    private String receiptChooserBadgeText(ReceiptDraft draft, int score) {
+        if (draft == null || draft.totalAmount == null) {
+            return getString(R.string.receipt_chooser_badge_no_amount);
+        }
+        if (score >= ReceiptCandidateScorer.AMOUNT_EXACT) {
+            return getString(R.string.receipt_chooser_badge_amount_match, draft.totalAmount);
+        }
+        return getString(R.string.receipt_chooser_badge_amount_close, draft.totalAmount);
+    }
+
+    /** The transaction behind a reference, for content matching; null when the row is gone. */
+    private Transaction receiptTransactionFor(String reference) {
+        List<ReceiptReferenceRepair.Entry> entries = receiptEntriesFor(reference);
+        return entries.isEmpty() ? null : entries.get(0).transaction;
+    }
+
+    /** Android 11+ finishes a gallery move through one system delete-consent sheet, once per photo. */
+    private void offerGallerySourceDelete(Uri source) {
+        if (source == null || Build.VERSION.SDK_INT < 30
+                || receiptDeclinedDeleteSources.contains(source.toString())) return;
+        try {
+            android.app.PendingIntent delete = MediaStore.createDeleteRequest(
+                    getContentResolver(), Collections.singletonList(source));
+            pendingDeleteSourceUri = source;
+            receiptDeleteRequestLauncher.launch(new androidx.activity.result.IntentSenderRequest.Builder(
+                    delete.getIntentSender()).build());
+        } catch (RuntimeException unavailable) {
+            pendingDeleteSourceUri = null;
+            Log.w("EnvelopeMoney", "receipt gallery delete request unavailable", unavailable);
+        }
     }
 
     /** Thumbnails decode on the recovery executor and pop in; a row stays usable without one. */

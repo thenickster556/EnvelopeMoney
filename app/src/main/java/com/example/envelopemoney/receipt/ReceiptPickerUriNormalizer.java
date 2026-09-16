@@ -35,10 +35,17 @@ public final class ReceiptPickerUriNormalizer {
         @NonNull
         public final Uri uri;
         public final boolean sourceDeleted;
+        /** Source survived deletion but qualifies for a system delete-consent request (Android 11+). */
+        public final boolean deleteNeedsConsent;
 
         ImportResult(@NonNull Uri uri, boolean sourceDeleted) {
+            this(uri, sourceDeleted, false);
+        }
+
+        ImportResult(@NonNull Uri uri, boolean sourceDeleted, boolean deleteNeedsConsent) {
             this.uri = uri;
             this.sourceDeleted = sourceDeleted;
+            this.deleteNeedsConsent = deleteNeedsConsent;
         }
     }
 
@@ -188,7 +195,9 @@ public final class ReceiptPickerUriNormalizer {
     }
 
     /**
-     * Persist the album copy. Best-effort delete of a non–app-owned picker source.
+     * Persist the album copy. Best-effort delete of a non–app-owned picker source; when the
+     * platform forbids a silent delete but allows a user-consent request (Android 11+
+     * MediaStore image), the result flags it so the caller can finish the move.
      * Never deletes a Mountain Money file, and never rolls back to a picker URI.
      */
     @NonNull
@@ -203,7 +212,10 @@ public final class ReceiptPickerUriNormalizer {
                 && !isAppOwnedReceiptUri(context, originalUri)) {
             deleted = ReceiptSourceDeleter.tryDeleteSource(context, originalUri);
         }
-        return new ImportResult(persist, deleted);
+        boolean needsConsent = !deleted
+                && ReceiptSourceDeleter.needsSystemDeleteConsent(originalUri,
+                        Build.VERSION.SDK_INT);
+        return new ImportResult(persist, deleted, needsConsent);
     }
 
     /**

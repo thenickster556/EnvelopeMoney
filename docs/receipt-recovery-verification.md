@@ -229,3 +229,22 @@ Independent verification run: 287 tests, 3 documented baseline failures; recover
 git diff --check pass. No code changed in this audit. Standing rules for later fixes: never
 auto-attach the first ranked file, never widen ±1 without a request, never open the system
 picker from recovery.
+
+---
+
+# OCR-ranked candidates, EXIF capture dates, gallery move restored — 2026-09-15
+
+## Delivered behavior (delta)
+- **Empty-picker root cause fixed (EXIF capture dates).** Renamed/copied album files have no name-epoch and `DATE_TAKEN`=0, so their capture time fell back to `DATE_ADDED` — the copy day — pushing real receipts out of the day-±1 window and dead receipts into the MISSING retry dialog. Capture precedence is now filename epoch → `DATE_TAKEN` → **EXIF `DateTimeOriginal`** (header-only probe, only for rows that would otherwise fall back; counted as `exif=K` in the album log) → `DATE_ADDED`. The tap path logs `receipt chooser: status=…, alternatives=N` so the next on-device run explains itself.
+- **OCR-scored, live-sorted candidates.** While the picker is open, each candidate runs through the existing `ReceiptOcrPipeline`/`ReceiptFieldParser` on the recovery executor; the pure `ReceiptCandidateScorer` (exact amount 100 / close ±$0.50-or-2% 40 / shared merchant tokens ≤50 / same date 20) re-sorts rows live with evidence badges (`Amount matches · $…`, `Close amount · $…`, `No amount read`, `Reading receipt…` until scanned). Dialog usable immediately in capture-rank order; generation + isShowing guards drop stale reorders; equal scores keep capture rank; OCR never attaches — `Use this picture` is unchanged.
+- **Recurring regression fixed: gallery import duplicates instead of moving (third occurrence).** `3e1bb82`'s `OpenDocument`→`GetContent` swap made both delete paths unreachable (not a documents URI; read-only grant blocks `ContentResolver.delete`), so every pick duplicated. Fix: the dead `takePersistableUriPermission` remnant is removed; `isMediaStoreImagesUri` now recognizes the media documents provider (its pinned test — a documented baseline failure — turns green, **baseline failures drop 3 → 2**); `needsSystemDeleteConsent` + `ImportResult.deleteNeedsConsent` flag survivors; `MainActivity` shows `MediaStore.createDeleteRequest` — one system consent sheet per photo, Allow = move complete, Cancel = both kept and never re-asked this session. History of the recurrence: 2026-07 move via deleter, 2026-07-03 DocumentsContract delete, 2026-09-12 OpenDocument restore, 2026-09-15 GetContent swap broke it again — now guarded by regression tests.
+
+## Automated results
+- Tests first (all red before implementation): `ReceiptCandidateScorerTest` (pinned scores 145/85/45/0, tolerance tiers, token normalization/cap, null-safety, stable sort), `AndroidReceiptSourceTest` (EXIF-dated row with `taken=0` and a far `DATE_ADDED` → EXIF time; no-EXIF keeps `DATE_ADDED`; 4-arg precedence table), `ReceiptSourceDeleterTest.needsSystemDeleteConsent_api30AndMediaOnly`, `ReceiptPickerUriNormalizerTest.finishImportFlagsConsentWhenMediaSourceSurvives` (a refusing provider models the read-only grant; file sources delete cleanly with no consent).
+- Full `:app:testDebugUnitTest`: **298 tests, 296 passed, 2 baseline failures** (`MonthRolloverHelperTest`, `PondLookupTest`) — `ReceiptSourceDeleterTest.isMediaStoreImagesUri_trueForMediaContent` left the baseline set.
+- Recovery JaCoCo scope: **659/676 lines (97.49%) and 545/678 branches (80.38%)**; `:app:verifyReceiptRecoveryCoverage` passes both 80% gates.
+- `:app:lintDebug`: **43 existing errors** — unchanged; changed files add no new findings. `:app:assembleDebug` and `git diff --check`: passed.
+- Chooser OCR wiring, consent sheet, and badge rendering have no JVM harness for `MainActivity`/activity views (recorded limitation): compile + resource lint + the checklist below.
+
+## On-device check (recommended, not yet run)
+Copy a renamed, EXIF-dated JPEG into the folder weeks after its transaction date; tap the dead receipt — the picker must open with that file (logcat: `receipt chooser: status=AMBIGUOUS, alternatives≥1`; album line shows `exif=1`). With ≥2 candidates, badges fill in and rows settle best-first without the dialog blocking. Gallery: pick a photo, Allow the delete sheet — only the Mountain Money copy remains; Cancel — both remain and no second ask for that photo.

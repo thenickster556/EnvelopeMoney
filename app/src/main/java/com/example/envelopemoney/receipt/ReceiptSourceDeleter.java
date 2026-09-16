@@ -56,14 +56,26 @@ public final class ReceiptSourceDeleter {
 
     /**
      * Heuristic: MediaStore image URIs are more likely to be deletable than ephemeral picker grants.
+     * Covers both {@code content://media/…/images/…} rows and the media documents provider; the
+     * photo-picker grants ({@code …media.photopicker…}) are deliberately excluded.
      */
     public static boolean isMediaStoreImagesUri(@Nullable String uriString) {
         if (uriString == null || uriString.trim().isEmpty()) {
             return false;
         }
         String lower = uriString.toLowerCase(Locale.US);
-        return lower.contains("content://media/")
-                && (lower.contains("/images/") || lower.contains("media.documents"));
+        boolean mediaImages = lower.contains("content://media/") && lower.contains("/images/");
+        boolean mediaDocuments = lower.contains("com.android.providers.media.documents");
+        return mediaImages || mediaDocuments;
+    }
+
+    /**
+     * Android 11+ deletes other apps' media only through a user-consent request
+     * ({@link android.provider.MediaStore#createDeleteRequest}); GetContent grants never allow a
+     * silent delete. True only for MediaStore image URIs on those platforms.
+     */
+    public static boolean needsSystemDeleteConsent(@Nullable Uri sourceUri, int sdkInt) {
+        return sdkInt >= 30 && isMediaStoreImagesUri(sourceUri == null ? null : sourceUri.toString());
     }
 
     /**

@@ -165,4 +165,8 @@
     <string name="content_desc_receipt_candidate_next">Next candidate picture</string>
     <string name="receipt_choose_different">Choose different</string>
     <string name="receipt_swap_none_found">No other pictures match this receipt.</string>
+    <string name="receipt_chooser_badge_reading">Reading receipt…</string>
+    <string name="receipt_chooser_badge_amount_match">Amount matches · $%1$.2f</string>
+    <string name="receipt_chooser_badge_amount_close">Close amount · $%1$.2f</string>
+    <string name="receipt_chooser_badge_no_amount">No amount read</string>
 </resources>

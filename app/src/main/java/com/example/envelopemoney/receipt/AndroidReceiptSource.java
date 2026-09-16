@@ -12,11 +12,16 @@ import android.os.Build;
 import android.os.Environment;
 import android.provider.MediaStore;
 import android.util.Log;
+import androidx.annotation.Nullable;
+import androidx.exifinterface.media.ExifInterface;
 import androidx.core.content.ContextCompat;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -139,13 +144,14 @@ public final class AndroidReceiptSource implements ReceiptReferenceResolver.Sour
         Set<String> indexedNames = new HashSet<>();
         boolean accessDenied = false;
         int rowsSeen = 0;
+        int[] exifProbes = new int[1];
         try {
-            rowsSeen += queryAlbumRows(pictures, indexedNames);
+            rowsSeen += queryAlbumRows(pictures, indexedNames, exifProbes);
             if (rowsSeen == 0 && !needsReadPermission()) {
                 // Files copied over USB or a PC can sit in the folder before MediaStore indexes them.
                 Log.i(TAG, "receipt album empty in MediaStore; requesting rescan of the Mountain Money folder");
                 rescanAlbumFolder();
-                rowsSeen += queryAlbumRows(pictures, indexedNames);
+                rowsSeen += queryAlbumRows(pictures, indexedNames, exifProbes);
             }
         } catch (SecurityException denied) {
             accessDenied = true;
@@ -157,7 +163,7 @@ public final class AndroidReceiptSource implements ReceiptReferenceResolver.Sour
                 for (File file : files) {
                     if (file.isFile() && !indexedNames.contains(file.getName())) {
                         pictures.add(ReceiptReferenceResolver.Result.resolved(
-                                file.toURI().toString(), file.getName(), captureTimeMs(file)));
+                                file.toURI().toString(), file.getName(), diskCaptureTimeMs(file)));
                         diskSupplement++;
                     }
                 }
@@ -166,7 +172,8 @@ public final class AndroidReceiptSource implements ReceiptReferenceResolver.Sour
             accessDenied = true;
         }
         Log.i(TAG, "receipt album: " + pictures.size() + " pictures (mediastore=" + rowsSeen
-                + ", disk=" + diskSupplement + ", restricted=" + albumAccessRestricted()
+                + ", disk=" + diskSupplement + ", exif=" + exifProbes[0]
+                + ", restricted=" + albumAccessRestricted()
                 + ", " + (System.currentTimeMillis() - startedAt) + "ms)");
         if (pictures.isEmpty() && (accessDenied || needsReadPermission())) {
             throw new SecurityException("Photo access required");
@@ -175,7 +182,8 @@ public final class AndroidReceiptSource implements ReceiptReferenceResolver.Sour
     }
 
     /** One MediaStore pass over the exact album folder; rows outside it are skipped. */
-    private int queryAlbumRows(List<ReceiptReferenceResolver.Result> pictures, Set<String> indexedNames) {
+    private int queryAlbumRows(List<ReceiptReferenceResolver.Result> pictures, Set<String> indexedNames,
+                               int[] exifProbes) {
         boolean scopedStorage = Build.VERSION.SDK_INT >= 29;
         String locationColumn = scopedStorage ? MediaStore.MediaColumns.RELATIVE_PATH : MediaStore.MediaColumns.DATA;
         File folder = albumDirectory();
@@ -202,8 +210,17 @@ public final class AndroidReceiptSource implements ReceiptReferenceResolver.Sour
                         cursor.getLong(idCol));
                 long taken = takenCol >= 0 && !cursor.isNull(takenCol) ? cursor.getLong(takenCol) : 0L;
                 long added = addedCol >= 0 && !cursor.isNull(addedCol) ? cursor.getLong(addedCol) : 0L;
+                long exifOriginalMs = 0L;
+                // Only rows that would otherwise fall back to the scan/copy day pay for a probe.
+                if (taken <= 0 && ReceiptAlbumMatcher.captureTimeMs(name) == null) {
+                    Long probed = exifCaptureTimeMs(context, uri);
+                    if (probed != null && probed > 0) {
+                        exifOriginalMs = probed;
+                        exifProbes[0]++;
+                    }
+                }
                 pictures.add(ReceiptReferenceResolver.Result.resolved(uri.toString(), name,
-                        captureTimeMs(name, taken, added)));
+                        captureTimeMs(name, taken, exifOriginalMs, added)));
                 indexedNames.add(name);
                 kept++;
             }
@@ -258,22 +275,55 @@ public final class AndroidReceiptSource implements ReceiptReferenceResolver.Sour
     }
 
     /**
-     * Filename epoch first, then MediaStore {@code DATE_TAKEN} (ms), then {@code DATE_ADDED}
-     * (seconds unless the value is already milliseconds).
+     * Filename epoch first, then MediaStore {@code DATE_TAKEN} (ms), then the JPEG's EXIF
+     * {@code DateTimeOriginal} (the real capture instant for copied files), then {@code DATE_ADDED}
+     * (seconds unless the value is already milliseconds) — the scan/copy day as a last resort.
      */
-    static long captureTimeMs(String fileName, long dateTakenMs, long dateAddedRaw) {
+    static long captureTimeMs(String fileName, long dateTakenMs, long exifOriginalMs, long dateAddedRaw) {
         Long fromName = ReceiptAlbumMatcher.captureTimeMs(fileName);
         if (fromName != null && fromName > 0) return fromName;
         if (dateTakenMs > 0) return dateTakenMs;
+        if (exifOriginalMs > 0) return exifOriginalMs;
         if (dateAddedRaw > 1_000_000_000_000L) return dateAddedRaw;
         if (dateAddedRaw > 0) return dateAddedRaw * 1000L;
         return 0L;
+    }
+
+    /**
+     * Header-only EXIF probe: {@code DateTimeOriginal} parsed in the default timezone. Copied and
+     * renamed JPEGs carry their true capture instant there while MediaStore only knows the scan
+     * day; screenshots and stripped exports return null and keep falling back to DATE_ADDED.
+     */
+    @Nullable
+    static Long exifCaptureTimeMs(Context context, Uri uri) {
+        if (context == null || uri == null) return null;
+        try (InputStream stream = ReceiptBitmapLoader.openInputStream(context, uri)) {
+            if (stream == null) return null;
+            ExifInterface exif = new ExifInterface(stream);
+            String original = exif.getAttribute(ExifInterface.TAG_DATETIME_ORIGINAL);
+            if (original == null) return null;
+            SimpleDateFormat format = new SimpleDateFormat("yyyy:MM:dd HH:mm:ss", Locale.US);
+            format.setLenient(false);
+            Date parsed = format.parse(original.trim());
+            return parsed != null ? parsed.getTime() : null;
+        } catch (IOException | ParseException | RuntimeException unavailable) {
+            return null;
+        }
     }
 
     static long captureTimeMs(File file) {
         if (file == null) return 0L;
         Long fromName = ReceiptAlbumMatcher.captureTimeMs(file.getName());
         if (fromName != null && fromName > 0) return fromName;
+        return file.lastModified();
+    }
+
+    /** Disk-supplement capture time: name epoch, then an EXIF probe, then last-modified. */
+    long diskCaptureTimeMs(File file) {
+        Long fromName = ReceiptAlbumMatcher.captureTimeMs(file.getName());
+        if (fromName != null && fromName > 0) return fromName;
+        Long fromExif = exifCaptureTimeMs(context, Uri.fromFile(file));
+        if (fromExif != null && fromExif > 0) return fromExif;
         return file.lastModified();
     }
 }
