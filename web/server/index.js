@@ -6,10 +6,20 @@ import multer from 'multer';
 import bcrypt from 'bcryptjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readFileSync } from 'node:fs';
+import os from 'node:os';
+import https from 'node:https';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { connectDb, getDb, getReceiptBucket, ObjectId } from './db.js';
 import { replaceGridFsFile } from './gridFsReplace.js';
+import {
+  resolveHost,
+  listLanIPv4,
+  formatListenLines,
+  sessionCookieOptions,
+  readHttpsOptions,
+} from './listenInfo.js';
 import { applyLaunchAndDisplay, emptyProfile, publicProfile, refreshBalances } from '../domain/profileEngine.js';
 import { buildDemoProfile, shouldSeedDemoProfile } from '../domain/demoSeed.js';
 import { parse as parseReceipt, ocrLine, ocrResult, ReceiptCaptureMode } from '../domain/receiptFieldParser.js';
@@ -18,9 +28,18 @@ import { readLearning, saveLearning } from './learningStore.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, '..');
 const PORT = Number(process.env.PORT || 3000);
+const HOST = resolveHost(process.env);
 const mongoUri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017';
 const dbName = process.env.MONGODB_DB || 'mountain_money';
 const sessionSecret = process.env.SESSION_SECRET || 'mountain-money-dev-secret-change-me';
+let httpsOptions = null;
+try {
+  httpsOptions = readHttpsOptions(process.env, readFileSync);
+} catch (err) {
+  console.error(err.message);
+  process.exit(1);
+}
+const useHttps = !!httpsOptions;
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -68,7 +87,7 @@ app.use(session({
   secret: sessionSecret,
   resave: false,
   saveUninitialized: false,
-  cookie: { httpOnly: true, sameSite: 'lax', maxAge: 7 * 24 * 60 * 60 * 1000 },
+  cookie: sessionCookieOptions(useHttps),
   store: MongoStore.create({
     mongoUrl: mongoUri,
     dbName,
@@ -295,6 +314,18 @@ app.post('/api/learning', requireAuth, async (req, res) => {
   }
 });
 
+function printListenInfo(protocol) {
+  const lines = formatListenLines({
+    protocol,
+    port: PORT,
+    lanAddresses: listLanIPv4(os.networkInterfaces()),
+    mongoUri,
+  });
+  for (const line of lines) {
+    console.log(line);
+  }
+}
+
 async function start() {
   try {
     await connectDb();
@@ -303,9 +334,12 @@ async function start() {
     console.error(err.message);
     process.exit(1);
   }
-  app.listen(PORT, '127.0.0.1', () => {
-    console.log(`Mountain Money web demo: http://127.0.0.1:${PORT}`);
-  });
+  const onListen = () => printListenInfo(useHttps ? 'https' : 'http');
+  if (useHttps) {
+    https.createServer(httpsOptions, app).listen(PORT, HOST, onListen);
+  } else {
+    app.listen(PORT, HOST, onListen);
+  }
 }
 
 start();

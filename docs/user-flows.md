@@ -84,3 +84,14 @@
 5. Gallery pick (add/edit receipt only) uses `GetContent` so the photo gallery opens, not Files. Import still copies into **Pictures/Mountain Money** and persists that album URI. On Android 11+ the system then shows **one delete-consent sheet** for the picked photo — Allow completes the move (original removed), Cancel keeps both copies and is never re-asked for that photo this session. (Move-not-duplicate is a recurring regression — third occurrence — now guarded by tests.) Preview/recovery never open a picker.
 6. Rotation save writes the same stored URI.
 The existing gallery action still imports a new/replacement receipt when intentionally selected.
+
+## Web demo: Local Files (optional)
+
+1. Sign in as usual (Mongo session). Ponds work with no folder chosen.
+2. Tap the top-bar **Local Files** folder icon.
+3. Leave **Receipts on server** (default) or pick **Receipts on this device**.
+4. **Choose Folder** is the primary action when the browser can pick a live directory; otherwise **Choose Files** is primary. Import/Export/Change Folder/Reconnect are shown when they apply. Cancelling a picker does nothing.
+5. Add/edit camera or gallery then copies into that device workspace in local mode (no GridFS upload). Status reads **Saved to your folder** or **Saved in this browser until you Export**.
+6. Save stores `local://…` on the transaction in Mongo. Preview and rotate use the local file; existing `/api/receipts/:id` rows still use GridFS.
+7. Reload reuses a granted folder handle when the browser still has permission; otherwise **Reconnect folder**. A missing local picture tints the history icon red and explains that the JPEG is on the device where it was saved — the spend is kept.
+

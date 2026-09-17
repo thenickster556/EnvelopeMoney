@@ -22,6 +22,12 @@
   ],
   "completed_tasks": [
     {
+      "id": "web-local-file-storage-2026-09-16",
+      "title": "Add per-device local folder/file storage beside GridFS in the web demo",
+      "status": "completed",
+      "intent": "Major/additive web-only: keep Mongo users/profiles/sessions and GridFS receipts; keep server SQLite learning. Capability-based LocalFileStorage + ReceiptStorage; per-browser mode; local:// vs /api/receipts refs; HOST 0.0.0.0 + optional HTTPS. Android unchanged. Tests first. npm test 139 pass."
+    },
+    {
       "id": "receipt-see-all-faster-2026-09-16",
       "title": "See all unused pictures in the list; load thumbs and amounts faster",
       "status": "completed",

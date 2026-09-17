@@ -32,6 +32,7 @@
       <button type="button" id="btnBillsSetup" class="icon-btn" aria-label="Choose which days of the month are bills days">📅</button>
       <button type="button" id="btnAnalysis" class="icon-btn" aria-label="Analysis">▦</button>
       <button type="button" id="btnRecalculate" class="icon-btn" aria-label="Recalculate pond balances from transactions">↻</button>
+      <button type="button" id="btnLocalFiles" class="icon-btn" aria-label="Local Files">📁</button>
       <button type="button" id="btnSignOut" class="text-btn">Sign out</button>
     </header>
 
@@ -98,6 +99,8 @@
   </div>
 
   <div id="toast" class="toast hidden"></div>
+  <input id="localDirInput" type="file" webkitdirectory multiple class="visually-hidden" tabindex="-1">
+  <input id="localFileInput" type="file" multiple class="visually-hidden" tabindex="-1">
 
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <script type="module" src="/js/app.js"></script>

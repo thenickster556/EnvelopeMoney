@@ -106,7 +106,8 @@ Database `mountain_money` (localhost). One profile per registered account; Envel
 - `users`: `_id`, `login` (normalized username or email), `passwordHash` (bcrypt), `createdAt`
 - `profiles`: `userId`, `currentMonth`, `displayedMonth`, `envelopes`, `envelopesCollapsed`, `billsDays`, `paydays`, `billsFilterActive`, `billsFilterSavedStartDisplay`, `billsFilterSavedEndDisplay`, `dateFilterStartDisplay`, `dateFilterEndDisplay`, `transfersVisible`, last-add pond prefs
 - `sessions`: express-session store
-- `receipts` GridFS: JPEG files tagged with `metadata.userId`; transaction `receiptImageUri` is `/api/receipts/:id`
+- `receipts` GridFS: JPEG files tagged with `metadata.userId`; transaction `receiptImageUri` is `/api/receipts/:id` in **Receipts on server** mode (default).
+- Optional web **Receipts on this device** mode is stored in **this browser** only (`localStorage` key `mm.receiptStorageMode`), not on the Mongo profile, so a phone and a laptop can choose independently. Local pictures are referenced as `local://receipts/YYYY-MM/MountainMoney_{epoch}.jpg`. Mongo still stores that string on the transaction; it does not store the JPEG or base64. A live folder handle may be remembered in IndexedDB on that browser. Missing local files do not delete the spend row.
 
 Web and Android stores are independent (no SharedPreferences sync). Learning `.db` files are also independent per platform/user unless the user copies the file.
 

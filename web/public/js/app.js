@@ -28,6 +28,19 @@ import { randomUUID } from '/domain/id.js';
 import { footerTotals, pondReconciliation, refreshBalances, recalculateBalances } from '/domain/profileEngine.js';
 import { ensureRecurringTransactions } from '/domain/recurring.js';
 import { analyze, barScaleMax, fullMonthLabel, shortMonthLabel } from '/domain/spendAnalysis.js';
+import { parseFileReference } from '/domain/fileReference.js';
+import { detectCapabilities } from './storage/capabilities.js';
+import { createHandleStore } from './storage/handleStore.js';
+import { createObjectUrlCache } from './storage/objectUrls.js';
+import { createLocalFileStorage } from './storage/localFileStorage.js';
+import { createDirectDirectoryProvider } from './storage/providers/directDirectoryProvider.js';
+import { createDirectoryHandleWorkspace } from './storage/providers/directoryHandleWorkspace.js';
+import { loadReceiptStorageMode, saveReceiptStorageMode } from './storage/receiptStorageMode.js';
+import { StorageErrorCode } from './storage/storageErrors.js';
+import { createReceiptStorage } from './receipts/receiptStorage.js';
+import { createGridFsReceiptStorage } from './receipts/gridFsReceiptStorage.js';
+import { createLocalBrowserReceiptStorage } from './receipts/localBrowserReceiptStorage.js';
+import { createLocalFilesUi, pickFromInput } from './localFilesUi.js';
 
 const state = {
   user: null,
@@ -39,9 +52,54 @@ const state = {
   previewScale: 1,
   previewX: 0,
   previewY: 0,
+  receiptAttention: new Map(),
 };
 
 const $ = (id) => document.getElementById(id);
+
+const capabilities = detectCapabilities();
+const objectUrls = createObjectUrlCache();
+const handleStore = createHandleStore();
+let pendingFolderHandle = null;
+let localFilesUi = null;
+const directProvider = createDirectDirectoryProvider({ handleStore });
+const localFileStorage = createLocalFileStorage({
+  capabilities,
+  objectUrls,
+  directProvider,
+  pickDirectoryFiles: () => pickFromInput($('localDirInput')),
+  pickFiles: () => pickFromInput($('localFileInput')),
+  getOpfsDirectory: capabilities.opfs ? () => navigator.storage.getDirectory() : null,
+});
+const receiptStorage = createReceiptStorage({
+  getMode: () => loadReceiptStorageMode(window.localStorage),
+  gridFs: createGridFsReceiptStorage({
+    post: async (path, formLike) => {
+      const form = new FormData();
+      form.append('image', formLike.image, formLike.fileName || 'receipt.jpg');
+      return api(path, { method: 'POST', body: form });
+    },
+    put: async (path, formLike) => {
+      const form = new FormData();
+      form.append('image', formLike.image, formLike.fileName || 'receipt.jpg');
+      return api(path, { method: 'PUT', body: form });
+    },
+    getBlob: async (uri) => {
+      const res = await fetch(uri, { credentials: 'include' });
+      if (!res.ok) throw new Error(S.previewFailed);
+      return res.blob();
+    },
+  }),
+  local: createLocalBrowserReceiptStorage({ localFileStorage }),
+});
+
+function getReceiptMode() {
+  return loadReceiptStorageMode(window.localStorage);
+}
+
+function setReceiptMode(mode) {
+  saveReceiptStorageMode(mode, window.localStorage);
+}
 
 async function api(path, options = {}) {
   const headers = { ...(options.headers || {}) };
@@ -56,9 +114,13 @@ async function api(path, options = {}) {
 
 async function saveProfile() {
   refreshBalances(state.profile);
-  const data = await api('/api/profile', { method: 'PUT', body: JSON.stringify({ profile: state.profile }) });
-  state.profile = data.profile;
-  render();
+  try {
+    const data = await api('/api/profile', { method: 'PUT', body: JSON.stringify({ profile: state.profile }) });
+    state.profile = data.profile;
+    render();
+  } catch {
+    toast(S.serverUnreachable);
+  }
 }
 
 function toast(message) {
@@ -141,6 +203,104 @@ function allTransactions() {
   return rows;
 }
 
+async function refreshReceiptAttention() {
+  const next = new Map();
+  if (!state.profile) {
+    state.receiptAttention = next;
+    return;
+  }
+  const rows = [];
+  for (const env of state.profile.envelopes || []) {
+    for (const tx of getTransactions(env)) rows.push(tx);
+  }
+  for (const tx of rows) {
+    if (!tx.receiptImageUri) continue;
+    const ref = parseFileReference(tx.receiptImageUri);
+    if (ref.storage !== 'local') continue;
+    let missing = true;
+    try {
+      missing = !localFileStorage.hasWorkspace() || !(await localFileStorage.exists(ref.path));
+    } catch {
+      missing = true;
+    }
+    next.set(tx.receiptImageUri, missing);
+  }
+  const changed = next.size !== state.receiptAttention.size
+    || [...next.entries()].some(([uri, missing]) => state.receiptAttention.get(uri) !== missing);
+  state.receiptAttention = next;
+  if (!changed) return;
+  document.querySelectorAll('[data-act="photo"][data-uri]').forEach((button) => {
+    button.classList.toggle('attention', !!next.get(button.dataset.uri));
+  });
+}
+
+async function reconnectLocalFolder() {
+  if (!pendingFolderHandle || typeof pendingFolderHandle.requestPermission !== 'function') {
+    throw new Error(S.folderUnsupported);
+  }
+  const permission = await pendingFolderHandle.requestPermission({ mode: 'readwrite' });
+  if (permission !== 'granted') {
+    const err = new Error(S.permissionDenied);
+    err.code = StorageErrorCode.PERMISSION_DENIED;
+    throw err;
+  }
+  localFileStorage.attachWorkspace(createDirectoryHandleWorkspace(pendingFolderHandle, {
+    writesToOriginalFolder: true,
+    folderLabel: pendingFolderHandle.name,
+  }));
+  pendingFolderHandle = null;
+}
+
+async function restoreLocalWorkspace() {
+  pendingFolderHandle = null;
+  const handle = await handleStore.load('workspace');
+  if (handle) {
+    try {
+      const permission = typeof handle.queryPermission === 'function'
+        ? await handle.queryPermission({ mode: 'readwrite' })
+        : 'granted';
+      if (permission === 'granted') {
+        localFileStorage.attachWorkspace(createDirectoryHandleWorkspace(handle, {
+          writesToOriginalFolder: true,
+          folderLabel: handle.name,
+        }));
+        return;
+      }
+      pendingFolderHandle = handle;
+    } catch {
+      pendingFolderHandle = handle;
+    }
+  }
+  if (!localFileStorage.hasWorkspace() && capabilities.opfs) {
+    try {
+      await localFileStorage.connectWorkingCopy();
+    } catch {
+      /* working copy is optional until the user attaches a receipt */
+    }
+  }
+}
+
+function getLocalFilesUi() {
+  if (!localFilesUi) {
+    localFilesUi = createLocalFilesUi({
+      S,
+      capabilities,
+      localFileStorage,
+      getMode: getReceiptMode,
+      setMode: setReceiptMode,
+      openSheet,
+      closeSheet,
+      toast,
+      onWorkspaceChange: () => {
+        refreshReceiptAttention().then(() => render());
+      },
+      reconnectFolder: reconnectLocalFolder,
+      getNeedsReconnect: () => !!pendingFolderHandle,
+    });
+  }
+  return localFilesUi;
+}
+
 function render() {
   if (!state.profile) return;
   const month = displayedMonth();
@@ -162,6 +322,7 @@ function render() {
   if (foot.mode === 'reconcile') $('tvPondTotalsFooter').textContent = S.footerReconcile(foot.inBank, foot.stillToDeposit);
   else if (foot.mode === 'full') $('tvPondTotalsFooter').textContent = S.footerFull(foot.account, foot.remaining, foot.difference);
   else $('tvPondTotalsFooter').textContent = S.footerPartial(foot.remaining);
+  refreshReceiptAttention();
 }
 
 function renderPonds() {
@@ -238,7 +399,7 @@ function renderTransactions() {
         ${expanded ? `<pre>${escapeHtml(formatBreakdownLine(group))}</pre>` : ''}
         <button type="button" class="text-btn" data-act="split">${expanded ? 'Hide' : 'Show'} split</button>` : ''}
       <div class="row-actions">
-        ${t.receiptImageUri ? `<button type="button" class="icon-btn" data-act="photo" aria-label="View receipt image">🖼</button>` : ''}
+        ${t.receiptImageUri ? `<button type="button" class="icon-btn${state.receiptAttention.get(t.receiptImageUri) ? ' attention' : ''}" data-act="photo" data-uri="${escapeHtml(t.receiptImageUri)}" aria-label="View receipt image">🖼</button>` : ''}
         <button type="button" class="text-btn" data-act="edit">${S.edit}</button>
         <button type="button" class="text-btn" data-act="delete">${S.delete}</button>
       </div>`;
@@ -687,12 +848,13 @@ function openTransactionDialog(existing) {
 
   async function attachReceipt(file) {
     if (!file) return;
+    if (getReceiptMode() === 'local') {
+      const ready = await getLocalFilesUi().ensureLocalWorkspace();
+      if (!ready) return;
+    }
     $('rxStatus').textContent = S.ocrReading;
     try {
-      const form = new FormData();
-      form.append('image', file);
-      const uploaded = await api('/api/receipts', { method: 'POST', body: form });
-      receiptUri = uploaded.uri;
+      receiptUri = await receiptStorage.save(file);
       $('rxPreview').disabled = false;
       $('rxRemove').disabled = false;
       const draft = await runOcr(file, ocrMode, ocrWeights);
@@ -703,10 +865,24 @@ function openTransactionDialog(existing) {
       if (draft?.merchantForComment && !$('txComment').value) $('txComment').value = draft.merchantForComment;
       if (draft?.dateYyyyMmDd && isIsoDateOutsideFilterRange(draft.dateYyyyMmDd, state.profile.dateFilterStartDisplay, state.profile.dateFilterEndDisplay)) {
         $('rxStatus').textContent = S.dateOutside;
+      } else if (getReceiptMode() === 'local') {
+        $('rxStatus').textContent = getLocalFilesUi().saveStatusText();
       } else {
         $('rxStatus').textContent = '';
       }
-    } catch {
+    } catch (err) {
+      if (err && err.code === StorageErrorCode.PICKER_CANCELLED) {
+        $('rxStatus').textContent = '';
+        return;
+      }
+      if (err && err.code === StorageErrorCode.QUOTA) {
+        $('rxStatus').textContent = S.storageFull;
+        return;
+      }
+      if (err && err.code === StorageErrorCode.PERMISSION_DENIED) {
+        $('rxStatus').textContent = S.permissionDenied;
+        return;
+      }
       $('rxStatus').textContent = S.ocrFailed;
     }
   }
@@ -856,23 +1032,19 @@ async function openPreview(uri) {
   const img = $('previewImage');
   img.onerror = () => toast(S.previewFailed);
   try {
-    if (String(uri).startsWith('/api/receipts/')) {
-      const res = await fetch(uri, { credentials: 'include' });
-      if (!res.ok) {
-        throw new Error('preview');
-      }
-      const blob = await res.blob();
-      if (img.dataset.blobUrl) {
-        URL.revokeObjectURL(img.dataset.blobUrl);
-      }
-      const blobUrl = URL.createObjectURL(blob);
-      img.dataset.blobUrl = blobUrl;
-      img.src = blobUrl;
-    } else {
-      img.src = uri;
+    const blob = await receiptStorage.loadBlob(uri);
+    if (img.dataset.blobUrl) {
+      URL.revokeObjectURL(img.dataset.blobUrl);
     }
+    const blobUrl = URL.createObjectURL(blob);
+    img.dataset.blobUrl = blobUrl;
+    img.src = blobUrl;
   } catch {
-    toast(S.previewFailed);
+    if (parseFileReference(uri).storage === 'local') {
+      toast(S.pictureOnOtherDevice);
+    } else {
+      toast(S.previewFailed);
+    }
     return;
   }
   applyPreviewTransform();
@@ -898,15 +1070,10 @@ async function savePreviewRotation() {
   ctx.rotate(rad * Math.PI / 180);
   ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
   const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.92));
-  const id = state.previewUri.split('/').pop();
-  const form = new FormData();
-  form.append('image', blob, 'receipt.jpg');
   try {
-    await api(`/api/receipts/${id}`, { method: 'PUT', body: form });
+    await receiptStorage.replace(state.previewUri, blob);
     state.previewRotation = 0;
-    const res = await fetch(`${state.previewUri}?t=${Date.now()}`, { credentials: 'include' });
-    if (!res.ok) throw new Error('preview');
-    const next = await res.blob();
+    const next = await receiptStorage.loadBlob(state.previewUri);
     if (img.dataset.blobUrl) {
       URL.revokeObjectURL(img.dataset.blobUrl);
     }
@@ -922,6 +1089,12 @@ async function savePreviewRotation() {
 function closePreview() {
   if (state.previewRotation % 360 !== 0) {
     if (!confirm(S.discardMessage)) return;
+  }
+  const img = $('previewImage');
+  if (img && img.dataset.blobUrl) {
+    URL.revokeObjectURL(img.dataset.blobUrl);
+    delete img.dataset.blobUrl;
+    img.removeAttribute('src');
   }
   $('preview').classList.add('hidden');
 }
@@ -1265,6 +1438,7 @@ function bindUi() {
   };
   $('btnBillsSetup').onclick = openBillsDialog;
   $('btnAnalysis').onclick = openAnalysisSheet;
+  $('btnLocalFiles').onclick = () => getLocalFilesUi().open();
   $('btnBillsFilter').onclick = applyBillsFilter;
   $('btnToggleTransfers').onclick = async () => {
     state.profile.transfersVisible = !state.profile.transfersVisible;
@@ -1314,6 +1488,7 @@ function initializeMonthForAll(month) {
 
 async function boot() {
   bindUi();
+  await restoreLocalWorkspace();
   try {
     const data = await api('/api/auth/me');
     if (data.user) {

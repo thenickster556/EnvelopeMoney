@@ -13,7 +13,7 @@ This file maps the **repository memory system**: what each document is for and w
 | [AI_CHANGE_PROTOCOL.md](AI_CHANGE_PROTOCOL.md) | Mandatory AI workflow: load memory ? intent ? verify ? implement ? test ? docs ? commit. |
 | [../state/TASK_STATE.json](../state/TASK_STATE.json) | Active and completed tasks; update when work starts or finishes. |
 | [../prompts/codex_rules.md](../prompts/codex_rules.md) | Prompt discipline and **context-loading block** appended to AI instructions. |
-| [WEB_DEMO.md](WEB_DEMO.md) | Localhost HTML/CSS + Node/Express + MongoDB demo (per-account profiles). |
+| [WEB_DEMO.md](WEB_DEMO.md) | Localhost HTML/CSS + Node/Express + MongoDB demo (per-account profiles, optional device-local receipt files, LAN/HTTPS). |
 | [../README.md](../README.md) | Project entry point, expectations, and **change log** (session log when context resets). |
 
 [Receipt recovery verification](receipt-recovery-verification.md) records automatic folder recovery, regression/coverage evidence, emulator checks and pre-existing verification limitations.

@@ -5,6 +5,8 @@ Mountain Money (package `com.example.envelopemoney`) is a single-activity Androi
 
 A sibling **web demo** lives in `web/`: Node/Express + MongoDB + mobile HTML/CSS. It mirrors the same pond/transaction models and helper math, with one Mongo `profiles` document per registered account. It does not share storage with the Android app. See [WEB_DEMO.md](WEB_DEMO.md).
 
+Web receipt binaries default to Mongo GridFS. An additive **Local Files** layer (`web/public/js/storage`, `ReceiptStorage`) can keep JPEGs on the **browser’s device** instead. UI never calls filesystem APIs directly. Capability detection (directory picker / directory input / file input / OPFS) is used; OS/user-agent sniffing is not. Mongo still owns users, sessions, profiles, and transaction JSON. SQLite learning stays on the server. Node `fs` never reads another device’s folder.
+
 Comment typeahead and OCR amount-correction weights live in a **sidecar SQLite** file (`LearningDb` / `mountain_money_learning.db`), not in Envelope Gson.
 
 ## Core Components
