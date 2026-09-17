@@ -54,9 +54,11 @@ OcrAmountWeightsTest
 OcrAmountLearnerTest
 ReceiptFieldParserTest
 SpendAnalysisHelperTest
+HistoryTransferTotalsTest
 ```
 
 ## Change Log
+- 2026-09-17: **Inbound transfers stay out of Total:** Money transferred into a destination pond is omitted from history **Total** and shown on the transfers panel as **To dest: -$X.XX** so inbound cash is visible. The To line is not zeroed when that destination is selected. `HistoryTransferTotals` + web port. Java helper 3/3; `node --test` 143 pass. Gradle 6.7.1 blocked on JDK 25.
 - 2026-09-17: **Assigned unused photos leave the unused list; See all unused keeps amount/date:** **Use this picture** on a previously unused JPEG reserves URI and filename so it does not reappear in later unused / See all unused lists (including when MediaStore later lists the same name as `content://`). See all unused keeps the transaction amount and date in the chooser message for OCR cross-check. `ReceiptAlbumMatcher` + `ReceiptCandidateSummary` tests (43 via javac/JUnit; Gradle 6.7.1 blocked on JDK 25). Android only. Web unchanged.
 - 2026-09-17: **Bills-period filter shows transfers:** Selecting the history bills-period filter turns transfer visibility on so pond-to-pond moves appear in that window. Clearing the filter leaves the transfer toggle unchanged. Restored active filter on launch also shows transfers. `BillsPeriodFilterUi` + tests (2/2 via javac/JUnit; Gradle 6.7.1 blocked on JDK 25). Android only. Web unchanged.
 - 2026-09-16: **Web demo local-folder storage:** Additive client LocalFileStorage + ReceiptStorage beside Mongo/GridFS. Default remains server receipts. Opt-in **Receipts on this device** uses capability detection (live folder, directory import, file pick, working copy). Express binds `HOST` 0.0.0.0 with Local/Network URLs and optional HTTPS. SQLite learning and GridFS replace-by-id unchanged. Android unchanged. Tests first: `npm test` 139 pass.

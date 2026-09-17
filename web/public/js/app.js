@@ -13,9 +13,10 @@ import {
 import { createEnvelope, getTransactions, initializeMonth, calculateRemaining } from '/domain/envelopeModel.js';
 import { canonicalName } from '/domain/pondLookup.js';
 import { computeAnchorDate } from '/domain/billsDayAnchor.js';
-import { roundToCents, splitIntegerPercentsFirstCeiling, splitTotalByPercents } from '/domain/moneyMath.js';
+import { roundToCents, splitIntegerPercentsFirstCeiling, splitTotalByPercents, formatSignedMoney } from '/domain/moneyMath.js';
 import { excludingSource } from '/domain/transferDestinationList.js';
 import { allocatedTotal as transferAllocated } from '/domain/transferGroup.js';
+import { addInboundToPanel, formatToSummary } from '/domain/historyTransferTotals.js';
 import { validate as validateSplit, allocatedTotal as splitAllocated } from '/domain/splitPurchase.js';
 import { detachTransferGroup, resolveAnchorTransaction, getAllocations } from '/domain/transferSync.js';
 import { saveSpendingOrTransfer, removePlainTransaction } from '/domain/transactionSave.js';
@@ -381,7 +382,7 @@ function renderTransactions() {
   }
   for (const t of rows) {
     if (t.transferBucketId && t.amount < 0) {
-      destTotals[t.envelopeName] = (destTotals[t.envelopeName] || 0) + Math.abs(t.amount);
+      destTotals[t.envelopeName] = addInboundToPanel(destTotals[t.envelopeName] || 0, t.amount);
     }
     if (!t.transferBucketId) total += Number(t.amount) || 0;
     const li = document.createElement('li');
@@ -420,15 +421,26 @@ function renderTransactions() {
   $('tvTransactionsTotal').textContent = S.total(roundToCents(total));
   const spinner = $('spinnerTransferTotals');
   spinner.innerHTML = '';
-  let transferSum = 0;
-  for (const [name, amount] of Object.entries(destTotals)) {
-    transferSum += amount;
+  spinner.onchange = null;
+  const destNames = Object.keys(destTotals).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  for (const name of destNames) {
     const opt = document.createElement('option');
     opt.value = name;
-    opt.textContent = `${name}: ${money(amount)}`;
+    opt.textContent = formatToSummary(name, destTotals[name]);
     spinner.appendChild(opt);
   }
-  $('tvTransferTotalsSummary').textContent = S.transfers(roundToCents(transferSum));
+  if (destNames.length === 0) {
+    $('tvTransferTotalsSummary').textContent = S.transfers(0);
+  } else {
+    const showSummary = () => {
+      const name = spinner.value || destNames[0];
+      $('tvTransferTotalsSummary').textContent = formatToSummary(name, destTotals[name]);
+    };
+    showSummary();
+    if (destNames.length > 1) {
+      spinner.onchange = showSummary;
+    }
+  }
 }
 
 function escapeHtml(value) {

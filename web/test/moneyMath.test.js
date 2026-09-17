@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { roundToCents, splitIntegerPercentsFirstCeiling, splitTotalByPercents } from '../domain/moneyMath.js';
+import { roundToCents, splitIntegerPercentsFirstCeiling, splitTotalByPercents, formatSignedMoney } from '../domain/moneyMath.js';
 
 test('roundToCents half up', () => {
   assert.equal(roundToCents(100.0 / 3), 33.33);
@@ -34,3 +34,8 @@ function assertAmountsSum(expectedTotal, amounts) {
   for (const amount of amounts) sum += amount;
   assert.ok(Math.abs(roundToCents(sum) - expectedTotal) < 0.001);
 }
+
+test('formatSignedMoney shows minus before the dollar', () => {
+  assert.equal(formatSignedMoney(-50), '-$50.00');
+  assert.equal(formatSignedMoney(12.5), '$12.50');
+});

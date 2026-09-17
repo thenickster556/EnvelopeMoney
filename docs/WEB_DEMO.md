@@ -29,7 +29,7 @@ npm run seed-demo
 ## Stack
 
 - `web/public` — mobile-first HTML/CSS/JS (Mountain palette, ponds copy)
-- `web/domain` — JS ports of Android helpers (MoneyMath, BillsDayAnchor, payday Remaining, transfers/splits, rollover, ReceiptFieldParser, CommentHistory, OcrAmountLearner, SpendAnalysisHelper)
+- `web/domain` — JS ports of Android helpers (MoneyMath, BillsDayAnchor, payday Remaining, transfers/splits, HistoryTransferTotals, rollover, ReceiptFieldParser, CommentHistory, OcrAmountLearner, SpendAnalysisHelper)
 - `web/server` — Express session auth, profile JSON, GridFS receipts, per-user `web/data/learning/<userId>.db` (sql.js). Listens on `HOST` (default `0.0.0.0`) and prints Local/Network URLs. Optional HTTPS via `HTTPS_KEY` / `HTTPS_CERT`.
 - MongoDB database `mountain_money`: `users`, `profiles`, `sessions`, `receipts` GridFS
 - Client local files (optional): `web/public/js/storage` + `ReceiptStorage`. Not a Mongo replacement.

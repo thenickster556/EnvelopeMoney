@@ -3011,7 +3011,6 @@ public class MainActivity extends AppCompatActivity {
         Map<String, List<TransferBucketAllocation>> transferAllocationsById = new HashMap<>();
         double grossTotal = 0;
         double outgoingTransferTotal = 0;
-        double incomingTransferTotal = 0;
 
         for (Envelope envelope : envelopes) {
             boolean envelopeSelected = envelope.isSelected();
@@ -3057,28 +3056,24 @@ public class MainActivity extends AppCompatActivity {
                     }
 
                     filteredTransactions.add(transaction);
-                    grossTotal += transaction.getAmount();
+                    if (HistoryTransferTotals.includeAmountInHistoryTotal(isTransfer, isSourceSide)) {
+                        grossTotal += transaction.getAmount();
+                    }
 
                     if (isTransfer && !allocations.isEmpty()) {
                         if (isSourceSide) {
                             double allocatedTotal = TransferGroupDraft.allocatedTotal(allocations);
                             outgoingTransferTotal += allocatedTotal;
                             for (TransferBucketAllocation allocation : allocations) {
-                                Envelope destinationEnvelope = findEnvelopeByName(allocation.getToEnvelope());
-                                boolean destinationSelected = destinationEnvelope != null && destinationEnvelope.isSelected();
                                 String summaryKey = "to:" + allocation.getToEnvelope();
                                 String relatedEnvelopeName = allocation.getToEnvelope();
                                 TransferTotalsOption existing = transferTotalsByEnvelope.get(summaryKey);
                                 double running = existing != null ? existing.total : 0d;
-                                running += Math.abs(allocation.getAmount());
-                                if (destinationSelected) {
-                                    running -= Math.abs(allocation.getAmount());
-                                }
+                                running = HistoryTransferTotals.addInboundToPanel(
+                                        running, allocation.getAmount());
                                 transferTotalsByEnvelope.put(summaryKey,
                                         new TransferTotalsOption(summaryKey, "To", relatedEnvelopeName, running));
                             }
-                        } else {
-                            incomingTransferTotal += Math.abs(transaction.getAmount());
                         }
                     }
                 } catch (ParseException e) {
@@ -3103,7 +3098,8 @@ public class MainActivity extends AppCompatActivity {
             ));
         }
 
-        double displayTotal = showTransfers ? (grossTotal - outgoingTransferTotal + incomingTransferTotal) : grossTotal;
+        double displayTotal = HistoryTransferTotals.spendingTotal(
+                grossTotal, outgoingTransferTotal, showTransfers);
         tvTransactionsTotal.setText(String.format(Locale.getDefault(), "Total: $%.2f", displayTotal));
         updateTransferTotalsPanel(new ArrayList<>(transferTotalsByEnvelope.values()));
 
@@ -5675,7 +5671,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private String formatTransferTotalsSummary(TransferTotalsOption option) {
-        return String.format(Locale.getDefault(), "%s %s: $%.2f", option.labelPrefix, option.envelopeName, option.total);
+        return HistoryTransferTotals.formatToSummary(option.envelopeName, option.total);
     }
 
     /** Start of local today (00:00) for consistent range end when the bills-period filter is on. */

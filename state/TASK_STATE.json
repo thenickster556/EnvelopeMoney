@@ -22,6 +22,12 @@
   ],
   "completed_tasks": [
     {
+      "id": "inbound-transfer-totals-2026-09-17",
+      "title": "Keep inbound transfers out of history Total; show them as negative in the transfers panel",
+      "status": "completed",
+      "intent": "Minor: transfers into a destination pond must not change history Total. The transfers panel lists To dest as a negative so inbound cash is visible. Do not zero the panel when the destination is selected. HistoryTransferTotals helper + web port. No Gson change. Java helper 3/3; node --test 143 pass. Gradle 6.7.1 blocked on JDK 25."
+    },
+    {
       "id": "receipt-unused-assign-see-all-context-2026-09-17",
       "title": "Drop assigned unused photos from later choosers; keep amount/date on See all unused",
       "status": "completed",

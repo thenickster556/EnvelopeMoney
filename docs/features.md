@@ -39,7 +39,7 @@
 - Transfer buckets use a fixed `$0.50` slider and `+/-` stepper for fast snapping, keep the slider stacked below the amount row on tighter screens, collapse scale landmarks when width is limited, and still allow exact-cent manual entry.
 - Transfer summary text is larger and validation stays quiet until the user interacts or attempts save; toggling transfer mode auto-scrolls the dialog section into view and scrolling dismisses any open dropdown popup.
 - Transfer visibility can be toggled in the transactions view.
-- With transfers visible, the header **spinner** lists each destination pond and how much was transferred **to** it in the date range (no separate “from” rows).
+- With transfers visible, the header **spinner** lists each destination pond and how much was transferred **to** it in the date range as a **negative** (money put into that account). Inbound mirrors are not included in history **Total**. The To line is not zeroed when that destination pond is selected.
 
 ## Recurring Transactions
 - Recurring transactions support weekly, bi-weekly, and monthly patterns.

@@ -14,6 +14,11 @@
 3. **Reorder** icon shows drag handles; drag a row (or long-press handle) to reorder with a lifted shadow; order persists in the envelopes JSON array.
 4. **Done** icon exits reorder mode; collapsing the pond section also exits reorder mode.
 
+## Transaction history totals
+1. History **Total** is spending in the visible rows. Destination-side transfer mirrors (money put into an account) are omitted from that Total.
+2. Toggling transfers on still shows those rows in the list. The transfers panel lists each destination as **To dest: -$X.XX** so inbound cash is visible and is not zeroed when that destination pond is selected.
+3. With transfers visible, allocated outgoing is also removed from Total (it is not spend).
+
 ## Add Transaction Flow
 1. User opens the transaction dialog (check icon confirms, close icon cancels).
 2. User selects pond, date, amount, and comment (fields appear first in the scrollable body). Typing in Comment shows remembered notes in an inline list (3 rows visible; prefix then contains). Cancel does not store the comment.

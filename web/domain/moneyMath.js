@@ -44,3 +44,10 @@ export function splitTotalByPercents(total, percents) {
   }
   return amounts;
 }
+
+/** "-$12.50" / "$12.50" so inbound transfer panel amounts read as money put into the dest pond. */
+export function formatSignedMoney(amount) {
+  const cents = roundToCents(amount);
+  const sign = cents < 0 ? '-' : '';
+  return `${sign}$${Math.abs(cents).toFixed(2)}`;
+}

@@ -24,6 +24,8 @@ Comment typeahead and OCR amount-correction weights live in a **sidecar SQLite**
   - Cent-rounded bank reconciliation (`roundToCents`, 2 dp). When global paydays and per-pond Account are set: **Still to deposit** = Limit shares for paydays not yet arrived; **Remaining** = Account + unlocked shares − month spend (paydays count on/after their day; resets each month). Footer, pond row (with payday progress), and edit preview show **In bank** and **Still to deposit** only (limit shown separately).
 - `SpendAnalysisHelper` / `SpendBarChartView`
   - Pure helper for last-N calendar months of spend vs **`Envelope.limit`**, over-budget pond-months (`roundToCents(spend) > roundToCents(limit)`), by-pond totals, and this-month snapshot. Default spend excludes transfer rows (`transferId` set); **Include transfers** uses the same all-amounts sum as Remaining. No new persistence. Web port: `web/domain/spendAnalysis.js`. Charts are Canvas/CSS bars (no chart library).
+- `HistoryTransferTotals`
+  - Pure helper: inbound destination-mirror amounts stay out of history Total; the transfers panel lists each destination as a negative To line. Web port: `web/domain/historyTransferTotals.js`.
 - `TransferDestinationList`
   - Builds the transfer destination pond name list (all ponds except the source) for add/edit transfer UI.
 - `TransferGroupDraft` / `TransferSyncHelper`
