@@ -462,4 +462,41 @@ public class ReceiptAlbumMatcherTest {
         assertEquals(A, assigned.get("k1").reference);
         assertTrue(assigned.get("k1").alternatives.isEmpty());
     }
+
+    @Test
+    public void unusedNotReservedDropsSelectedPhotoByUri() {
+        long noon = utcNoon(2026, 9, 7);
+        java.util.Set<String> reserved = new java.util.HashSet<>();
+        ReceiptAlbumMatcher.addAssignedReservation(reserved, A, "MountainMoney_" + noon + ".jpg");
+        List<ReceiptReferenceResolver.Result> unused = ReceiptAlbumMatcher.unusedNotReserved(
+                Arrays.asList(picture(A, noon), picture(B, noon + 3_600_000L)), reserved);
+        assertEquals(1, unused.size());
+        assertEquals(B, unused.get(0).reference);
+    }
+
+    @Test
+    public void unusedNotReservedDropsSelectedPhotoWhenLaterListedUnderAnotherUri() {
+        String fileUri = "file:///storage/emulated/0/Pictures/Mountain%20Money/MountainMoney_1.jpg";
+        String mediaUri = "content://media/external/images/media/99";
+        String name = "MountainMoney_1.jpg";
+        java.util.Set<String> reserved = new java.util.HashSet<>();
+        ReceiptAlbumMatcher.addAssignedReservation(reserved, fileUri, name);
+        List<ReceiptReferenceResolver.Result> unused = ReceiptAlbumMatcher.unusedNotReserved(
+                Arrays.asList(ReceiptReferenceResolver.Result.resolved(mediaUri, name, utcNoon(2026, 9, 7))),
+                reserved);
+        assertTrue(unused.isEmpty());
+    }
+
+    @Test
+    public void releasingAssignedPhotoReturnsItToUnusedList() {
+        String name = "MountainMoney_1.jpg";
+        java.util.Set<String> reserved = new java.util.HashSet<>();
+        ReceiptAlbumMatcher.addAssignedReservation(reserved, A, name);
+        ReceiptAlbumMatcher.releaseAssigned(reserved, A, name);
+        List<ReceiptReferenceResolver.Result> unused = ReceiptAlbumMatcher.unusedNotReserved(
+                Arrays.asList(ReceiptReferenceResolver.Result.resolved(A, name, utcNoon(2026, 9, 7))),
+                reserved);
+        assertEquals(1, unused.size());
+        assertEquals(A, unused.get(0).reference);
+    }
 }

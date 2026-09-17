@@ -22,6 +22,12 @@
   ],
   "completed_tasks": [
     {
+      "id": "receipt-unused-assign-see-all-context-2026-09-17",
+      "title": "Drop assigned unused photos from later choosers; keep amount/date on See all unused",
+      "status": "completed",
+      "intent": "Minor Android: Use this picture on a previously unused JPEG reserves URI+filename so it does not reappear in unusedNearby / See all unused (file:// vs content:// of the same name). See all unused keeps the transaction amount and date in the chooser message for OCR cross-check. No Gson/SQLite change. Web unchanged. Tests first. ReceiptAlbumMatcher + ReceiptCandidateSummary 43 pass via javac/JUnit; Gradle 6.7.1 blocked on JDK 25."
+    },
+    {
       "id": "bills-filter-shows-transfers-2026-09-17",
       "title": "Auto-show transfers when the bills-period filter is selected",
       "status": "completed",

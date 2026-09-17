@@ -3,6 +3,7 @@ package com.example.envelopemoney.receipt;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 public class ReceiptCandidateSummaryTest {
 
@@ -40,5 +41,20 @@ public class ReceiptCandidateSummaryTest {
         assertEquals("", ReceiptCandidateSummary.immersivePond(null));
         assertEquals("$12.50", ReceiptCandidateSummary.immersiveAmount(12.5));
         assertEquals("-$3.20", ReceiptCandidateSummary.immersiveAmount(-3.2));
+    }
+
+    @Test
+    public void chooserSummaryKeepsFundAmountAndDate() {
+        assertEquals("Lunch · $12.50 · Food · Sep 7, 2026",
+                ReceiptCandidateSummary.chooserDialogSummary("Lunch", "Food", 12.5, "2026-09-07"));
+    }
+
+    @Test
+    public void seeAllUnusedHeadlineStillIncludesFundAmountAndDate() {
+        String summary = ReceiptCandidateSummary.chooserDialogSummary("Lunch", "Food", 12.5, "2026-09-07");
+        String headline = ReceiptCandidateSummary.seeAllUnusedHeadline(4, summary);
+        assertTrue(headline.contains("$12.50"));
+        assertTrue(headline.contains("Sep 7, 2026"));
+        assertTrue(headline.contains("4 unused"));
     }
 }

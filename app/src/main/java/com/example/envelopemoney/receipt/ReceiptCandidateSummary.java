@@ -39,6 +39,32 @@ public final class ReceiptCandidateSummary {
         return formatMoney(amount);
     }
 
+    /**
+     * Chooser dialog subtitle: comment/pond, fund amount, and transaction date. Used for the
+     * shortlist and for See all unused pictures so OCR totals can be cross-checked.
+     */
+    public static String chooserDialogSummary(String comment, String envelopeName, double amount,
+                                              String yyyyMmDdDate) {
+        String title = titleLine(comment, envelopeName, amount);
+        String detail = detailLine(comment, envelopeName, yyyyMmDdDate);
+        if (title == null || title.isEmpty()) {
+            return detail != null ? detail : "";
+        }
+        if (detail == null || detail.isEmpty()) {
+            return title;
+        }
+        return title + " · " + detail;
+    }
+
+    /**
+     * Headline after See all unused pictures. Keeps {@code transactionSummary} (amount and date).
+     */
+    public static String seeAllUnusedHeadline(int pictureCount, String transactionSummary) {
+        String summary = transactionSummary == null ? "" : transactionSummary;
+        return pictureCount + " unused pictures for this receipt (" + summary
+                + "). OCR shows the printed $";
+    }
+
     private static String formatMoney(double amount) {
         double cents = MoneyMath.roundToCents(amount);
         String sign = cents < 0 ? "-" : "";

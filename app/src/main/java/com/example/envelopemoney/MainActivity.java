@@ -191,7 +191,7 @@ public class MainActivity extends AppCompatActivity {
     private String pendingReceiptReference;
     private boolean receiptLibraryAccessMissing;
     private boolean receiptPhotoAccessPromptPending;
-    /** Receipt files picked in this session stay out of later choosers so two rows cannot take one picture. */
+    /** Receipt files picked in this session stay out of later choosers so two rows cannot take one picture. URI and filename keys. */
     private final Set<String> receiptChosenReferences = new HashSet<>();
     /** Tapped reference awaiting a fullscreen candidate pick; null means no check is open. */
     private String pendingCandidateReference;
@@ -2225,15 +2225,13 @@ public class MainActivity extends AppCompatActivity {
         return unionNearbyWithAlternatives(nearby, result);
     }
 
-    /** Other rows' URIs and this session's picks stay out of choosers. */
+    /** Other rows' URIs/filenames and this session's picks stay out of choosers. */
     private Set<String> receiptChooserReserved(Transaction tapped) {
         Set<String> reserved = new HashSet<>(receiptChosenReferences);
         if (envelopes != null) {
             for (ReceiptReferenceRepair.Entry entry : ReceiptReferenceRepair.snapshot(envelopes)) {
                 if (entry == null || entry.transaction == tapped) continue;
-                if (entry.reference != null && !entry.reference.isEmpty()) {
-                    reserved.add(stripReceiptFragment(entry.reference));
-                }
+                ReceiptAlbumMatcher.addAssignedReservation(reserved, entry.reference, entry.fileName);
             }
         }
         return reserved;
@@ -2266,6 +2264,10 @@ public class MainActivity extends AppCompatActivity {
         for (ReceiptReferenceRepair.Entry entry : entries) results.put(entry.key(), result);
         if (ReceiptReferenceRepair.apply(envelopes, entries, results) > 0) {
             PrefManager.saveEnvelopes(this, envelopes);
+            if (result != null) {
+                ReceiptAlbumMatcher.addAssignedReservation(
+                        receiptChosenReferences, result.reference, result.fileName);
+            }
         }
         recordReceiptAttention(entries, results, false);
         markReceiptResolved(reference);
@@ -2409,8 +2411,7 @@ public class MainActivity extends AppCompatActivity {
     private ReceiptReferenceResolver.Result inspectChooserCandidate(
             AndroidReceiptSource source, ReceiptReferenceResolver.Result candidate) {
         if (source == null || candidate == null || candidate.reference == null) return null;
-        if (receiptChosenReferences.contains(candidate.reference)
-                || receiptChosenReferences.contains(stripReceiptFragment(candidate.reference))) {
+        if (ReceiptAlbumMatcher.isReservedPicture(candidate, receiptChosenReferences)) {
             return null;
         }
         ReceiptReferenceResolver.Result verified = source.inspect(candidate.reference);
@@ -2437,10 +2438,11 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private String receiptChooserMessage(String reference, int count) {
+        String summary = receiptChooserSummary(reference);
         if (receiptChooserShowingAllUnused) {
-            return getString(R.string.receipt_chooser_all_unused_message, count);
+            return ReceiptCandidateSummary.seeAllUnusedHeadline(count, summary);
         }
-        return getString(R.string.receipt_chooser_message, count, receiptChooserSummary(reference));
+        return getString(R.string.receipt_chooser_message, count, summary);
     }
 
     /**
@@ -2900,9 +2902,14 @@ public class MainActivity extends AppCompatActivity {
         pendingCandidateReference = null;
         pendingCandidateResults.clear();
         if (reference == null || chosen == null) return;
-        // Every shared row moves to the pick, so the replaced file is owned nowhere and free again.
-        receiptChosenReferences.remove(stripReceiptFragment(reference));
-        receiptChosenReferences.add(chosen.reference);
+        List<ReceiptReferenceRepair.Entry> currentEntries = receiptEntriesFor(reference);
+        if (!currentEntries.isEmpty()) {
+            ReceiptReferenceRepair.Entry current = currentEntries.get(0);
+            ReceiptAlbumMatcher.releaseAssigned(
+                    receiptChosenReferences, current.reference, current.fileName);
+        }
+        ReceiptAlbumMatcher.addAssignedReservation(
+                receiptChosenReferences, chosen.reference, chosen.fileName);
         if (receiptChooserDialog != null && receiptChooserDialog.isShowing()) {
             receiptChooserDialog.dismiss();
         }
@@ -2924,9 +2931,7 @@ public class MainActivity extends AppCompatActivity {
                 Set<String> reserved = new HashSet<>();
                 for (ReceiptReferenceRepair.Entry entry : ReceiptReferenceRepair.snapshot(envelopes)) {
                     if (entry.transaction == transaction) continue;
-                    if (entry.reference != null && !entry.reference.isEmpty()) {
-                        reserved.add(stripReceiptFragment(entry.reference));
-                    }
+                    ReceiptAlbumMatcher.addAssignedReservation(reserved, entry.reference, entry.fileName);
                 }
                 swapPool = ReceiptReferenceRepair.swapCandidates(new AndroidReceiptSource(this),
                         transaction.getReceiptImageFileName(), transaction.getDate(),
@@ -2971,9 +2976,12 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private String receiptChooserSummary(String reference) {
-        String[] lines = receiptCandidateLines(reference);
-        if (lines[0].isEmpty()) return "";
-        return lines[1].isEmpty() ? lines[0] : lines[0] + " · " + lines[1];
+        List<ReceiptReferenceRepair.Entry> entries = receiptEntriesFor(reference);
+        if (entries.isEmpty()) return "";
+        Transaction transaction = entries.get(0).transaction;
+        return ReceiptCandidateSummary.chooserDialogSummary(
+                transaction.getComment(), transaction.getEnvelopeName(),
+                transaction.getAmount(), transaction.getDate());
     }
     private void updateTransactionHistory() {
         ensureRecurringTransactionsForCurrentMonth();

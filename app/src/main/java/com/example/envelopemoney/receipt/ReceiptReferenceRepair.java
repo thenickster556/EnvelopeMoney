@@ -159,7 +159,7 @@ public final class ReceiptReferenceRepair {
             return new ArrayList<>();
         }
         TimeZone tz = zone != null ? zone : TimeZone.getDefault();
-        Set<String> reserved = reservedReferences != null ? reservedReferences : Collections.emptySet();
+        Set<String> reserved = ReceiptAlbumMatcher.reservedKeys(reservedReferences);
         String wantedName = ReceiptReferenceResolver.validFileName(fileName) ? fileName : null;
         String wantedNormalized = ReceiptAlbumMatcher.normalizeFileName(wantedName);
         String wantedToken = ReceiptAlbumMatcher.epochToken(wantedName);
@@ -179,7 +179,7 @@ public final class ReceiptReferenceRepair {
         List<ReceiptAlbumMatcher.Claim> dateClaim = Collections.singletonList(
                 new ReceiptAlbumMatcher.Claim("swap-date", null, transactionDate));
         ReceiptReferenceResolver.Result dateMatch = ReceiptAlbumMatcher.assign(
-                dateClaim, album, tz, Collections.emptySet(), !source.albumAccessRestricted())
+                dateClaim, album, tz, reserved, !source.albumAccessRestricted())
                 .get("swap-date");
         if (dateMatch != null) {
             List<ReceiptReferenceResolver.Result> dayPool =
@@ -194,7 +194,7 @@ public final class ReceiptReferenceRepair {
         String attached = stripFragment(currentReference);
         List<ReceiptReferenceResolver.Result> others = new ArrayList<>();
         for (ReceiptReferenceResolver.Result candidate : pool) {
-            if (reserved.contains(candidate.reference)) continue;
+            if (ReceiptAlbumMatcher.isReservedPicture(candidate, reserved)) continue;
             if (stripFragment(candidate.reference).equals(attached)) continue;
             others.add(candidate);
         }

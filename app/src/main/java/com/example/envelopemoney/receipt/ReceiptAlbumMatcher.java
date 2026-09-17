@@ -56,10 +56,7 @@ public final class ReceiptAlbumMatcher {
         }
         TimeZone tz = zone != null ? zone : TimeZone.getDefault();
         AlbumIndex index = new AlbumIndex(album);
-        Set<String> bound = new HashSet<>();
-        if (reservedReferences != null) {
-            bound.addAll(reservedReferences);
-        }
+        Set<String> bound = reservedKeys(reservedReferences);
         List<Claim> leftover = new ArrayList<>();
         for (Claim claim : claims) {
             String name = ReceiptReferenceResolver.validFileName(claim.fileName) ? claim.fileName : null;
@@ -74,7 +71,7 @@ public final class ReceiptAlbumMatcher {
                 continue;
             }
             ReceiptReferenceResolver.Result picture = candidates.get(0);
-            bound.add(picture.reference);
+            addAssignedReservation(bound, picture.reference, picture.fileName);
             results.put(claim.key, picture);
         }
         if (!allowDateMatch) {
@@ -116,9 +113,9 @@ public final class ReceiptAlbumMatcher {
         Set<String> seen = new HashSet<>();
         for (ReceiptReferenceResolver.Result picture : pool) {
             if (picture == null || picture.reference == null) continue;
+            if (isReservedPicture(picture, bound)) continue;
             int hash = picture.reference.indexOf('#');
             String bare = hash >= 0 ? picture.reference.substring(0, hash) : picture.reference;
-            if (bound.contains(picture.reference) || bound.contains(bare)) continue;
             if (seen.add(bare)) unused.add(picture);
         }
         return rankByLikelihood(new Claim("nearby", null, transactionDate), unused, tz);
@@ -174,6 +171,41 @@ public final class ReceiptAlbumMatcher {
         return bound;
     }
 
+    /**
+     * After Use this picture (or unique auto-bind), reserve the JPEG by URI and filename so a
+     * later MediaStore {@code content://} of the same file is not offered as unused.
+     */
+    public static void addAssignedReservation(Set<String> reserved, String reference, String fileName) {
+        if (reserved == null) return;
+        if (reference != null && !reference.isEmpty()) {
+            reserved.addAll(reservedKeys(Collections.singleton(reference)));
+        }
+        if (fileName != null && !fileName.isEmpty()) {
+            reserved.add(fileName);
+        }
+    }
+
+    /** Choose-different releases the previous JPEG so it can appear as unused again. */
+    public static void releaseAssigned(Set<String> reserved, String reference, String fileName) {
+        if (reserved == null) return;
+        if (reference != null && !reference.isEmpty()) {
+            reserved.removeAll(reservedKeys(Collections.singleton(reference)));
+        }
+        if (fileName != null && !fileName.isEmpty()) {
+            reserved.remove(fileName);
+        }
+    }
+
+    /** True when this album row is already bound by URI (including fragment) or filename. */
+    public static boolean isReservedPicture(ReceiptReferenceResolver.Result picture, Set<String> bound) {
+        if (picture == null || picture.reference == null) return true;
+        if (bound == null || bound.isEmpty()) return false;
+        int hash = picture.reference.indexOf('#');
+        String bare = hash >= 0 ? picture.reference.substring(0, hash) : picture.reference;
+        if (bound.contains(picture.reference) || bound.contains(bare)) return true;
+        return picture.fileName != null && !picture.fileName.isEmpty() && bound.contains(picture.fileName);
+    }
+
     /** Every unused album row, including files with no capture day. */
     private static List<ReceiptReferenceResolver.Result> unusedAlbum(
             AlbumIndex index, Set<String> bound) {
@@ -181,11 +213,7 @@ public final class ReceiptAlbumMatcher {
         if (index == null) return pool;
         for (ReceiptReferenceResolver.Result picture : index.files) {
             if (picture == null || picture.reference == null) continue;
-            int hash = picture.reference.indexOf('#');
-            String bare = hash >= 0 ? picture.reference.substring(0, hash) : picture.reference;
-            if (bound != null && (bound.contains(picture.reference) || bound.contains(bare))) {
-                continue;
-            }
+            if (isReservedPicture(picture, bound)) continue;
             pool.add(picture);
         }
         return pool;
@@ -215,7 +243,7 @@ public final class ReceiptAlbumMatcher {
             if (normalized != null) {
                 List<ReceiptReferenceResolver.Result> byNormalization = new ArrayList<>();
                 for (ReceiptReferenceResolver.Result picture : files) {
-                    if (bound.contains(picture.reference)) continue;
+                    if (isReservedPicture(picture, bound)) continue;
                     if (normalized.equals(normalizeFileName(picture.fileName))) byNormalization.add(picture);
                 }
                 if (!byNormalization.isEmpty()) return byNormalization;
@@ -224,7 +252,7 @@ public final class ReceiptAlbumMatcher {
             if (token != null) {
                 List<ReceiptReferenceResolver.Result> byToken = new ArrayList<>();
                 for (ReceiptReferenceResolver.Result picture : files) {
-                    if (bound.contains(picture.reference)) continue;
+                    if (isReservedPicture(picture, bound)) continue;
                     if (token.equals(epochToken(picture.fileName))) byToken.add(picture);
                 }
                 return byToken;
@@ -235,7 +263,7 @@ public final class ReceiptAlbumMatcher {
         private List<ReceiptReferenceResolver.Result> filesNamed(String fileName, Set<String> bound) {
             List<ReceiptReferenceResolver.Result> matches = new ArrayList<>();
             for (ReceiptReferenceResolver.Result picture : files) {
-                if (bound.contains(picture.reference)) continue;
+                if (isReservedPicture(picture, bound)) continue;
                 if (fileName.equals(picture.fileName)) matches.add(picture);
             }
             return matches;
@@ -272,7 +300,7 @@ public final class ReceiptAlbumMatcher {
             if (dayFiles == null) dayFiles = Collections.emptyList();
             if (dayClaims.getValue().size() == 1 && dayFiles.size() == 1) {
                 ReceiptReferenceResolver.Result picture = dayFiles.get(0);
-                bound.add(picture.reference);
+                addAssignedReservation(bound, picture.reference, picture.fileName);
                 results.put(dayClaims.getValue().get(0).key, picture);
                 continue;
             }
@@ -307,7 +335,7 @@ public final class ReceiptAlbumMatcher {
                 List<ReceiptReferenceResolver.Result> dayFiles = unusedByDay.get(adjacent);
                 if (dayFiles == null) continue;
                 for (ReceiptReferenceResolver.Result picture : dayFiles) {
-                    if (!bound.contains(picture.reference)) pool.add(picture);
+                    if (!isReservedPicture(picture, bound)) pool.add(picture);
                 }
             }
             if (pool.isEmpty()) {
@@ -327,7 +355,7 @@ public final class ReceiptAlbumMatcher {
                         Collections.singletonList(picture)));
                 continue;
             }
-            bound.add(picture.reference);
+            addAssignedReservation(bound, picture.reference, picture.fileName);
             results.put(claim.key, picture);
         }
     }
@@ -372,7 +400,7 @@ public final class ReceiptAlbumMatcher {
             Set<String> seen = new HashSet<>();
             for (ReceiptReferenceResolver.Result alternative : current.alternatives) {
                 if (alternative == null || alternative.reference == null) continue;
-                if (bound.contains(alternative.reference)) continue;
+                if (isReservedPicture(alternative, bound)) continue;
                 if (seen.add(alternative.reference)) pool.add(alternative);
             }
             String day = normalizeDay(claim.transactionDate);
@@ -396,7 +424,7 @@ public final class ReceiptAlbumMatcher {
             AlbumIndex index, TimeZone tz, Set<String> bound) {
         Map<String, List<ReceiptReferenceResolver.Result>> unusedByDay = new HashMap<>();
         for (ReceiptReferenceResolver.Result picture : index.files) {
-            if (bound.contains(picture.reference)) continue;
+            if (isReservedPicture(picture, bound)) continue;
             String day = captureDayOf(picture, tz);
             if (day == null) continue;
             List<ReceiptReferenceResolver.Result> same = unusedByDay.get(day);
@@ -423,7 +451,7 @@ public final class ReceiptAlbumMatcher {
             if (dayFiles == null) continue;
             for (ReceiptReferenceResolver.Result picture : dayFiles) {
                 if (picture == null || picture.reference == null) continue;
-                if (bound != null && bound.contains(picture.reference)) continue;
+                if (isReservedPicture(picture, bound)) continue;
                 if (seen.add(picture.reference)) pool.add(picture);
             }
         }
