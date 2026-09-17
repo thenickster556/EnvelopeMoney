@@ -18,6 +18,8 @@ Comment typeahead and OCR amount-correction weights live in a **sidecar SQLite**
   - Sanitizes persisted envelope state, repairs legacy month data, and computes a safe launch month on a deep copy before the activity adopts it. On rollover, **carry increases the available pool** (`remaining`, baselines, `MonthData`) while **`Envelope.limit` stays the user’s base monthly budget** (`originalLimit`).
 - `BillsDayAnchor`
   - Pure helper for bills-period filter start (unit-tested). Unified month walk: latest bills day on or before today in current month, else walk backward; period-start adjustment when today lands on a bills-day boundary (multi-day → prior day in set; single-day on today → previous month).
+- `BillsPeriodFilterUi`
+  - Pure helper: selecting the bills-period filter turns transfer visibility on; clearing the filter does not force transfers off.
 - `MoneyMath` / `PondBankReconciliationHelper`
   - Cent-rounded bank reconciliation (`roundToCents`, 2 dp). When global paydays and per-pond Account are set: **Still to deposit** = Limit shares for paydays not yet arrived; **Remaining** = Account + unlocked shares − month spend (paydays count on/after their day; resets each month). Footer, pond row (with payday progress), and edit preview show **In bank** and **Still to deposit** only (limit shown separately).
 - `SpendAnalysisHelper` / `SpendBarChartView`

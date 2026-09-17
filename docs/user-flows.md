@@ -5,7 +5,7 @@
 2. `MonthRolloverHelper` sanitizes envelope collections, numeric fields, and legacy transaction months.
 3. If a new month is required, rollover is applied on a deep copy.
 4. The repaired envelopes and active month are committed once.
-5. If the bills-period filter was left on, the start date is set to the computed bills anchor and the end date to today (saved prefs hold the pre-filter range for restore when toggled off).
+5. If the bills-period filter was left on, the start date is set to the computed bills anchor and the end date to today (saved prefs hold the pre-filter range for restore when toggled off), and transfer visibility is turned on.
 6. Pond and transaction lists render for the active month.
 
 ## Pond list flow
@@ -55,8 +55,8 @@
 
 ## Bills period filter
 1. User taps the **filter** icon beside the transfers toggle (disabled or toast if no bills days configured).
-2. App saves the current start/end display strings, sets **start** to the bills anchor date and **end** to today, and persists filter state. Anchor rules: latest passed bills day in the current month when applicable (May 15, bills 10 → May 10); prior month when none passed yet (Feb 10, bills 15 → Jan 15); on a multi-day period-end, previous bills day in the set (Apr 15, [1,15] → Apr 1); single bills day on today → same day previous month.
-3. User taps again to turn off; previous start/end strings are restored.
+2. App saves the current start/end display strings, sets **start** to the bills anchor date and **end** to today, and persists filter state. Transfer visibility is turned **on**. Anchor rules: latest passed bills day in the current month when applicable (May 15, bills 10 → May 10); prior month when none passed yet (Feb 10, bills 15 → Jan 15); on a multi-day period-end, previous bills day in the set (Apr 15, [1,15] → Apr 1); single bills day on today → same day previous month.
+3. User taps again to turn off; previous start/end strings are restored. The transfer toggle is left as it is (not forced off).
 
 ## Month Navigation Flow
 1. User navigates between months.

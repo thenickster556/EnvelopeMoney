@@ -22,6 +22,12 @@
   ],
   "completed_tasks": [
     {
+      "id": "bills-filter-shows-transfers-2026-09-17",
+      "title": "Auto-show transfers when the bills-period filter is selected",
+      "status": "completed",
+      "intent": "Minor Android: selecting btnBillsPeriodFilter turns transfer visibility on. Turning off leaves the transfer toggle. Launch restore of an active filter also shows transfers. BillsPeriodFilterUi + tests (2/2 javac/JUnit; Gradle 6.7.1 blocked on JDK 25). Web unchanged."
+    },
+    {
       "id": "web-local-file-storage-2026-09-16",
       "title": "Add per-device local folder/file storage beside GridFS in the web demo",
       "status": "completed",

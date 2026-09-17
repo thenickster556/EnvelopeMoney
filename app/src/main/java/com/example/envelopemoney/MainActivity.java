@@ -5708,6 +5708,7 @@ public class MainActivity extends AppCompatActivity {
         tvEnd.setText(sdf.format(startOfToday()));
         billsPeriodFilterActive = true;
         updateBillsPeriodFilterButton(findViewById(R.id.btnBillsPeriodFilter));
+        syncTransfersVisibilityWithBillsFilter();
     }
 
     private void toggleBillsPeriodFilter() {
@@ -5743,8 +5744,16 @@ public class MainActivity extends AppCompatActivity {
             PrefManager.setBillsFilterActive(this, false);
             PrefManager.clearBillsFilterSavedRange(this);
         }
+        syncTransfersVisibilityWithBillsFilter();
         updateBillsPeriodFilterButton(findViewById(R.id.btnBillsPeriodFilter));
         updateTransactionHistory();
+    }
+
+    private void syncTransfersVisibilityWithBillsFilter() {
+        showTransfers = BillsPeriodFilterUi.transfersVisibleAfterBillsFilterChange(
+                billsPeriodFilterActive,
+                showTransfers);
+        updateTransferToggleButton(findViewById(R.id.btnToggleTransfers));
     }
 
     private void updateBillsPeriodFilterButton(ImageButton button) {
@@ -6295,6 +6304,9 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void updateTransferToggleButton(ImageButton button) {
+        if (button == null) {
+            return;
+        }
         int color = showTransfers
                 ? ContextCompat.getColor(this, R.color.mountain_primary)
                 : resolveThemeColor(androidx.appcompat.R.attr.colorControlNormal);
