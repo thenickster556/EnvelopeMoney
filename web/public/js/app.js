@@ -18,7 +18,7 @@ import { excludingSource } from '/domain/transferDestinationList.js';
 import { allocatedTotal as transferAllocated } from '/domain/transferGroup.js';
 import { addInboundToPanel, formatToSummary } from '/domain/historyTransferTotals.js';
 import { rowVisible, historyShowingLabel, transferSides } from '/domain/historyFilter.js';
-import { scaledSize, fillEmptyOcrFields, createOcrSession } from '/domain/receiptOcrPrep.js';
+import { fillEmptyOcrFields, createOcrSession, ocrSourceImage } from '/domain/receiptOcrPrep.js';
 import { validate as validateSplit, allocatedTotal as splitAllocated } from '/domain/splitPurchase.js';
 import { detachTransferGroup, resolveAnchorTransaction, getAllocations } from '/domain/transferSync.js';
 import { saveSpendingOrTransfer, removePlainTransaction } from '/domain/transactionSave.js';
@@ -1050,35 +1050,12 @@ function ocrEngine() {
   return ocrSession;
 }
 
-async function imageForOcr(file) {
-  if (!file || typeof createImageBitmap !== 'function' || typeof document === 'undefined') return file;
-  let bitmap = null;
-  try {
-    bitmap = await createImageBitmap(file);
-    const size = scaledSize(bitmap.width, bitmap.height);
-    if (size.width === bitmap.width && size.height === bitmap.height) return file;
-    const canvas = document.createElement('canvas');
-    canvas.width = size.width;
-    canvas.height = size.height;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return file;
-    ctx.drawImage(bitmap, 0, 0, size.width, size.height);
-    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.85));
-    return blob || file;
-  } catch {
-    return file;
-  } finally {
-    if (bitmap && typeof bitmap.close === 'function') bitmap.close();
-  }
-}
-
 async function runOcr(file, mode, weights) {
   const session = ocrEngine();
   if (!session) {
     return api('/api/ocr', { method: 'POST', body: JSON.stringify({ lines: [], mode }) }).then((d) => d.draft);
   }
-  const image = await imageForOcr(file);
-  const result = await session.recognize(image);
+  const result = await session.recognize(ocrSourceImage(file));
   const lines = (result.data.lines || []).map((line) => ocrLine(
     line.text || '',
     (line.confidence || 80) / 100,

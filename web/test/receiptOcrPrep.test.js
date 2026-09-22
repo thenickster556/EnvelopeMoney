@@ -1,13 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { scaledSize, fillEmptyOcrFields, createOcrSession, OCR_MAX_EDGE } from '../domain/receiptOcrPrep.js';
+import { fillEmptyOcrFields, createOcrSession, ocrSourceImage } from '../domain/receiptOcrPrep.js';
 
-test('scaledSize keeps small images and caps the long edge at 1280', () => {
-  assert.equal(OCR_MAX_EDGE, 1280);
-  assert.deepEqual(scaledSize(800, 600), { width: 800, height: 600 });
-  assert.deepEqual(scaledSize(2560, 1280), { width: 1280, height: 640 });
-  assert.deepEqual(scaledSize(1000, 4000), { width: 320, height: 1280 });
-  assert.deepEqual(scaledSize(0, 100), { width: 0, height: 0 });
+test('ocrSourceImage keeps the original photo so Tesseract sees full detail', () => {
+  const photo = { name: 'receipt.jpg', size: 4_000_000 };
+  assert.equal(ocrSourceImage(photo), photo);
+  assert.equal(ocrSourceImage(null), null);
 });
 
 test('fillEmptyOcrFields fills an empty comment and leaves a typed comment', () => {
@@ -23,13 +21,22 @@ test('fillEmptyOcrFields fills an empty comment and leaves a typed comment', () 
   assert.equal(kept.date, '2026-09-22');
 });
 
-test('createOcrSession reuses one worker', async () => {
+test('createOcrSession reuses one worker and recognizes the original image', async () => {
   let created = 0;
+  const seen = [];
   const session = createOcrSession(async () => {
     created += 1;
-    return { recognize: async (image) => ({ data: { lines: [], image } }) };
+    return {
+      recognize: async (image) => {
+        seen.push(image);
+        return { data: { lines: [], image } };
+      },
+    };
   });
-  await session.recognize('a');
-  await session.recognize('b');
+  const photo = { name: 'receipt.jpg' };
+  await session.recognize(ocrSourceImage(photo));
+  await session.recognize(ocrSourceImage(photo));
   assert.equal(created, 1);
+  assert.equal(seen[0], photo);
+  assert.equal(seen[1], photo);
 });

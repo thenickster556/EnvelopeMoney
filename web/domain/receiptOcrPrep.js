@@ -1,18 +1,11 @@
-/** Receipt OCR prep that does not touch Tesseract. Longest edge matches Android's 1280px cap. */
+/** Receipt OCR prep that does not touch Tesseract. The original photo is what gets read. */
 
-export const OCR_MAX_EDGE = 1280;
-
-export function scaledSize(width, height, maxEdge = OCR_MAX_EDGE) {
-  const w = Number(width) || 0;
-  const h = Number(height) || 0;
-  if (w <= 0 || h <= 0) return { width: 0, height: 0 };
-  const edge = Math.max(w, h);
-  if (edge <= maxEdge) return { width: w, height: h };
-  const scale = maxEdge / edge;
-  return {
-    width: Math.max(1, Math.round(w * scale)),
-    height: Math.max(1, Math.round(h * scale)),
-  };
+/**
+ * The accurate path is the original camera or gallery file. Resizing or
+ * re-encoding it as a smaller JPEG drops small receipt text.
+ */
+export function ocrSourceImage(file) {
+  return file ?? null;
 }
 
 /**

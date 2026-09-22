@@ -21,6 +21,12 @@
   ],
   "completed_tasks": [
     {
+      "id": "web-ocr-full-image-2026-09-22",
+      "title": "Restore full-photo web OCR accuracy and keep the reused worker",
+      "status": "completed",
+      "intent": "Minor web: the 1280px JPEG re-encode made receipt OCR less accurate than Tesseract.recognize on the original file. Keep one English worker so the model is not reloaded. Pass the original photo through unchanged. npm test 155 pass. Android unchanged."
+    },
+    {
       "id": "web-ocr-filter-layout-2026-09-22",
       "title": "Web demo: faster receipt OCR, pond history filter, mobile history layout",
       "status": "completed",
