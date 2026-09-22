@@ -90,12 +90,21 @@
 6. Rotation save writes the same stored URI.
 The existing gallery action still imports a new/replacement receipt when intentionally selected.
 
+## Budget backup
+
+1. Tap **Back up or restore** on the Android top bar, or **Backup** on the web top bar.
+2. The sheet explains that photos stay in the folder and the file has no pictures and no password.
+3. **Save a copy** / **Save budget file** writes `mountain-money-budget-YYYY-MM-DD.json` through the system save dialog (Android) or a browser download (web).
+4. **Restore** opens a file. Cancel leaves the ponds alone. A file that is not a version-1 budget backup shows an error and writes nothing.
+5. **Replace** confirms that current ponds and transactions will be replaced and that pictures already in the folder stay.
+6. Android then runs the existing Pictures/Mountain Money repair. Web, when **Receipts on this device** has a folder, rewrites a unique matching filename to `local://`. A missing file or two files with the same name keeps the old pointer and can show a red photo icon. The spend row stays.
+
 ## Web demo: Local Files (optional)
 
 1. Sign in as usual (Mongo session). Ponds work with no folder chosen.
 2. Tap the top-bar **Local Files** folder icon.
 3. Leave **Receipts on server** (default) or pick **Receipts on this device**.
-4. **Choose Folder** is the primary action when the browser can pick a live directory; otherwise **Choose Files** is primary. Import/Export/Change Folder/Reconnect are shown when they apply. Cancelling a picker does nothing.
+4. **Choose Folder** is the primary action when the browser can pick a live directory; otherwise **Choose Files** is primary. Import/Export/Change Folder/Reconnect are shown when they apply. Cancelling a picker does nothing. **Export** copies pictures only; ponds are saved with **Backup**.
 5. Add/edit camera or gallery then copies into that device workspace in local mode (no GridFS upload). Status reads **Saved to your folder** or **Saved in this browser until you Export**.
 6. Save stores `local://…` on the transaction in Mongo. Preview and rotate use the local file; existing `/api/receipts/:id` rows still use GridFS.
 7. Reload reuses a granted folder handle when the browser still has permission; otherwise **Reconnect folder**. A missing local picture tints the history icon red and explains that the JPEG is on the device where it was saved — the spend is kept.

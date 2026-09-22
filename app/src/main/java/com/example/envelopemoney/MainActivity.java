@@ -7,6 +7,16 @@ import android.content.res.ColorStateList;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.net.Uri;
+
+import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.reflect.TypeToken;
+
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.lang.reflect.Type;
+import java.nio.charset.StandardCharsets;
 import android.os.Build;
 import android.provider.MediaStore;
 import android.os.Bundle;
@@ -177,6 +187,9 @@ public class MainActivity extends AppCompatActivity {
     private boolean receiptImportInProgress;
     private ActivityResultLauncher<Intent> receiptCaptureLauncher;
     private ActivityResultLauncher<String> galleryPickLauncher;
+    private ActivityResultLauncher<String> backupCreateLauncher;
+    private ActivityResultLauncher<String[]> backupOpenLauncher;
+    private BudgetBackup.ParseResult pendingBackup;
     private ActivityResultLauncher<String> receiptReadPermissionLauncher;
     private ActivityResultLauncher<Intent> receiptPreviewLauncher;
     private final java.util.concurrent.ExecutorService receiptRecoveryExecutor = Executors.newSingleThreadExecutor();
@@ -856,6 +869,14 @@ public class MainActivity extends AppCompatActivity {
                         }
                     }
                 });
+        backupCreateLauncher = registerForActivityResult(
+                new ActivityResultContracts.CreateDocument("application/json"),
+                this::writeBackupFile);
+        backupOpenLauncher = registerForActivityResult(
+                new ActivityResultContracts.OpenDocument(),
+                uri -> {
+                    if (uri != null) readBackupFile(uri);
+                });
         galleryPickLauncher = registerForActivityResult(
                 new ActivityResultContracts.GetContent(),
                 uri -> {
@@ -906,6 +927,10 @@ public class MainActivity extends AppCompatActivity {
         ImageButton btnRecalculateBalances = findViewById(R.id.btnRecalculateBalances);
         btnRecalculateBalances.setOnClickListener(v -> showResetConfirmationDialog());
         expandTouchTarget(btnRecalculateBalances, 8);
+
+        ImageButton btnBackup = findViewById(R.id.btnBackup);
+        btnBackup.setOnClickListener(v -> showBackupDialog());
+        expandTouchTarget(btnBackup, 8);
 
         ImageButton btnAddEnvelope = findViewById(R.id.btnAddEnvelope);
         btnAddEnvelope.setOnClickListener(v -> showEnvelopeDialog(null));
@@ -2105,6 +2130,141 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /** Runs once after load and again after a photo-access grant; never filters by receipt age. */
+    private void showBackupDialog() {
+        new MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.backup_title)
+                .setMessage(R.string.backup_message)
+                .setPositiveButton(R.string.backup_save, (dialog, which) -> {
+                    String name = "mountain-money-budget-"
+                            + new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new Date())
+                            + ".json";
+                    backupCreateLauncher.launch(name);
+                })
+                .setNegativeButton(R.string.backup_restore, (dialog, which) ->
+                        backupOpenLauncher.launch(new String[]{"application/json", "text/*", "*/*"}))
+                .setNeutralButton(R.string.backup_close, null)
+                .show();
+    }
+
+    private void writeBackupFile(Uri uri) {
+        if (uri == null) return;
+        final String json;
+        try {
+            JsonArray envelopeJson = new Gson().toJsonTree(envelopes).getAsJsonArray();
+            json = BudgetBackup.buildSnapshot(
+                    currentMonth,
+                    envelopeJson,
+                    PrefManager.getBillsDays(this),
+                    PrefManager.getPaydays(this),
+                    PrefManager.isBillsFilterActive(this),
+                    PrefManager.getBillsFilterSavedStartDisplay(this),
+                    PrefManager.getBillsFilterSavedEndDisplay(this),
+                    learningDb.loadComments(),
+                    learningDb.getWeights());
+        } catch (RuntimeException exception) {
+            Toast.makeText(this, R.string.backup_save_failed, Toast.LENGTH_LONG).show();
+            return;
+        }
+        new Thread(() -> {
+            try (OutputStream out = getContentResolver().openOutputStream(uri)) {
+                if (out == null) throw new java.io.IOException("missing stream");
+                out.write(json.getBytes(StandardCharsets.UTF_8));
+                runOnUiThread(() -> Toast.makeText(MainActivity.this, R.string.backup_saved,
+                        Toast.LENGTH_SHORT).show());
+            } catch (Exception exception) {
+                runOnUiThread(() -> Toast.makeText(MainActivity.this, R.string.backup_save_failed,
+                        Toast.LENGTH_LONG).show());
+            }
+        }, "budget-backup-write").start();
+    }
+
+    private void readBackupFile(Uri uri) {
+        new Thread(() -> {
+            String text;
+            try (InputStream in = getContentResolver().openInputStream(uri)) {
+                if (in == null) throw new java.io.IOException("missing stream");
+                text = readBackupText(in);
+            } catch (Exception exception) {
+                runOnUiThread(() -> Toast.makeText(MainActivity.this, R.string.backup_invalid,
+                        Toast.LENGTH_LONG).show());
+                return;
+            }
+            BudgetBackup.ParseResult parsed = text == null
+                    ? null : BudgetBackup.parse(text);
+            runOnUiThread(() -> {
+                if (parsed == null || !parsed.ok) {
+                    pendingBackup = null;
+                    Toast.makeText(MainActivity.this, R.string.backup_invalid, Toast.LENGTH_LONG).show();
+                    return;
+                }
+                pendingBackup = parsed;
+                new MaterialAlertDialogBuilder(MainActivity.this)
+                        .setTitle(R.string.backup_replace_title)
+                        .setMessage(R.string.backup_replace_message)
+                        .setNegativeButton(android.R.string.cancel, (dialog, which) -> pendingBackup = null)
+                        .setPositiveButton(R.string.backup_replace_confirm, (dialog, which) -> {
+                            BudgetBackup.ParseResult ready = pendingBackup;
+                            pendingBackup = null;
+                            if (ready != null) applyBudgetRestore(ready);
+                        })
+                        .setOnCancelListener(dialog -> pendingBackup = null)
+                        .show();
+            });
+        }, "budget-backup-read").start();
+    }
+
+    private static String readBackupText(InputStream in) throws java.io.IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        byte[] buffer = new byte[8192];
+        int total = 0;
+        int read;
+        while ((read = in.read(buffer)) >= 0) {
+            total += read;
+            if (total > BudgetBackup.MAX_CHARS) return null;
+            out.write(buffer, 0, read);
+        }
+        return out.toString(StandardCharsets.UTF_8.name());
+    }
+
+    private void applyBudgetRestore(BudgetBackup.ParseResult result) {
+        Type type = new TypeToken<ArrayList<Envelope>>() { }.getType();
+        List<Envelope> restored = new Gson().fromJson(result.envelopes, type);
+        if (restored == null) restored = new ArrayList<>();
+        envelopes = restored;
+        PrefManager.saveEnvelopes(this, envelopes);
+        if (result.currentMonth != null && !result.currentMonth.isEmpty()) {
+            currentMonth = result.currentMonth;
+            MonthTracker.setCurrentMonth(this, currentMonth);
+        }
+        PrefManager.saveBillsDays(this, result.billsDays);
+        PrefManager.savePaydays(this, result.paydays);
+        PrefManager.setBillsFilterActive(this, result.billsFilterActive);
+        if (result.billsFilterActive) {
+            PrefManager.saveBillsFilterSavedRange(this,
+                    result.billsFilterSavedStartDisplay, result.billsFilterSavedEndDisplay);
+        } else {
+            PrefManager.clearBillsFilterSavedRange(this);
+        }
+        billsPeriodFilterActive = result.billsFilterActive;
+        if (result.learningPresent) {
+            learningDb.replaceLearning(result.comments, result.ocrWeights);
+        }
+        TextView tvMonth = findViewById(R.id.tvCurrentMonth);
+        TextView tvStart = findViewById(R.id.tvStartDate);
+        TextView tvEnd = findViewById(R.id.tvEndDate);
+        if (tvMonth != null) tvMonth.setText(formatDisplayMonth(currentMonth));
+        if (tvStart != null) tvStart.setText(getFirstDayOfMonth(currentMonth));
+        if (tvEnd != null) tvEnd.setText(getLastDayOfMonth(currentMonth));
+        applyPersistedBillsFilterState();
+        envelopeAdapter = new EnvelopeAdapter(this, envelopes);
+        recyclerViewEnvelopes.setAdapter(envelopeAdapter);
+        setupPondDragHelper();
+        updatePondHeaderControls();
+        updateDisplay();
+        startReceiptReferenceRepair();
+        Toast.makeText(this, R.string.backup_restored, Toast.LENGTH_LONG).show();
+    }
+
     private void startReceiptReferenceRepair() {
         if (envelopes == null || isDestroyed()) return;
         if (receiptRepairInProgress) { receiptRepairRequestedAgain = true; return; }

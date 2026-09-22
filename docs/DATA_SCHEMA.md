@@ -111,5 +111,16 @@ Database `mountain_money` (localhost). One profile per registered account; Envel
 
 Web and Android stores are independent (no SharedPreferences sync). Learning `.db` files are also independent per platform/user unless the user copies the file.
 
+### Budget file (`mountain-money-budget`, version 1)
+
+One JSON document the user keeps. It is not a photo archive and not an account.
+
+- `kind`, `version` (only `1`; a higher version is rejected)
+- `currentMonth`, `billsDays`, `paydays`, `billsFilterActive`, `billsFilterSavedStartDisplay`, `billsFilterSavedEndDisplay`
+- `envelopes`: the same pond/transaction JSON as Gson / Mongo, including `receiptImageFileName` (filled from a URI fragment when the name field is blank)
+- `learning` (optional): `comments` (most recent first, cap 50) and `ocrWeights` (5 numbers). Missing `learning` does not wipe the sidecar.
+
+Rejected without writing: wrong kind, bad or newer version, missing `envelopes`, over 2,000,000 characters, any `password` / `passwordHash` / `photoBase64` / `imageBase64` / `jpegBase64` field, or a string that starts with `data:image`. A comment that merely says “password” is allowed. Restore replaces the ledger only after the user confirms. Picture files are not deleted.
+
 ### Receipt recovery compatibility
 `Transaction.receiptImageFileName: String?` is an optional Gson filename identity alongside the existing `receiptImageUri`. Legacy JSON without the field continues to load. New named saves and verified repairs populate it. URI replacement/removal clears obsolete filename metadata; unchanged URI assignments retain it. Transfer mirrors and split-group edits preserve the verified filename. Repair updates current transactions and `MonthData.transactions` without changing financial fields, preference keys, or the learning SQLite database. Failed or ambiguous recovery never clears the original association. Matching binds by unique identity first (exact filename, normalized filename folding case/`.jpeg`/percent-encoding/` (1)` copy suffixes, or a shared epoch digit-run), and only then by date: the only unused album file captured on `Transaction.date` (`yyyy-MM-dd`) — or one day either side when that day holds no file — with exactly one unmatched receipt. A renamed-but-verified match replaces `receiptImageFileName` with the album filename; no new Gson keys are added. Verified means a successful header decode (one stream open); the fullscreen preview performs the full pixel decode. A user-confirmed candidate pick — initial or later swap via "Choose different" — is stored exactly like an automatic match (`receiptImageUri` + `receiptImageFileName`), so user picks survive restart with no extra fields.

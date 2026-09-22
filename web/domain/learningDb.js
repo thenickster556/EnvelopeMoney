@@ -33,6 +33,24 @@ export function loadComments(db) {
   return rows;
 }
 
+/** Replace the comment list in backup order (most recent first). Empty strings are skipped. */
+export function replaceComments(db, comments, nowMs) {
+  db.run('DELETE FROM comments');
+  let stamp = nowMs != null ? nowMs : Date.now();
+  const list = Array.isArray(comments) ? comments : [];
+  let kept = 0;
+  for (const comment of list) {
+    if (kept >= 50) break;
+    if (typeof comment !== 'string') continue;
+    const text = comment.trim();
+    if (!text) continue;
+    db.run('INSERT OR REPLACE INTO comments (text, last_used_ms) VALUES (?, ?)', [text, stamp]);
+    stamp -= 1;
+    kept += 1;
+  }
+  return loadComments(db);
+}
+
 export function rememberComment(db, text, nowMs) {
   const next = remember(loadComments(db), text);
   db.run('DELETE FROM comments');

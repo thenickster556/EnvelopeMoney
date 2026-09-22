@@ -21,9 +21,10 @@ import {
   readHttpsOptions,
 } from './listenInfo.js';
 import { applyLaunchAndDisplay, emptyProfile, publicProfile, refreshBalances } from '../domain/profileEngine.js';
+import { applyBudgetToProfile, buildBudgetBackup, parseBudgetBackup } from '../domain/budgetBackup.js';
 import { buildDemoProfile, shouldSeedDemoProfile } from '../domain/demoSeed.js';
 import { parse as parseReceipt, ocrLine, ocrResult, ReceiptCaptureMode } from '../domain/receiptFieldParser.js';
-import { readLearning, saveLearning } from './learningStore.js';
+import { readLearning, replaceLearningSnapshot, saveLearning } from './learningStore.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, '..');
@@ -210,6 +211,61 @@ app.put('/api/profile', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('profile save failed', err.message);
     res.status(500).json({ error: 'Could not save profile.' });
+  }
+});
+
+app.get('/api/backup', requireAuth, async (req, res) => {
+  try {
+    const profile = await loadOrCreateProfile(req.session.userId);
+    const learning = await readLearning(req.session.userId);
+    const text = buildBudgetBackup({
+      currentMonth: profile.currentMonth,
+      envelopes: profile.envelopes,
+      billsDays: profile.billsDays,
+      paydays: profile.paydays,
+      billsFilterActive: profile.billsFilterActive,
+      billsFilterSavedStartDisplay: profile.billsFilterSavedStartDisplay,
+      billsFilterSavedEndDisplay: profile.billsFilterSavedEndDisplay,
+      learningPresent: true,
+      comments: learning.comments,
+      ocrWeights: learning.weights,
+    });
+    res.type('application/json').send(text);
+  } catch (err) {
+    console.error('backup export failed', err.message);
+    res.status(500).json({ error: 'Could not save the backup file.' });
+  }
+});
+
+app.post('/api/backup', requireAuth, async (req, res) => {
+  try {
+    const text = JSON.stringify(req.body ?? {});
+    const parsed = parseBudgetBackup(text);
+    if (!parsed.ok) {
+      res.status(400).json({ error: 'That file is not a Mountain Money budget backup. Nothing was changed.' });
+      return;
+    }
+    const existing = await loadOrCreateProfile(req.session.userId);
+    const next = applyBudgetToProfile(existing, parsed);
+    delete next._id;
+    delete next.userId;
+    refreshBalances(next);
+    const db = getDb();
+    await db.collection('profiles').updateOne(
+      { userId: req.session.userId },
+      { $set: { ...next, userId: req.session.userId, updatedAt: new Date() } },
+      { upsert: true },
+    );
+    if (parsed.learningPresent) {
+      await replaceLearningSnapshot(req.session.userId, {
+        comments: parsed.comments,
+        ocrWeights: parsed.ocrWeights,
+      });
+    }
+    res.json({ profile: publicProfile(next) });
+  } catch (err) {
+    console.error('backup restore failed', err.message);
+    res.status(500).json({ error: 'Could not restore the backup file. Nothing was changed.' });
   }
 });
 

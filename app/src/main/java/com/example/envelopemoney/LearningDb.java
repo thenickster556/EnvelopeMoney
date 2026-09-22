@@ -112,6 +112,42 @@ public final class LearningDb extends SQLiteOpenHelper {
         return OcrAmountWeights.defaults();
     }
 
+    /**
+     * Replace comment history and OCR weights from a budget file.
+     * A null weight vector leaves the current weights in place.
+     */
+    public void replaceLearning(List<String> comments, float[] weights) {
+        try {
+            SQLiteDatabase db = getWritableDatabase();
+            db.beginTransaction();
+            try {
+                db.execSQL("DELETE FROM comments");
+                long now = System.currentTimeMillis();
+                if (comments != null) {
+                    int kept = 0;
+                    for (int i = 0; i < comments.size() && kept < CommentHistory.MAX_COMMENTS; i++) {
+                        String text = comments.get(i);
+                        if (text == null || text.trim().isEmpty()) continue;
+                        ContentValues row = new ContentValues();
+                        row.put("text", text.trim());
+                        row.put("last_used_ms", now - kept);
+                        db.insertWithOnConflict("comments", null, row, SQLiteDatabase.CONFLICT_REPLACE);
+                        kept++;
+                    }
+                }
+                db.setTransactionSuccessful();
+            } finally {
+                db.endTransaction();
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "replaceLearning", e);
+            return;
+        }
+        if (weights != null && weights.length == OcrAmountWeights.FEATURE_COUNT) {
+            saveWeights(weights);
+        }
+    }
+
     public void saveWeights(float[] weights) {
         try {
             float[] clamped = OcrAmountWeights.clamp(weights);

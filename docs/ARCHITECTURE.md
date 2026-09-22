@@ -45,7 +45,9 @@ Comment typeahead and OCR amount-correction weights live in a **sidecar SQLite**
 - `PrefManager`
   - Serializes/deserializes envelope state, UI preference state, bills days JSON, paydays JSON, and bills-filter state.
 - `LearningDb`
-  - Sidecar SQLite (`mountain_money_learning.db`) for remembered comments and the OCR amount weight vector. Envelope Gson is unchanged. Corrupt files fall back to default weights.
+  - Sidecar SQLite (`mountain_money_learning.db`) for remembered comments and the OCR amount weight vector. Envelope Gson is unchanged. Corrupt files fall back to default weights. `replaceLearning` writes a budget file’s comment list and weights; a backup with no learning section leaves the sidecar alone.
+- `BudgetBackup`
+  - Pure JSON ledger file (`kind` `mountain-money-budget`, `version` 1) shared with `web/domain/budgetBackup.js` and `shared/fixtures/budgetBackup.fixtures.json`. Holds envelopes, receipt filenames, bills/paydays, bills-filter prefs, current month, comments, and OCR weights. Rejects passwords, hashes, `data:image`, and photo base64. Does not store JPEG bytes. Android save/restore uses the system document picker; restore then runs the existing album repair. Web `GET`/`POST /api/backup` uses the same parser. `web/domain/receiptRelink.js` points a unique folder filename at `local://` and does not guess when two files share a name.
 - `CommentHistory` / `OcrAmountLearner` / `OcrAmountWeights`
   - Pure helpers for typeahead ranking, float32 weight encoding, and one-pass amount-correction updates.
 - Receipt capture (`com.example.envelopemoney.receipt`)

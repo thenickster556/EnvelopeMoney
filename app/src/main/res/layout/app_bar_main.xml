@@ -68,6 +68,17 @@
                 android:scaleType="centerInside"
                 android:src="@drawable/ic_reset"
                 android:tint="?attr/colorControlNormal" />
+
+            <ImageButton
+                android:id="@+id/btnBackup"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/content_desc_backup"
+                android:padding="10dp"
+                android:scaleType="centerInside"
+                android:src="@drawable/ic_backup"
+                android:tint="?attr/colorControlNormal" />
         </LinearLayout>
 
         <include layout="@layout/content_main" />

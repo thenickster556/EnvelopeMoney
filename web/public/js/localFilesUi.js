@@ -91,6 +91,7 @@ export function createLocalFilesUi(options) {
         <button type="button" class="btn-secondary" id="lfExport" ${hasWorkspace ? '' : 'disabled'}>${S.exportFiles}</button>
       </div>
       <p class="muted">${S.localFilesPrivacy}</p>
+      <p class="muted">${S.localFilesPicturesOnly}</p>
       <div class="sheet-actions">
         <button type="button" class="btn-secondary" id="sheetClose">${S.close}</button>
       </div>`);

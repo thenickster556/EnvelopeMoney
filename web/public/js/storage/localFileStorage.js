@@ -129,6 +129,9 @@ export function createLocalFileStorage(options = {}) {
     async list(path) {
       return (await requireWorkspace()).list(path);
     },
+    async listAllPaths() {
+      return collectFiles(await requireWorkspace());
+    },
     async exists(path) {
       return (await requireWorkspace()).exists(path);
     },

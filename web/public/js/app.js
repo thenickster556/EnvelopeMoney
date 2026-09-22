@@ -32,6 +32,8 @@ import { footerTotals, pondReconciliation, refreshBalances, recalculateBalances 
 import { ensureRecurringTransactions } from '/domain/recurring.js';
 import { analyze, barScaleMax, fullMonthLabel, shortMonthLabel } from '/domain/spendAnalysis.js';
 import { parseFileReference } from '/domain/fileReference.js';
+import { parseBudgetBackup } from '/domain/budgetBackup.js';
+import { receiptNeedsAttention, relinkLocalReceipts } from '/domain/receiptRelink.js';
 import { detectCapabilities } from './storage/capabilities.js';
 import { createHandleStore } from './storage/handleStore.js';
 import { createObjectUrlCache } from './storage/objectUrls.js';
@@ -225,17 +227,21 @@ async function refreshReceiptAttention() {
   for (const env of state.profile.envelopes || []) {
     for (const tx of getTransactions(env)) rows.push(tx);
   }
+  const mode = getReceiptMode();
   for (const tx of rows) {
     if (!tx.receiptImageUri) continue;
     const ref = parseFileReference(tx.receiptImageUri);
-    if (ref.storage !== 'local') continue;
-    let missing = true;
-    try {
-      missing = !localFileStorage.hasWorkspace() || !(await localFileStorage.exists(ref.path));
-    } catch {
-      missing = true;
+    let localExists = false;
+    if (ref.storage === 'local') {
+      try {
+        localExists = localFileStorage.hasWorkspace() && await localFileStorage.exists(ref.path);
+      } catch {
+        localExists = false;
+      }
     }
-    next.set(tx.receiptImageUri, missing);
+    if (receiptNeedsAttention({ uri: tx.receiptImageUri, mode, localExists })) {
+      next.set(tx.receiptImageUri, true);
+    }
   }
   const changed = next.size !== state.receiptAttention.size
     || [...next.entries()].some(([uri, missing]) => state.receiptAttention.get(uri) !== missing);
@@ -304,7 +310,9 @@ function getLocalFilesUi() {
       closeSheet,
       toast,
       onWorkspaceChange: () => {
-        refreshReceiptAttention().then(() => render());
+        relinkReceiptsFromWorkspace().finally(() => {
+          refreshReceiptAttention().then(() => render());
+        });
       },
       reconnectFolder: reconnectLocalFolder,
       getNeedsReconnect: () => !!pendingFolderHandle,
@@ -474,6 +482,84 @@ async function movePond(index, delta) {
   if (next < 0 || next >= list.length) return;
   [list[index], list[next]] = [list[next], list[index]];
   await saveProfile();
+}
+
+async function relinkReceiptsFromWorkspace() {
+  if (!state.profile || getReceiptMode() !== 'local' || !localFileStorage.hasWorkspace()) return;
+  let paths = [];
+  try {
+    paths = await localFileStorage.listAllPaths();
+  } catch {
+    return;
+  }
+  const files = paths.map((filePath) => ({
+    path: filePath,
+    name: String(filePath).split('/').pop(),
+  }));
+  const result = relinkLocalReceipts(state.profile.envelopes, files);
+  if (result.changed > 0) {
+    state.profile.envelopes = result.envelopes;
+    await saveProfile();
+  }
+}
+
+async function downloadBudget() {
+  const res = await fetch('/api/backup', { credentials: 'include' });
+  if (!res.ok) throw new Error(S.backupSaveFailed);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `mountain-money-budget-${ymd(new Date())}.json`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function openBackupSheet() {
+  openSheet(`
+    <h3>${S.budgetBackup}</h3>
+    <p>${S.budgetLead}</p>
+    <p class="muted">${S.budgetServerNote}</p>
+    <div class="local-files-actions">
+      <button type="button" class="btn-primary" id="budgetSave">${S.saveBudget}</button>
+      <button type="button" class="btn-secondary" id="budgetRestore">${S.restoreBudget}</button>
+    </div>
+    <div class="sheet-actions">
+      <button type="button" class="btn-secondary" id="sheetClose">${S.close}</button>
+    </div>`);
+  $('budgetSave').onclick = () => downloadBudget().catch(() => toast(S.backupSaveFailed));
+  $('budgetRestore').onclick = () => $('budgetFileInput').click();
+  $('sheetClose').onclick = closeSheet;
+}
+
+function confirmBudgetRestore(file) {
+  openSheet(`
+    <h3>${S.backupReplaceTitle}</h3>
+    <p>${S.backupReplaceMessage}</p>
+    <div class="sheet-actions">
+      <button type="button" class="btn-secondary" id="sheetCancel">${S.cancel}</button>
+      <button type="button" class="btn-primary" id="sheetOk">${S.backupReplace}</button>
+    </div>`);
+  $('sheetCancel').onclick = () => openBackupSheet();
+  $('sheetOk').onclick = async () => {
+    try {
+      const text = await file.text();
+      const parsed = parseBudgetBackup(text);
+      if (!parsed.ok) {
+        toast(S.backupInvalid);
+        openBackupSheet();
+        return;
+      }
+      const data = await api('/api/backup', { method: 'POST', body: text });
+      state.profile = data.profile;
+      closeSheet();
+      await relinkReceiptsFromWorkspace();
+      render();
+      toast(S.backupRestored);
+    } catch (err) {
+      toast(err && err.message ? err.message : S.backupInvalid);
+    }
+  };
 }
 
 function closeSheet() {
@@ -1490,6 +1576,12 @@ function bindUi() {
   $('btnBillsSetup').onclick = openBillsDialog;
   $('btnAnalysis').onclick = openAnalysisSheet;
   $('btnLocalFiles').onclick = () => getLocalFilesUi().open();
+  $('btnBackup').onclick = () => openBackupSheet();
+  $('budgetFileInput').addEventListener('change', () => {
+    const file = $('budgetFileInput').files && $('budgetFileInput').files[0];
+    $('budgetFileInput').value = '';
+    if (file) confirmBudgetRestore(file);
+  });
   $('btnBillsFilter').onclick = applyBillsFilter;
   $('btnToggleTransfers').onclick = async () => {
     state.profile.transfersVisible = !state.profile.transfersVisible;

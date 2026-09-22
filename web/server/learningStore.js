@@ -8,6 +8,7 @@ import {
   loadComments,
   loadWeights,
   rememberComment,
+  replaceComments,
   saveWeights,
 } from '../domain/learningDb.js';
 import { learn } from '../domain/ocrAmountLearner.js';
@@ -52,6 +53,17 @@ export async function readLearning(userId) {
     comments: loadComments(db),
     weights: loadWeights(db),
   }));
+}
+
+/** Replace comment history and OCR weights from a budget file. Omits weights that are not 5 numbers. */
+export async function replaceLearningSnapshot(userId, learning) {
+  return withUserLearningDb(userId, (db) => {
+    const comments = learning && Array.isArray(learning.comments) ? learning.comments : [];
+    replaceComments(db, comments, Date.now());
+    const weights = learning && Array.isArray(learning.ocrWeights) ? learning.ocrWeights : null;
+    if (weights && weights.length === 5) saveWeights(db, weights);
+    return { comments: loadComments(db), weights: loadWeights(db) };
+  });
 }
 
 export async function saveLearning(userId, body) {

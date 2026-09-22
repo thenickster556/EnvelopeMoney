@@ -21,6 +21,12 @@
   ],
   "completed_tasks": [
     {
+      "id": "offline-budget-backup-2026-09-22",
+      "title": "Ledger-only backup and restore; photos stay in the user folder",
+      "status": "completed",
+      "intent": "Major: one mountain-money-budget JSON file (ponds, transactions, receipt filenames, bills days, paydays, bills-filter prefs, current month, comment list, OCR weights). No JPEG bytes, passwords, or hashes. Android top-bar Backup saves/restores via the document picker, then existing album repair relinks Pictures/Mountain Money. Web Backup sheet is separate from picture Export; GET/POST /api/backup; filename relink to local:// when the folder already has the file. Sign-in hardening is out of scope until a hosted app. Shared fixture BudgetBackup. npm test 161 pass. BudgetBackupTest + SharedParityFixturesTest 3/3 via javac/JUnit; Gradle 6.7.1 blocked on JDK 25."
+    },
+    {
       "id": "web-ocr-full-image-2026-09-22",
       "title": "Restore full-photo web OCR accuracy and keep the reused worker",
       "status": "completed",

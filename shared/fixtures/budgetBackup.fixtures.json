@@ -1,0 +1,161 @@
+{
+  "helper": "BudgetBackup",
+  "cases": [
+    {
+      "name": "round-trip-keeps-money-ids-and-filename",
+      "function": "summarize",
+      "args": {
+        "document": {
+          "kind": "mountain-money-budget",
+          "version": 1,
+          "currentMonth": "2026-09",
+          "billsDays": [1, 15],
+          "paydays": [15],
+          "billsFilterActive": false,
+          "envelopes": [
+            {
+              "name": "Groceries",
+              "transactions": [
+                {
+                  "envelopeName": "Groceries",
+                  "amount": 12.5,
+                  "transferId": "t-1",
+                  "splitPurchaseGroupId": "split-1",
+                  "receiptImageUri": "content://media/external/images/media/5#MountainMoney_1710000000000.jpg",
+                  "comment": "password reset"
+                }
+              ],
+              "monthlyData": {
+                "2026-08": {
+                  "transactions": [
+                    {
+                      "amount": 4,
+                      "receiptImageFileName": "older.jpg"
+                    }
+                  ]
+                }
+              }
+            }
+          ],
+          "learning": {
+            "comments": ["Walmart"],
+            "ocrWeights": [55, 80, 60, 25, -100]
+          }
+        }
+      },
+      "expected": {
+        "ok": true,
+        "error": null,
+        "currentMonth": "2026-09",
+        "envelopeName": "Groceries",
+        "amount": 12.5,
+        "transferId": "t-1",
+        "splitPurchaseGroupId": "split-1",
+        "receiptImageFileName": "MountainMoney_1710000000000.jpg",
+        "learningPresent": true,
+        "comment": "Walmart",
+        "weight0": 55,
+        "billsDay0": 1
+      }
+    },
+    {
+      "name": "empty-envelopes-without-learning",
+      "function": "summarize",
+      "args": {
+        "document": {
+          "kind": "mountain-money-budget",
+          "version": 1,
+          "currentMonth": "2026-01",
+          "envelopes": []
+        }
+      },
+      "expected": {
+        "ok": true,
+        "error": null,
+        "currentMonth": "2026-01",
+        "envelopeName": null,
+        "amount": null,
+        "learningPresent": false,
+        "comment": null,
+        "weight0": null
+      }
+    },
+    {
+      "name": "rejects-password-field",
+      "function": "summarize",
+      "args": {
+        "document": {
+          "kind": "mountain-money-budget",
+          "version": 1,
+          "envelopes": [],
+          "password": "secret"
+        }
+      },
+      "expected": { "ok": false, "error": "forbidden" }
+    },
+    {
+      "name": "rejects-password-hash-field",
+      "function": "summarize",
+      "args": {
+        "document": {
+          "kind": "mountain-money-budget",
+          "version": 1,
+          "envelopes": [],
+          "passwordHash": "abc"
+        }
+      },
+      "expected": { "ok": false, "error": "forbidden" }
+    },
+    {
+      "name": "rejects-data-image",
+      "function": "summarize",
+      "args": {
+        "document": {
+          "kind": "mountain-money-budget",
+          "version": 1,
+          "envelopes": [
+            { "name": "Gas", "transactions": [{ "comment": "data:image/jpeg;base64,AAAA" }] }
+          ]
+        }
+      },
+      "expected": { "ok": false, "error": "forbidden" }
+    },
+    {
+      "name": "rejects-photo-base64-field",
+      "function": "summarize",
+      "args": {
+        "document": {
+          "kind": "mountain-money-budget",
+          "version": 1,
+          "envelopes": [],
+          "photoBase64": "AAAA"
+        }
+      },
+      "expected": { "ok": false, "error": "forbidden" }
+    },
+    {
+      "name": "rejects-wrong-kind",
+      "function": "summarize",
+      "args": {
+        "document": { "kind": "notes", "version": 1, "envelopes": [] }
+      },
+      "expected": { "ok": false, "error": "wrong-kind" }
+    },
+    {
+      "name": "rejects-newer-version",
+      "function": "summarize",
+      "args": {
+        "document": { "kind": "mountain-money-budget", "version": 2, "envelopes": [] }
+      },
+      "expected": { "ok": false, "error": "newer-version" }
+    },
+    {
+      "name": "rejects-missing-envelopes",
+      "function": "summarize",
+      "args": {
+        "document": { "kind": "mountain-money-budget", "version": 1 }
+      },
+      "expected": { "ok": false, "error": "missing-envelopes" }
+    }
+  ]
+}
