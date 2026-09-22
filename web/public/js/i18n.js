@@ -9,6 +9,8 @@ export const S = {
   paydayProgress: (n, m) => `Payday progress: ${n}/${m} reached`,
   history: 'Transaction History',
   noTransactions: 'No transactions to display',
+  noSelection: 'No transactions for this selection.',
+  left: 'Left',
   selectPond: 'Select pond',
   noPond: 'No pond found',
   accountLabel: 'Account (bank slice)',

@@ -10,7 +10,7 @@
 
 ## Pond list flow
 1. Pond section header is one row: **Ponds** + **N selected** on the left; **select**, **reorder**, **collapse**, and **add** icons on the right (same pattern as Transaction History).
-2. Checkbox toggles filter the transaction list (footer totals still sum all ponds).
+2. Checkbox toggles filter the transaction list (footer totals still sum all ponds). On the web demo, **Showing:** under History names the checked ponds; none checked shows **No transactions for this selection.** Transfer rows appear only while the transfers toggle is on.
 3. **Reorder** icon shows drag handles; drag a row (or long-press handle) to reorder with a lifted shadow; order persists in the envelopes JSON array.
 4. **Done** icon exits reorder mode; collapsing the pond section also exits reorder mode.
 

@@ -40,6 +40,16 @@ button, input, select, textarea {
 .auth-screen, .app-screen {
   min-height: 100dvh;
 }
+.app-screen {
+  display: flex;
+  flex-direction: column;
+}
+.app-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
 .auth-screen {
   display: flex;
   align-items: center;
@@ -102,7 +112,7 @@ button, input, select, textarea {
   border-radius: 12px;
 }
 .top-bar h1 {
-  flex: 1;
+  flex: 1 0 100%;
   margin: 0;
   font-size: 18px;
   color: var(--mountain-primary);
@@ -116,22 +126,42 @@ button, input, select, textarea {
 .month-title { font-weight: 700; font-size: 18px; }
 .date-chip {
   min-height: var(--tap);
-  border: 0;
-  background: transparent;
+  border: 1px solid var(--top-bar-stroke);
+  border-radius: 999px;
+  background: var(--card);
   color: var(--text);
   font-size: 16px;
+  padding: 8px 14px;
 }
-.section-header h2 { margin: 0; font-size: 18px; }
+.section-header h2 { margin: 0; font-size: 18px; flex: 1; }
+.history-showing {
+  margin: 0;
+  padding: 0 16px 8px;
+  color: var(--muted);
+  font-size: 14px;
+}
+.history-section, .ponds-section {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.history-section { flex: 1; }
 .card-list {
   list-style: none;
   margin: 0;
   padding: 0 12px 8px;
   display: grid;
   gap: 8px;
-  max-height: 38vh;
+  align-content: start;
   overflow: auto;
+  flex: 1;
+  min-height: 8rem;
 }
-.ponds-section .card-list { max-height: 32vh; }
+.ponds-section .card-list {
+  flex: none;
+  max-height: none;
+  overflow: visible;
+}
 .empty-hint {
   text-align: center;
   color: var(--muted);
@@ -151,8 +181,21 @@ button, input, select, textarea {
   align-items: center;
   gap: 8px;
 }
-.card-top strong { flex: 1; }
-.row-actions { display: flex; gap: 4px; }
+.card-top strong { flex: 1; min-width: 0; }
+.tx-amount {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.tx-meta, .pond-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.tx-meta span { flex: 1; min-width: 0; }
+.row-actions { display: flex; gap: 4px; justify-content: flex-end; }
 .totals-row {
   display: flex;
   align-items: center;
@@ -330,6 +373,27 @@ button, input, select, textarea {
 }
 
 .collapsed .ponds-body { display: none; }
+
+@media (min-width: 800px) {
+  .top-bar h1 { flex-basis: auto; }
+  .app-body {
+    flex-direction: row;
+    align-items: stretch;
+    gap: 8px;
+    padding: 0 8px 12px;
+  }
+  .history-section { flex: 1.4; min-width: 0; }
+  .ponds-section {
+    flex: 1;
+    min-width: 280px;
+    max-width: 420px;
+    overflow: auto;
+  }
+  .ponds-section .card-list {
+    overflow: auto;
+    flex: 1;
+  }
+}
 
 .analysis-check {
   display: flex;

@@ -1,7 +1,6 @@
 {
   "active_tasks": [
     {"id":"receipt-reference-recovery-2026-09-08","title":"Automatic receipt-folder recovery implemented; final UI verification blocked","status":"verification_blocked","intent":"Automatic exact-folder discovery replaces manual selection. Implementation, history backfill, metadata copying and restart recovery are complete. Photo-library prompt for legacy search is included (launch/resume). Build and 80% recovery coverage gate pass (96.76% lines, 83.87% branches). Full suite: 192/195 passed; three failures reproduced in baseline. Lint: same 43 baseline errors. API 36 startup/restart/render test passes from prior work. Permission-dialog UI on a device was not re-run in this patch. See docs/receipt-recovery-verification.md."},
-    {"id":"receipt-reference-recovery-2026-09-08","title":"Automatic receipt-folder recovery implemented; final UI verification blocked","status":"verification_blocked","intent":"Automatic exact-folder discovery replaces manual selection. Implementation, history backfill, metadata copying and restart recovery are complete. Photo-library prompt for legacy search is included (launch/resume). Build and 80% recovery coverage gate pass (96.76% lines, 83.87% branches). Full suite: 192/195 passed; three failures reproduced in baseline. Lint: same 43 baseline errors. API 36 startup/restart/render test passes from prior work. Permission-dialog UI on a device was not re-run in this patch. See docs/receipt-recovery-verification.md."},
     {
       "id": "transfer-dialog-ux-polish-2026-05",
       "title": "Polish grouped transfer dialog scrolling, dropdowns, and slider readability",
@@ -21,6 +20,12 @@
     }
   ],
   "completed_tasks": [
+    {
+      "id": "web-ocr-filter-layout-2026-09-22",
+      "title": "Web demo: faster receipt OCR, pond history filter, mobile history layout",
+      "status": "completed",
+      "intent": "Web only. Reuse one Tesseract worker and downscale receipts to 1280px. History: no ponds checked is empty; transfers hidden until the toggle is on, then a transfer shows if its pond, the source, or a destination is checked. Phone layout drops 38vh/32vh caps and adds Showing. npm test 155 pass. Android unchanged. No new Mongo fields."
+    },
     {
       "id": "inbound-transfer-totals-2026-09-17",
       "title": "Keep inbound transfers out of history Total; show them as negative in the transfers panel",

@@ -17,6 +17,8 @@ import { roundToCents, splitIntegerPercentsFirstCeiling, splitTotalByPercents, f
 import { excludingSource } from '/domain/transferDestinationList.js';
 import { allocatedTotal as transferAllocated } from '/domain/transferGroup.js';
 import { addInboundToPanel, formatToSummary } from '/domain/historyTransferTotals.js';
+import { rowVisible, historyShowingLabel, transferSides } from '/domain/historyFilter.js';
+import { scaledSize, fillEmptyOcrFields, createOcrSession } from '/domain/receiptOcrPrep.js';
 import { validate as validateSplit, allocatedTotal as splitAllocated } from '/domain/splitPurchase.js';
 import { detachTransferGroup, resolveAnchorTransaction, getAllocations } from '/domain/transferSync.js';
 import { saveSpendingOrTransfer, removePlainTransaction } from '/domain/transactionSave.js';
@@ -189,14 +191,23 @@ function selectedPonds() {
 
 function allTransactions() {
   const month = displayedMonth();
-  const selected = selectedPonds();
-  const names = new Set(selected.map((e) => e.name));
+  const selected = new Set(selectedPonds().map((e) => e.name));
+  const transfersVisible = !!state.profile.transfersVisible;
   const rows = [];
   for (const env of state.profile.envelopes || []) {
-    if (names.size && !names.has(env.name)) continue;
     for (const t of getTransactions(env)) {
       if (t.month !== month) continue;
-      if (!inDateRange(t.date)) continue;
+      const sides = t.transferId
+        ? transferSides(state.profile.envelopes, t.transferId, selected)
+        : { sourceSelected: false, anyDestinationSelected: false };
+      if (!rowVisible({
+        transferId: t.transferId,
+        inRange: inDateRange(t.date),
+        pondSelected: selected.has(env.name),
+        transfersVisible,
+        sourceSelected: sides.sourceSelected,
+        anyDestinationSelected: sides.anyDestinationSelected,
+      })) continue;
       rows.push(t);
     }
   }
@@ -334,8 +345,7 @@ function renderPonds() {
     li.className = 'card';
     const recon = pondReconciliation(pond, state.profile);
     const details = [];
-    details.push(`${S.limit}: ${money(pond.limit)}`);
-    details.push(`${S.remaining}: ${money(pond.remaining)}`);
+    details.push(`${S.limit} ${money(pond.limit)} · ${S.left} ${money(pond.remaining)}`);
     if (pond.accountBalance != null) details.push(`${S.accountLabel}: ${money(pond.accountBalance)}`);
     if (recon && recon.active) {
       details.push(S.rowReconcile(recon.inBank, recon.stillToDepositForMonth));
@@ -352,7 +362,7 @@ function renderPonds() {
           <button type="button" class="text-btn" data-act="delete">${S.delete}</button>
         </div>
       </div>
-      <div>${details.join('<br>')}</div>`;
+      <div class="pond-meta">${details.join(' · ')}</div>`;
     li.querySelector('[data-act="select"]').addEventListener('change', async (e) => {
       pond.selected = e.target.checked;
       await saveProfile();
@@ -370,11 +380,18 @@ function renderPonds() {
 function renderTransactions() {
   const list = $('transactionList');
   list.innerHTML = '';
+  const names = (state.profile.envelopes || []).map((e) => e.name);
+  const selectedNames = selectedPonds().map((e) => e.name);
+  const showing = $('historyShowing');
+  if (showing) showing.textContent = historyShowingLabel(selectedNames, names);
   const rows = allTransactions();
   let total = 0;
   const destTotals = {};
   if (rows.length === 0) {
-    list.innerHTML = `<li class="empty-hint">${S.noTransactions}</li>`;
+    const empty = selectedNames.length === 0 || selectedNames.length !== names.length
+      ? S.noSelection
+      : S.noTransactions;
+    list.innerHTML = `<li class="empty-hint">${empty}</li>`;
     $('tvTransactionsTotal').textContent = S.total(0);
     $('spinnerTransferTotals').innerHTML = '';
     $('tvTransferTotalsSummary').textContent = S.transfers(0);
@@ -393,14 +410,16 @@ function renderTransactions() {
     li.innerHTML = `
       <div class="card-top">
         <strong>${escapeHtml(t.envelopeName)}</strong>
-        <span>${money(t.amount)}</span>
+        <span class="tx-amount">${money(t.amount)}</span>
       </div>
-      <div>${escapeHtml(displayFromIso(t.date))} · ${escapeHtml(t.comment || '')}</div>
+      <div class="tx-meta">
+        <span>${escapeHtml(displayFromIso(t.date))} · ${escapeHtml(t.comment || '')}</span>
+        ${t.receiptImageUri ? `<button type="button" class="icon-btn${state.receiptAttention.get(t.receiptImageUri) ? ' attention' : ''}" data-act="photo" data-uri="${escapeHtml(t.receiptImageUri)}" aria-label="View receipt image">🖼</button>` : ''}
+      </div>
       ${split ? `<div class="muted">${S.splitBreakdown(groupTotal(group))}</div>
         ${expanded ? `<pre>${escapeHtml(formatBreakdownLine(group))}</pre>` : ''}
         <button type="button" class="text-btn" data-act="split">${expanded ? 'Hide' : 'Show'} split</button>` : ''}
       <div class="row-actions">
-        ${t.receiptImageUri ? `<button type="button" class="icon-btn${state.receiptAttention.get(t.receiptImageUri) ? ' attention' : ''}" data-act="photo" data-uri="${escapeHtml(t.receiptImageUri)}" aria-label="View receipt image">🖼</button>` : ''}
         <button type="button" class="text-btn" data-act="edit">${S.edit}</button>
         <button type="button" class="text-btn" data-act="delete">${S.delete}</button>
       </div>`;
@@ -872,9 +891,18 @@ function openTransactionDialog(existing) {
       const draft = await runOcr(file, ocrMode, ocrWeights);
       lastOcrAmount = draft?.totalAmount != null ? draft.totalAmount : null;
       lastOcrLines = Array.isArray(draft?.sourceLines) ? draft.sourceLines : [];
-      if (draft?.totalAmount && !$('txAmount').value) $('txAmount').value = draft.totalAmount;
-      if (draft?.dateYyyyMmDd) $('txDate').value = draft.dateYyyyMmDd;
-      if (draft?.merchantForComment && !$('txComment').value) $('txComment').value = draft.merchantForComment;
+      const filled = fillEmptyOcrFields({
+        amount: $('txAmount') ? $('txAmount').value : '',
+        date: $('txDate') ? $('txDate').value : '',
+        comment: $('txComment') ? $('txComment').value : '',
+      }, draft);
+      if ($('txAmount')) $('txAmount').value = filled.amount;
+      if ($('txDate')) $('txDate').value = filled.date;
+      if ($('txComment')) $('txComment').value = filled.comment;
+      const splitTotal = $('splitTotal');
+      if (splitTotal && String(splitTotal.value || '').trim() === '' && draft?.totalAmount != null) {
+        splitTotal.value = draft.totalAmount;
+      }
       if (draft?.dateYyyyMmDd && isIsoDateOutsideFilterRange(draft.dateYyyyMmDd, state.profile.dateFilterStartDisplay, state.profile.dateFilterEndDisplay)) {
         $('rxStatus').textContent = S.dateOutside;
       } else if (getReceiptMode() === 'local') {
@@ -1012,11 +1040,45 @@ async function deleteTransaction(tx) {
   await saveProfile();
 }
 
+let ocrSession = null;
+
+function ocrEngine() {
+  if (!window.Tesseract || typeof window.Tesseract.createWorker !== 'function') return null;
+  if (!ocrSession) {
+    ocrSession = createOcrSession(() => window.Tesseract.createWorker('eng'));
+  }
+  return ocrSession;
+}
+
+async function imageForOcr(file) {
+  if (!file || typeof createImageBitmap !== 'function' || typeof document === 'undefined') return file;
+  let bitmap = null;
+  try {
+    bitmap = await createImageBitmap(file);
+    const size = scaledSize(bitmap.width, bitmap.height);
+    if (size.width === bitmap.width && size.height === bitmap.height) return file;
+    const canvas = document.createElement('canvas');
+    canvas.width = size.width;
+    canvas.height = size.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return file;
+    ctx.drawImage(bitmap, 0, 0, size.width, size.height);
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.85));
+    return blob || file;
+  } catch {
+    return file;
+  } finally {
+    if (bitmap && typeof bitmap.close === 'function') bitmap.close();
+  }
+}
+
 async function runOcr(file, mode, weights) {
-  if (!window.Tesseract) {
+  const session = ocrEngine();
+  if (!session) {
     return api('/api/ocr', { method: 'POST', body: JSON.stringify({ lines: [], mode }) }).then((d) => d.draft);
   }
-  const result = await window.Tesseract.recognize(file, 'eng');
+  const image = await imageForOcr(file);
+  const result = await session.recognize(image);
   const lines = (result.data.lines || []).map((line) => ocrLine(
     line.text || '',
     (line.confidence || 80) / 100,

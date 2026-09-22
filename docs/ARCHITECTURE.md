@@ -26,6 +26,8 @@ Comment typeahead and OCR amount-correction weights live in a **sidecar SQLite**
   - Pure helper for last-N calendar months of spend vs **`Envelope.limit`**, over-budget pond-months (`roundToCents(spend) > roundToCents(limit)`), by-pond totals, and this-month snapshot. Default spend excludes transfer rows (`transferId` set); **Include transfers** uses the same all-amounts sum as Remaining. No new persistence. Web port: `web/domain/spendAnalysis.js`. Charts are Canvas/CSS bars (no chart library).
 - `HistoryTransferTotals`
   - Pure helper: inbound destination-mirror amounts stay out of history Total; the transfers panel lists each destination as a negative To line. Web port: `web/domain/historyTransferTotals.js`.
+- `historyFilter.js` / `receiptOcrPrep.js` (web demo)
+  - Web history rows: a pond checkbox off hides that pond’s spending; no ponds checked shows an empty list; transfer rows stay hidden until the transfers toggle is on, then a transfer also shows when the source or a destination pond is checked. OCR prep caps the long edge at 1280px and reuses one Tesseract worker. Android list filtering and ML Kit OCR are unchanged.
 - `TransferDestinationList`
   - Builds the transfer destination pond name list (all ponds except the source) for add/edit transfer UI.
 - `TransferGroupDraft` / `TransferSyncHelper`

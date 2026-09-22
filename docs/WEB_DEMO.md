@@ -15,7 +15,7 @@ npm test
 npm start
 ```
 
-3. Open the **Local** URL from the console (`http://localhost:3000`). The process binds `HOST` (default `0.0.0.0`) so another device on the LAN can use the **Network** URL. Mongo stays on `127.0.0.1:27017` and is not exposed to the LAN.
+3. Open the **This PC** URL from the console (`http://localhost:3001`). The process binds `HOST` (default `0.0.0.0`). On a phone, type the full address under **On your phone, open this exact address** (includes `http://`, the PC’s LAN IP, and port `3001`). Mongo stays on `127.0.0.1:27017` and is not exposed to the LAN.
 4. Sign in as **`alice-demo` / `secret1`** (after `npm run seed-demo`) or **Register** a new account. Empty new accounts get the same five-pond, 13-month demo dataset automatically.
 
 The demo dataset is **Groceries, Gas, Fun, Bills, Savings** with spending, 2-bucket transfers, split purchases, and a monthly rent series across the **12 previous months plus the current month**. Go to a **future** month (or a filter with no rows) to see **No transactions to display**.
@@ -29,14 +29,14 @@ npm run seed-demo
 ## Stack
 
 - `web/public` — mobile-first HTML/CSS/JS (Mountain palette, ponds copy)
-- `web/domain` — JS ports of Android helpers (MoneyMath, BillsDayAnchor, payday Remaining, transfers/splits, HistoryTransferTotals, rollover, ReceiptFieldParser, CommentHistory, OcrAmountLearner, SpendAnalysisHelper)
+- `web/domain` — JS ports of Android helpers (MoneyMath, BillsDayAnchor, payday Remaining, transfers/splits, HistoryTransferTotals, historyFilter, receiptOcrPrep, rollover, ReceiptFieldParser, CommentHistory, OcrAmountLearner, SpendAnalysisHelper)
 - `web/server` — Express session auth, profile JSON, GridFS receipts, per-user `web/data/learning/<userId>.db` (sql.js). Listens on `HOST` (default `0.0.0.0`) and prints Local/Network URLs. Optional HTTPS via `HTTPS_KEY` / `HTTPS_CERT`.
 - MongoDB database `mountain_money`: `users`, `profiles`, `sessions`, `receipts` GridFS
 - Client local files (optional): `web/public/js/storage` + `ReceiptStorage`. Not a Mongo replacement.
 
 ## Behavior
 
-Same as the Android app: ponds, transactions, Spending / Transfer / Split purchase, recurring, bills days vs paydays, payday Remaining = Account + unlocked Limit slices − month spend, bills-period filter, receipt camera/gallery + Tesseract.js OCR + `ReceiptFieldParser`, comment typeahead (3-row list), silent OCR amount-weight learning, preview rotate/save (GridFS keeps the original id until the replacement exists; local mode overwrites the device file or working copy), transfer save validates before insert and moves edited transfer sources between ponds, **Analysis** charts (Last 3/6/12, pond chips, include-transfers). **Local Files** is opt-in per browser: default receipt storage remains GridFS.
+Same as the Android app: ponds, transactions, Spending / Transfer / Split purchase, recurring, bills days vs paydays, payday Remaining = Account + unlocked Limit slices − month spend, bills-period filter, receipt camera/gallery + one reused Tesseract.js worker (image long edge capped at 1280px) + `ReceiptFieldParser`, comment typeahead (3-row list), silent OCR amount-weight learning, preview rotate/save (GridFS keeps the original id until the replacement exists; local mode overwrites the device file or working copy), transfer save validates before insert and moves edited transfer sources between ponds, **Analysis** charts (Last 3/6/12, pond chips, include-transfers). History **Showing:** follows pond checkboxes (none checked is an empty list; transfers follow the toggle). Phone layout is one column; from 800px wide, history and ponds sit side by side. **Local Files** is opt-in per browser: default receipt storage remains GridFS.
 
 ## LAN phone / second-computer demo
 
@@ -45,14 +45,16 @@ Same as the Android app: ponds, transactions, Spending / Transfer / Split purcha
 
 ```text
 Mountain Money web demo
-  Local:   http://localhost:3000
-  Network: http://192.168.x.x:3000
-  Mongo:   mongodb://127.0.0.1:27017 (not exposed to LAN)
+  This PC:  http://localhost:3001
+  Computer name: YOUR-PC
+  On your phone, open this exact address:
+    http://192.168.x.x:3001
+  Mongo:    mongodb://127.0.0.1:27017 (not exposed to LAN)
 ```
 
-3. On the PC browser open the Local URL. On another device, open the Network URL (allow port 3000 through the PC firewall if needed).
+3. On the PC browser open the **This PC** URL. On the phone, type the full line under **On your phone, open this exact address** (allow port 3001 through the PC firewall if needed).
 4. Sign in through Express. That other device talks to Express; Express talks to Mongo on localhost.
-5. **Live folder** APIs need a secure context. `http://localhost` is fine on the PC. A phone opening `http://192.168.x.x:3000` can still use camera and **Choose Files**. To test **Choose Folder** on that phone, enable local HTTPS (below) and trust the certificate.
+5. **Live folder** APIs need a secure context. `http://localhost` is fine on the PC. A phone opening `http://192.168.x.x:3001` can still use camera and **Choose Files**. To test **Choose Folder** on that phone, enable local HTTPS (below) and trust the certificate.
 6. Confirm the folder/file picker shows **that device’s** storage, not the PC’s. Local mode does not upload the JPEG to GridFS.
 
 ## Local HTTPS (optional)

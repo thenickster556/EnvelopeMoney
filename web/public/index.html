@@ -48,6 +48,7 @@
       <input id="hiddenEnd" type="date" class="visually-hidden">
     </div>
 
+    <div class="app-body">
     <section class="history-section">
       <div class="section-header">
         <h2>Transaction History</h2>
@@ -55,6 +56,7 @@
         <button type="button" id="btnToggleTransfers" class="icon-btn" aria-label="Toggle transfers">⇄</button>
         <button type="button" id="btnAddTransaction" class="icon-btn" aria-label="Add transaction">＋</button>
       </div>
+      <p id="historyShowing" class="history-showing"></p>
       <ul id="transactionList" class="card-list"></ul>
       <div class="totals-row">
         <div id="tvTransactionsTotal">Total: $0.00</div>
@@ -78,6 +80,7 @@
       <ul id="pondList" class="card-list"></ul>
       <p id="tvPondTotalsFooter" class="footer-line"></p>
     </section>
+    </div>
   </div>
 
   <div id="sheet" class="sheet hidden" role="dialog" aria-modal="true">
