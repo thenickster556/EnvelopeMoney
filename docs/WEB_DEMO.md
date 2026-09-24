@@ -30,7 +30,7 @@ npm run seed-demo
 
 - `web/public` — mobile-first HTML/CSS/JS (Mountain palette, ponds copy)
 - `web/domain` — JS ports of Android helpers (MoneyMath, BillsDayAnchor, payday Remaining, transfers/splits, HistoryTransferTotals, historyFilter, receiptOcrPrep, rollover, ReceiptFieldParser, CommentHistory, OcrAmountLearner, SpendAnalysisHelper, BudgetBackup, receiptRelink)
-- `web/server` — Express session auth, profile JSON, GridFS receipts, per-user `web/data/learning/<userId>.db` (sql.js). Listens on `HOST` (default `0.0.0.0`) and prints Local/Network URLs. Optional HTTPS via `HTTPS_KEY` / `HTTPS_CERT`.
+- `web/server` — Express session auth, profile JSON, GridFS receipts, and one Mongo `learning` document per user (comments and OCR weights). Listens on `HOST` (default `0.0.0.0`) and prints Local/Network URLs. Optional HTTPS via `HTTPS_KEY` / `HTTPS_CERT`. `node scripts/migrateLearningSqlite.js` can copy old `web/data/learning/*.db` files once; startup does not.
 - MongoDB database `mountain_money`: `users`, `profiles`, `sessions`, `receipts` GridFS
 - Client local files (optional): `web/public/js/storage` + `ReceiptStorage`. Not a Mongo replacement.
 

@@ -1,13 +1,13 @@
 # Data Schema
 
-> **Note:** Pond/transaction **business state** is still SharedPreferences + Gson (no SQL for envelopes). In protocol terms those “tables” = **preference keys and model types**. A **sidecar SQLite** file `mountain_money_learning.db` stores comment typeahead and OCR amount weights only. The **web demo** stores Envelope/Transaction JSON per user in MongoDB and the same learning schema in `web/data/learning/<userId>.db`.
+> **Note:** Pond/transaction **business state** is still SharedPreferences + Gson (no SQL for envelopes). In protocol terms those “tables” = **preference keys and model types**. Android stores comment typeahead and OCR amount weights in a **sidecar SQLite** file `mountain_money_learning.db`. The **web demo** stores Envelope/Transaction JSON and the same learning fields in MongoDB (`profiles` and `learning`).
 
 ## Persistence Store
 The app persists most business state via SharedPreferences.
 
 ## Learning sidecar (SQLite)
 
-File: `mountain_money_learning.db` (Android `getFilesDir()`; web `web/data/learning/<userId>.db`). Not part of `envelopes` JSON. Copyable between Mountain Money clients.
+Android file: `mountain_money_learning.db` in `getFilesDir()`. Not part of `envelopes` JSON. The web demo does not write that file. Web learning is one MongoDB document per user in collection `learning` (`userId` unique, `comments`, `weights` as five numbers, `updatedAt`). A missing document reads as empty comments and the default weights. `GET /api/learning` does not insert a document.
 
 ```text
 meta(key TEXT PRIMARY KEY, value TEXT)           -- version = 1

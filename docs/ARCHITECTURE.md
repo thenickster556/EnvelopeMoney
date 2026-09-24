@@ -7,7 +7,7 @@ A sibling **web demo** lives in `web/`: Node/Express + MongoDB + mobile HTML/CSS
 
 Web receipt binaries default to Mongo GridFS. An additive **Local Files** layer (`web/public/js/storage`, `ReceiptStorage`) can keep JPEGs on the **browser’s device** instead. UI never calls filesystem APIs directly. Capability detection (directory picker / directory input / file input / OPFS) is used; OS/user-agent sniffing is not. Mongo still owns users, sessions, profiles, and transaction JSON. SQLite learning stays on the server. Node `fs` never reads another device’s folder.
 
-Comment typeahead and OCR amount-correction weights live in a **sidecar SQLite** file (`LearningDb` / `mountain_money_learning.db`), not in Envelope Gson.
+Comment typeahead and OCR amount-correction weights live outside Envelope Gson. Android uses a **sidecar SQLite** file (`LearningDb` / `mountain_money_learning.db`). The web demo uses MongoDB collection `learning`.
 
 ## Core Components
 - `MainActivity`
@@ -45,7 +45,7 @@ Comment typeahead and OCR amount-correction weights live in a **sidecar SQLite**
 - `PrefManager`
   - Serializes/deserializes envelope state, UI preference state, bills days JSON, paydays JSON, and bills-filter state.
 - `LearningDb`
-  - Sidecar SQLite (`mountain_money_learning.db`) for remembered comments and the OCR amount weight vector. Envelope Gson is unchanged. Corrupt files fall back to default weights. `replaceLearning` writes a budget file’s comment list and weights; a backup with no learning section leaves the sidecar alone.
+  - Android sidecar SQLite (`mountain_money_learning.db`) for remembered comments and the OCR amount weight vector. Envelope Gson is unchanged. Corrupt files fall back to default weights. `replaceLearning` writes a budget file’s comment list and weights; a backup with no learning section leaves the sidecar alone. The web demo stores the same comments and five-number weights in MongoDB collection `learning` (`web/server/learningStore.js`); it does not write `web/data/learning`.
 - `BudgetBackup`
   - Pure JSON ledger file (`kind` `mountain-money-budget`, `version` 1) shared with `web/domain/budgetBackup.js` and `shared/fixtures/budgetBackup.fixtures.json`. Holds envelopes, receipt filenames, bills/paydays, bills-filter prefs, current month, comments, and OCR weights. Rejects passwords, hashes, `data:image`, and photo base64. Does not store JPEG bytes. Android save/restore uses the system document picker; restore then runs the existing album repair. Web `GET`/`POST /api/backup` uses the same parser. `web/domain/receiptRelink.js` points a unique folder filename at `local://` and does not guess when two files share a name.
 - `CommentHistory` / `OcrAmountLearner` / `OcrAmountWeights`

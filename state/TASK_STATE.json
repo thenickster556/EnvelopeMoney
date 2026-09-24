@@ -21,6 +21,12 @@
   ],
   "completed_tasks": [
     {
+      "id": "mongo-learning-store-2026-09-24",
+      "title": "Store web OCR learning in the existing MongoDB database",
+      "status": "completed",
+      "intent": "Major web persistence only. Replaced sql.js files in learningStore with one learning document per user (comments, five-number weights, updatedAt) via getDb(). Unique index on userId. Kept readLearning, saveLearning, and replaceLearningSnapshot return shapes. GET does not insert. Optional one-time migrate script, not on startup. Android SQLite unchanged. No auth, profile, session, GridFS, or frontend change. npm test 169 pass."
+    },
+    {
       "id": "offline-budget-backup-2026-09-22",
       "title": "Ledger-only backup and restore; photos stay in the user folder",
       "status": "completed",
